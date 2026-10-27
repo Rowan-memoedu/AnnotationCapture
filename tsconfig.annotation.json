@@ -1,0 +1,4 @@
+{
+    "compilerOptions": { "target": "esnext", "module": "esnext", "strict": true, "esModuleInterop": true, "moduleResolution": "node", "resolveJsonModule": true, "skipLibCheck": true, "lib": ["ESNext", "DOM", "DOM.Iterable"], "noEmit": true },
+    "include": ["electron.annotation.config.ts", "src/main/annotation*.ts", "src/main/captureDefaults.ts", "src/main/formula*.ts", "src/renderer/annotation/**/*.ts", "src/renderer/clip/clip_window.ts", "lib/annotation*.ts"]
+}

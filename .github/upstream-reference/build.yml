@@ -1,4 +1,5 @@
-name: Build/release
+# Upstream reference only. AnnotationCapture releases use the verified local ZIP.
+name: Upstream Build/release reference
 
 on:
   push:

@@ -30,17 +30,13 @@ import { ele2jsKeyCode, jsKeyCodeDisplay } from "../../../lib/key";
 import open_with from "../../../lib/open_with";
 import store from "../../../lib/store/renderStore";
 import { t } from "../../../lib/translate/translate";
+import { installCompletion } from "../annotation/capture";
+import initScreenShots from "../annotation/screenshot";
 import { writeImage, writeText } from "../lib/clipboard";
 import { Class, cssColor, getImgUrl, initStyle, setTitle } from "../root/root";
 
-import initScreenShots from "../screenShot/screenShot";
-
-const screenShots = initScreenShots(
-    { c: store.get("额外截屏器.命令"), path: store.get("额外截屏器.位置") },
-    undefined,
-    t,
-    store.get("使用XDGDesktopPortal"),
-);
+const screenShots = initScreenShots();
+let pendingCanvasWork = Promise.resolve();
 
 import {
     button,
@@ -67,7 +63,6 @@ import type {
     功能列表,
 } from "../../ShareTypes.js";
 import xhistory from "../lib/history";
-import { ocrList } from "../ocr/ocr_omni";
 
 type SrcPoint = { x: number; y: number } & { readonly _: unique symbol };
 
@@ -617,6 +612,10 @@ function 记忆框选f() {
 
 // 关闭
 async function closeWin() {
+    await completion.finish(false);
+}
+
+async function closeArchivedWindow() {
     mainCanvas.width = drawCanvas.width = mainCanvas.width; // 确保清空画布
     cleanClip();
     document.documentElement.style.display = "none";
@@ -630,10 +629,7 @@ async function closeWin() {
 }
 
 function runOcr() {
-    const type = ocr引擎.gv;
-    const c = getClipPhoto();
-    renderSend("clip_ocr", [c.toDataURL(), type]);
-    toolsX.close.f();
+    void completion.finish(true);
 }
 
 function runSearch() {
@@ -2431,16 +2427,21 @@ function hisPush() {
  * @param {boolean} v true向前 false向后
  */
 function undo(v: boolean) {
-    if (v) {
-        undoStack.undo();
-    } else {
-        undoStack.unundo();
-    }
-    const c = undoStack.getData();
-    finalRect = c.rect;
-    drawClipRect();
-    followBar();
-    if (fabricCanvas) fabricCanvas.loadFromJSON(c.canvas);
+    pendingCanvasWork = pendingCanvasWork.then(async () => {
+        if (v) {
+            undoStack.undo();
+        } else {
+            undoStack.unundo();
+        }
+        const c = undoStack.getData();
+        finalRect = c.rect;
+        drawClipRect();
+        followBar();
+        if (fabricCanvas) {
+            await fabricCanvas.loadFromJSON(c.canvas);
+            fabricCanvas.requestRenderAll();
+        }
+    });
 }
 
 function getShapePro(name: keyof typeof shapePro) {
@@ -2634,6 +2635,14 @@ function pencilElClick() {
 function eraserElClick() {
     // todo
     const eraser = new EraserBrush(fabricCanvas);
+    eraser.on("end", (event) => {
+        event.preventDefault();
+        pendingCanvasWork = pendingCanvasWork.then(async () => {
+            await eraser.commit(event.detail);
+            fabricCanvas.requestRenderAll();
+            hisPush();
+        });
+    });
     fabricCanvas.freeDrawingBrush = eraser;
     fabricCanvas.freeDrawingBrush.width = getShapePro("eraser").sw;
 }
@@ -3345,14 +3354,9 @@ const toolsX: Record<功能, { el: ElType<HTMLElement>; f: () => void }> = {
     },
     screens: { el: view().attr({ title: "屏幕管理" }), f: () => {} },
     ocr: {
-        el: selectEl(
-            iconEl("ocr"),
-            t("文字识别"),
-            ocrList(store).map((v) => ({
-                name: typeof v.name === "string" ? t(v.name) : v.name.text,
-                value: v.value,
-            })),
-        ),
+        el: selectEl(iconEl("ocr"), t("文字识别"), [
+            { name: t("选公式并识别"), value: "annotation" },
+        ]),
         f: () => runOcr(),
     },
     search: {
@@ -4958,10 +4962,6 @@ fabricCanvas.on("mouse:up", (options) => {
             getFilters();
         }
     }
-
-    if (fabricCanvas.isDrawingMode) {
-        hisPush();
-    }
 });
 
 class mask extends Rect {
@@ -5123,3 +5123,46 @@ hotkeys("Ctrl+v", () => {
 });
 
 setEditType("select", editType.select);
+
+fabricCanvas.on("object:added", ({ target }) => {
+    target.set("erasable", true);
+});
+fabricCanvas.on("path:created", () => hisPush());
+const completion = installCompletion(
+    async () => {
+        await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        );
+        await pendingCanvasWork;
+        const active = fabricCanvas.getActiveObject();
+        if (active instanceof IText && active.isEditing) active.exitEditing();
+        fabricCanvas.discardActiveObject();
+        fabricCanvas.renderAll();
+        const composite = getClipPhoto();
+        const ink = fabricCanvas.toCanvasElement(1, {
+            left: finalRect[0],
+            top: finalRect[1],
+            width: finalRect[2],
+            height: finalRect[3],
+            filter: (object) =>
+                !(object instanceof FabricImage) &&
+                object.type.toLowerCase() !== "mask",
+        });
+        return {
+            composite,
+            ink,
+            rect: {
+                x: finalRect[0],
+                y: finalRect[1],
+                width: finalRect[2],
+                height: finalRect[3],
+            },
+            screenId: nowScreenId,
+        };
+    },
+    closeArchivedWindow,
+    fabricCanvas.upperCanvasEl,
+);
+renderOn("annotation_finish", () => {
+    void completion.finish(false);
+});

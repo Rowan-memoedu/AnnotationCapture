@@ -1,4 +1,15 @@
-# eSearch 项目指南
+# AnnotationCapture 项目指南
+
+本仓库是基于 eSearch 15.6.1 的有限改造，运行入口为 `src/main/annotationMain.ts`，构建配置为 `electron.annotation.config.ts`。上游 `src/main/main.ts` 保留供参考，不是当前发行入口。
+
+- 当前能力：截图批注、完成时按日归档、独立公式框选、纯笔迹导出、DeepSeek Vision 识别与剪贴板。
+- `pnpm run typecheck`、`pnpm test`、`pnpm run lint` 验证当前应用；`pnpm run typecheck:upstream` 仅审计完整上游源码。后者存在上游 xtimelog 类型错误，不能冒充已通过。
+- `pnpm run build` 后可 `pnpm start`；`pnpm run release:win` 生成含运行时的独立 Windows x64 ZIP。构建、使用和验收以 README 为准。
+- API Key 只由环境变量或系统加密存储提供，发行包、源码与验收记录不得含真实密钥、用户截图或用户运行配置。
+- 截图归档成功后才能销毁画布；公式裁剪不能改变归档范围；测试要分别报告功能链路通过与 OCR 精确匹配结果。
+- Math Academy 浏览器及输入适配仍在当前范围之外。
+
+以下保留上游结构与组件约定。
 
 ## 项目概述
 
@@ -68,7 +79,7 @@ ts修改都需要biome格式化(`pnpm run format`)和ts类型检查(`pnpm run ty
 
 如果修改文本，需要修改翻译
 
-不用测试
+改动归档、异步画布、识别和剪贴板逻辑时运行相关测试；界面变动用实际 Electron 页面验证。
 
 ### 进程交互
 

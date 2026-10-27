@@ -1,0 +1,26 @@
+const fs=require('node:fs');
+const path=require('node:path');
+const assert=require('node:assert/strict');
+const {_electron}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const exe=process.env.ANNOTATION_EXE;
+const root=process.env.ANNOTATION_EVIDENCE||'D:/Artifacts/AnnotationCapture/acceptance/packaged';
+fs.mkdirSync(root,{recursive:true});
+let app;
+(async()=>{
+    assert.ok(exe,'ANNOTATION_EXE is required');
+    app=await _electron.launch({executablePath:exe,cwd:path.dirname(exe),args:['--testMode'],env:{...process.env,PATH:`${process.env.SystemRoot}/System32;${process.env.SystemRoot}`,NODE_PATH:'',NODE_OPTIONS:'',DEEPSEEK_API_KEY:'',ANNOTATION_DEEPSEEK_API_KEY:'',ANNOTATION_DATA_DIR:''},timeout:30000});
+    const page=await app.firstWindow();await page.waitForSelector('#ac-start');
+    const initial=await page.evaluate(()=>require('electron').ipcRenderer.invoke('annotation:state'));
+    const data=await app.evaluate(({app})=>app.getPath('userData'));
+    assert.equal(path.resolve(data),path.resolve(path.dirname(exe),'AnnotationCapture-data'));
+    assert.equal(initial.config.hasKey,false);
+    const demo='acceptance-only-not-a-real-key';await page.locator('#ac-api-key').fill(demo);await page.locator('#ac-save-settings').click();await page.waitForFunction(()=>document.querySelector('#ac-panel-status').textContent.includes('设置已保存'));
+    const stored=fs.readFileSync(path.join(data,'annotation-settings.json'),'utf8');assert.ok(!stored.includes(demo));assert.ok(JSON.parse(stored).encryptedKey);
+    const configured=await page.evaluate(()=>require('electron').ipcRenderer.invoke('annotation:state'));assert.equal(configured.config.hasKey,true);assert.equal(configured.config.keySource,'saved');
+    await page.locator('#ac-clear-key').click();await page.waitForFunction(()=>document.querySelector('#ac-key-status').textContent.includes('未配置'));
+    assert.ok(!JSON.parse(fs.readFileSync(path.join(data,'annotation-settings.json'),'utf8')).encryptedKey);
+    const registered=await app.evaluate(({globalShortcut},key)=>globalShortcut.isRegistered(key),initial.config.shortcut);assert.ok(registered);
+    await page.screenshot({path:path.join(root,'fresh-portable-settings.png')});
+    fs.writeFileSync(path.join(root,'portable-report.json'),JSON.stringify({passed:true,exe,data,requiresDeveloperRuntime:false,processPath:'Windows system directories only',noBundledKey:true,encryptedKeyPersistence:true,clearKey:true,globalShortcutRegistered:true},null,2));
+    console.log('PORTABLE_FRESH_PROFILE_PASSED');
+})().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{if(app)await app.evaluate(({app})=>app.exit());});

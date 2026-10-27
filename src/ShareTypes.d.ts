@@ -2,7 +2,7 @@ import type Electron from "electron";
 
 export interface setting {
     设置版本: string; // 用于新版本识别
-    启动提示: true;
+    启动提示: boolean;
     dev: boolean;
     语言: { 语言?: string };
     托盘: "无" | "彩色" | "黑" | "白" | "跟随系统" | "跟随系统反";

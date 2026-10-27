@@ -1,5 +1,5 @@
-// biome-ignore format:
-const { ipcRenderer, ipcMain} = require("electron") as typeof import("electron");
+const { ipcRenderer, ipcMain } =
+    require("electron") as typeof import("electron");
 
 import type {
     Display,
@@ -18,11 +18,10 @@ import type {
     功能,
 } from "../src/ShareTypes";
 
-type Equals<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y
-    ? 1
-    : 2
-    ? true
-    : false;
+type Equals<X, Y> =
+    (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2
+        ? true
+        : false;
 
 // biome-ignore lint/suspicious/noExplicitAny: 相信ai
 type IsVoidFunction<T> = T extends (...args: any[]) => any
@@ -43,6 +42,7 @@ export type RecordRect = {
 };
 
 type Message = {
+    annotation_finish: () => void;
     clip_show: () => void;
     clip_close: () => void;
     clip_ocr: (img: string, type: string) => void;
@@ -100,10 +100,7 @@ type Message = {
         expected?: string;
         more?: string;
     }) => string;
-    feedbackFeature: (op?: {
-        title?: string;
-        main?: string;
-    }) => string;
+    feedbackFeature: (op?: { title?: string; main?: string }) => string;
     selectPath: (
         defalutPath: string,
         p: OpenDialogOptions["properties"],
@@ -189,11 +186,11 @@ type Message = {
 
 const name = "ipc";
 
-// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+// biome-ignore lint/suspicious/noExplicitAny: IPC callbacks share one dispatch table.
 const renderOnData = new Map<string, ((data: any) => void)[]>();
 const mainOnData = new Map<
     string,
-    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+    // biome-ignore lint/suspicious/noExplicitAny: IPC callbacks share one dispatch table.
     ((data: any, event: Electron.IpcMainEvent) => any)[]
 >();
 
@@ -294,10 +291,10 @@ ipcMain?.on(name, async (event, key, data) => {
 });
 
 export {
+    mainOn,
+    mainOnReflect,
     mainSend,
     renderOn,
     renderSend,
     renderSendSync,
-    mainOn,
-    mainOnReflect,
 };
