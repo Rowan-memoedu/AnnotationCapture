@@ -57,7 +57,7 @@ let app;
     const result=state.jobs[0];
     const clipboard=await app.evaluate(async ({clipboard})=>await clipboard.readText());
     await panel.screenshot({path:path.join(root,`deepseek-${caseName}-result.png`)});
-    const canonical=s=>s.replace(/[\s{}]/g,'').replace(/\\left|\\right/g,'');
+    const canonical=s=>s.replace(/\s/g,'').replace(/\\left|\\right/g,'').replace(/([_^])\{([A-Za-z0-9])\}/g,'$1$2');
     const exactMatch=canonical(result.latex)===canonical(expected);
     let manualCorrectionVerified=false;
     if(process.env.ANNOTATION_TEST_CORRECTION==='1'&&result.latex){
