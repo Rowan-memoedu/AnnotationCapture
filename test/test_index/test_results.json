@@ -1,0 +1,162 @@
+[
+    {
+        "name": "截屏.框选裁切",
+        "state": true
+    },
+    {
+        "name": "截屏.取色器",
+        "state": true
+    },
+    {
+        "name": "截屏.自由画笔",
+        "state": true
+    },
+    {
+        "name": "截屏.几何",
+        "state": true
+    },
+    {
+        "name": "截屏.马赛克",
+        "state": true
+    },
+    {
+        "name": "截屏.模糊",
+        "state": true
+    },
+    {
+        "name": "截屏.方向键调节",
+        "state": true
+    },
+    {
+        "name": "截屏.四则运算式",
+        "state": true
+    },
+    {
+        "name": "截屏.autodo",
+        "state": true
+    },
+    {
+        "name": "截屏.保存",
+        "state": true
+    },
+    {
+        "name": "截屏.保存到剪贴板",
+        "state": true
+    },
+    {
+        "name": "截屏.滚动截屏",
+        "state": true
+    },
+    {
+        "name": "ocr.识别文字",
+        "state": true
+    },
+    {
+        "name": "主页面.ocr同步",
+        "state": true
+    },
+    {
+        "name": "主页面.搜索",
+        "state": true
+    },
+    {
+        "name": "主页面.校对",
+        "state": true
+    },
+    {
+        "name": "主页面.翻译",
+        "state": true
+    },
+    {
+        "name": "主页面.翻译.复制",
+        "state": true
+    },
+    {
+        "name": "主页面.翻译.保存",
+        "state": true
+    },
+    {
+        "name": "主页面.以图搜图.yandex",
+        "state": false
+    },
+    {
+        "name": "主页面.以图搜图.ai",
+        "state": null
+    },
+    {
+        "name": "贴图.多个",
+        "state": true
+    },
+    {
+        "name": "贴图.滚轮缩放",
+        "state": true
+    },
+    {
+        "name": "贴图.局部放大",
+        "state": true
+    },
+    {
+        "name": "贴图.透明",
+        "state": true
+    },
+    {
+        "name": "贴图.归位",
+        "state": null
+    },
+    {
+        "name": "贴图.鼠标穿透",
+        "state": null
+    },
+    {
+        "name": "贴图.翻译",
+        "state": true
+    },
+    {
+        "name": "贴图.变换",
+        "state": null
+    },
+    {
+        "name": "屏幕翻译",
+        "state": null
+    },
+    {
+        "name": "二维码",
+        "state": true
+    },
+    {
+        "name": "标准录屏",
+        "state": null
+    },
+    {
+        "name": "标准录屏.摄像头",
+        "state": null
+    },
+    {
+        "name": "标准录屏.麦克风",
+        "state": null
+    },
+    {
+        "name": "标准录屏.系统声音",
+        "state": null
+    },
+    {
+        "name": "标准录屏.短视频",
+        "state": null
+    },
+    {
+        "name": "标准录屏.长视频",
+        "state": null
+    },
+    {
+        "name": "标准录屏.光标和键盘",
+        "state": null
+    },
+    {
+        "name": "标准录屏.虚拟背景",
+        "state": null
+    },
+    {
+        "name": "截屏美化",
+        "state": null
+    }
+]

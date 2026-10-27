@@ -1,0 +1,830 @@
+import {
+    addStyle,
+    button,
+    check,
+    type ElType,
+    ele,
+    frame,
+    image,
+    input,
+    label,
+    noI18n,
+    select,
+    setTranslate,
+    trackPoint,
+    txt,
+    view,
+} from "dkh-ui";
+import store from "../../../lib/store/renderStore";
+import type { setting } from "../../ShareTypes";
+import { Class, cssVar, getImgUrl, initStyle, setTitle } from "../root/root";
+
+const { nativeImage } = window.require("electron") as typeof import("electron");
+
+import { writeImage } from "../lib/clipboard";
+
+const { existsSync, writeFileSync } = require("node:fs") as typeof import("fs");
+const { join } = require("node:path") as typeof import("path");
+const ort = require("onnxruntime-node") as typeof import("onnxruntime-node");
+
+import { renderOn, renderSend, renderSendSync } from "../../../lib/ipc";
+import { t } from "../../../lib/translate/translate";
+import type { IconType } from "../../iconTypes";
+import removeobj from "../lib/removeObj";
+
+function icon(src: IconType) {
+    return image(getImgUrl(`${src}.svg`), noI18n("icon")).class("icon");
+}
+
+function alert(m: string) {
+    const d = ele("dialog")
+        .add(
+            view("y")
+                .add([
+                    t(m),
+                    button(t("确定"))
+                        .on("click", () => {
+                            d.remove();
+                        })
+                        .style({ width: "auto" }),
+                ])
+                .class(Class.gap),
+        )
+        .class(Class.glassBar)
+        .addInto();
+    d.el.showModal();
+}
+
+initStyle(store);
+
+setTranslate(t);
+
+setTitle(t("高级编辑"));
+
+const maskPens: Map<string, { w: number; ps: { x: number; y: number }[] }> =
+    new Map();
+
+let maskOrt: Awaited<ReturnType<typeof ort.InferenceSession.create>> | null =
+    null;
+
+const pz = store.get("高级图片编辑.配置");
+const defaultConfig: typeof styleData = {
+    name: "0",
+    raduis: 0,
+    outerRadius: false,
+    bgType: "color",
+    bgColor: "",
+    bgUrl: "",
+    "bg.gradient.angle": 0,
+    "bg.gradient.repeat": false,
+    "bg.gradient.repeatSize": 0,
+    "bg.gradient.x": 0,
+    "bg.gradient.y": 0,
+    "bg.gradient": [],
+    "shadow.x": 0,
+    "shadow.y": 0,
+    "shadow.blur": 0,
+    "shadow.color": "",
+    "padding.x": 0,
+    "padding.y": 0,
+    autoPadding: false,
+};
+let styleData: setting["高级图片编辑"]["配置"][0] = getStyleData(
+    store.get("高级图片编辑.默认配置"),
+);
+
+function getStyleData(id: string) {
+    const data = structuredClone(pz.find((i) => i.name === id));
+    if (!data) return defaultConfig;
+    for (const key in defaultConfig) {
+        if (!(key in data)) {
+            // @ts-expect-error
+            data[key] = defaultConfig[key];
+        }
+    }
+    return data;
+}
+
+function subTitle(text: string) {
+    return txt(text).class("sub-title");
+}
+
+addStyle({
+    body: {
+        display: "flex",
+        height: "100vh",
+    },
+    canvas: {
+        maxWidth: "100%",
+        maxHeight: "100%",
+        transition: "var(--transition)",
+    },
+    "canvas:hover": {
+        boxShadow: "var(--shadow)",
+    },
+    ".sub-title": {
+        fontSize: "1.2rem",
+        fontWeight: 500,
+    },
+});
+
+const preview = view().style({
+    margin: "auto",
+    position: "relative",
+    height: "100%",
+    display: "flex",
+    alignItems: "center",
+});
+
+// 新建 Record 变量存储 UI 元素
+const els = {
+    select: pzSelect().sv(pz.map((i) => getStyleData(i.name))),
+    raduis: input("number"),
+    outerRadius: label([check(""), "外圆角"]),
+    bgType: select<(typeof styleData)["bgType"]>([
+        { value: "color", name: "纯色" },
+        { value: "image", name: "图片" },
+        { value: "linear-gradient", name: "线性渐变" },
+        { value: "radial-gradient", name: "径向渐变" },
+        { value: "conic-gradient", name: "圆锥渐变" },
+    ])
+        .on("input", (_, el) => {
+            setBgUI(el.gv);
+        })
+        .bindSet((v: (typeof styleData)["bgType"], el) => {
+            setBgUI(v);
+            el.value = v;
+        }),
+    bgColor: input(),
+    bgUrl: input(),
+    bgGradient: flexLayout("y"),
+    angle: input("number"),
+    gx: input("number").attr({ max: "1", min: "0", step: "0.01" }),
+    gy: input("number").attr({ max: "1", min: "0", step: "0.01" }),
+    gColors: gColors(),
+    sx: input("number"),
+    sy: input("number"),
+    blur: input("number"),
+    scolor: input(),
+    px: input("number"),
+    py: input("number"),
+    magicPen: label([check(""), "魔法橡皮"]),
+    magicPenList: flexLayout("x").style({
+        "max-height": "200px",
+        "overflow-y": "auto",
+    }),
+    formart: select([
+        { value: "png", name: noI18n("PNG") },
+        { value: "jpg", name: noI18n("JPEG") },
+        { value: "webp", name: noI18n("WebP") },
+        { value: "bmp", name: noI18n("BMP") },
+    ]).sv(
+        (() => {
+            const format = store.get("保存.默认格式");
+            if (format === "svg") return "png";
+            return format;
+        })(),
+    ),
+    quality: input("number").attr({ max: "1", min: "0", step: "0.1" }).sv("1"),
+    photoW: input("number"),
+    photoH: input("number"),
+};
+
+const controls = frame("sidebar", {
+    _: flexLayout("y")
+        .style({
+            minWidth: "200px",
+            maxWidth: "400px",
+            padding: cssVar("o-padding"),
+            "overflow-y": "auto",
+            "overflow-x": "hidden",
+        })
+        .class(Class.smallSize),
+    configs: {
+        _: view("x"),
+        select: els.select,
+        addConf: button(icon("add")).on("click", () => {
+            const id = `${t("新配置")}${crypto.randomUUID().slice(0, 5)}`;
+            const newData = structuredClone(styleData);
+            newData.name = id;
+            pz.unshift(newData);
+            store.set("高级图片编辑.配置", pz);
+            store.set("高级图片编辑.默认配置", id);
+            els.select.sv(pz);
+            applyStyle(newData);
+        }),
+    },
+    controls: {
+        _: flexLayout("y"),
+        _raduis: {
+            _: view("y"),
+            _0: subTitle("圆角"),
+            raduis: els.raduis,
+            outerRadius: els.outerRadius,
+        },
+        background: {
+            _: flexLayout("y"),
+            _1: subTitle("背景"),
+            bgType: els.bgType,
+            bgColor: els.bgColor,
+            bgUrl: els.bgUrl,
+            bgGradient: els.bgGradient.add([
+                els.angle,
+                els.gx,
+                els.gy,
+                els.gColors,
+            ]),
+        },
+        _shadow: {
+            _: flexLayout("y"),
+            _2: subTitle("阴影"),
+            shadow: {
+                _: flexLayout("x"),
+                sx: els.sx,
+                sy: els.sy,
+                blur: els.blur,
+                scolor: els.scolor,
+            },
+        },
+        _padding: {
+            _: flexLayout("y"),
+            _3: subTitle("边距"),
+            padding: {
+                _: flexLayout("x"),
+                px: els.px,
+                py: els.py,
+            },
+        },
+        magic: {
+            _: flexLayout("y"),
+            _4: subTitle("魔法消除"),
+            magicPen: els.magicPen,
+            magicPenList: els.magicPenList,
+        },
+    },
+    export: {
+        _: flexLayout("y"),
+        _ex_edit: {
+            _: flexLayout("y"),
+            formart: els.formart,
+            quality: els.quality,
+            phScale: {
+                _: flexLayout("x"),
+                _s0: button("原始").on("click", () => scale(1)),
+                _s1: button(noI18n("3/4")).on("click", () => scale(0.75)),
+                _s2: button(noI18n("1/2")).on("click", () => scale(0.5)),
+                _s3: button(noI18n("1/3")).on("click", () => scale(0.333)),
+                _s4: button(noI18n("1/4")).on("click", () => scale(0.25)),
+                _s5: button(noI18n("1/5")).on("click", () => scale(0.2)),
+                _autoW: button("自动宽度").on("click", () => {
+                    autoScale("width");
+                }),
+                _autoH: button("自动高度").on("click", () => {
+                    autoScale("height");
+                }),
+            },
+            _phWH: {
+                _: flexLayout("x"),
+                photoW: els.photoW,
+                photoH: els.photoH,
+            },
+        },
+        _ex_save: {
+            _: flexLayout("x"),
+            save: button(icon("save")).on("click", () => {
+                const path = renderSendSync("save_file_path", [els.formart.gv]);
+                if (!path) return;
+                const img = getImg(true).replace(
+                    /^data:image\/\w+;base64,/,
+                    "",
+                );
+                writeFileSync(path, Buffer.from(img, "base64"));
+                renderSend("ok_save", [path]);
+                renderSend("windowClose", []);
+            }),
+            copy: button(icon("copy")).on("click", async () => {
+                const img = await getImg("blob");
+                await writeImage(img);
+                renderSend("windowClose", []);
+            }),
+        },
+    },
+});
+
+function flexLayout(a: "x" | "y") {
+    return (a === "x" ? view(a, "wrap") : view(a)).class(Class.gap);
+}
+
+function pzSelect() {
+    const el = flexLayout("x");
+    return el.bindSet((pz: setting["高级图片编辑"]["配置"]) => {
+        el.clear().add(
+            pz.map((i) =>
+                view("x")
+                    .add(
+                        txt(i.name)
+                            .class(Class.click)
+                            .on("click", () => {
+                                applyStyle(i);
+                            }),
+                    )
+                    .add(
+                        button(icon("close")).on("click", () => {
+                            pz.splice(
+                                pz.findIndex((x) => x.name === i.name),
+                                1,
+                            );
+                            store.set("高级图片编辑.配置", pz);
+                            store.set("高级图片编辑.默认配置", pz[0]?.name);
+                            els.select.sv(pz);
+                        }),
+                    ),
+            ),
+        );
+    });
+}
+
+function applyStyle(i: setting["高级图片编辑"]["配置"][0]) {
+    styleData = structuredClone(i);
+    setConfig();
+    updatePreview();
+}
+
+function setBgUI(type: (typeof styleData)["bgType"]) {
+    if (type === "image") {
+        els.bgUrl.style({ display: "" });
+        els.bgGradient.style({ display: "none" });
+        els.bgColor.style({ display: "none" });
+    } else if (type === "color") {
+        els.bgUrl.style({ display: "none" });
+        els.bgGradient.style({ display: "none" });
+        els.bgColor.style({ display: "" });
+    } else {
+        els.bgUrl.style({ display: "none" });
+        els.bgGradient.style({ display: "" });
+        els.bgColor.style({ display: "none" });
+    }
+}
+
+function scale(num: number) {
+    els.photoH.sv(String(Math.round(canvas.el.height * num)));
+    els.photoW.sv(String(Math.round(canvas.el.width * num)));
+}
+
+function autoScale(type: "width" | "height") {
+    const sw = canvas.el.width;
+    const sh = canvas.el.height;
+    const wEl = els.photoW;
+    const hEl = els.photoH;
+    if (type === "width") {
+        wEl.sv(String(Math.round((Number(hEl.gv) / sh) * sw)));
+    } else {
+        hEl.sv(String(Math.round((Number(wEl.gv) / sw) * sh)));
+    }
+}
+
+function getImg(): Electron.NativeImage;
+function getImg(base64: true): string;
+function getImg(blob: "blob"): Promise<Blob>;
+function getImg(base64: boolean | "blob" = false) {
+    const x = ele("canvas").attr({
+        width: Number(els.photoW.gv),
+        height: Number(els.photoH.gv),
+    }).el;
+    const ctx = x.getContext("2d");
+    if (!ctx) throw new Error("canvas context is null");
+    ctx.drawImage(
+        canvas.el,
+        0,
+        0,
+        canvas.el.width,
+        canvas.el.height,
+        0,
+        0,
+        x.width,
+        x.height,
+    );
+    const type = {
+        png: "image/png",
+        jpg: "image/jpeg",
+        webp: "image/webp",
+        bmp: "image/bmp",
+    };
+    const url = x.toDataURL(type[els.formart.gv], Number(els.quality.gv));
+    if (base64 === "blob") {
+        return fetch(url).then((r) => r.blob());
+    }
+    if (base64) return url;
+    return nativeImage.createFromDataURL(url);
+}
+
+function gColors() {
+    const div = flexLayout("y");
+    const list = flexLayout("y");
+    const add = button(noI18n("+"));
+
+    function createI(color: string, offset: number) {
+        console.log(color, offset);
+
+        const el = view("x").add([
+            input().sv(color).on("input", binput).style({ width: "100%" }),
+            input("number")
+                .attr({ max: "1", min: "0", step: "0.01" })
+                .sv(String(offset))
+                .on("input", binput),
+            button(noI18n("-")).on("click", () => {
+                el.remove();
+                binput();
+            }),
+        ]);
+        return el;
+    }
+
+    add.on("click", () => {
+        list.add(createI("#0000", 0.5));
+    });
+
+    function binput() {
+        div.el.dispatchEvent(new Event("input"));
+    }
+
+    return div
+        .add([list, add])
+        .bindGet(() => {
+            return list.queryAll("div").map((i) => {
+                const l = i.queryAll("input");
+                return { offset: Number(l[1].el.value), color: l[0].el.value };
+            });
+        })
+        .bindSet((v: (typeof styleData)["bg.gradient"]) => {
+            list.clear();
+            for (const item of v) {
+                list.add(createI(item.color, item.offset));
+            }
+        });
+}
+
+const canvas = ele("canvas");
+const magicPenPreview = ele("canvas");
+const magicPenPreviewCtx = magicPenPreview.el.getContext("2d")!;
+
+preview.add([canvas, magicPenPreview]);
+
+const configMap: Partial<
+    Record<
+        keyof typeof els,
+        {
+            path: keyof typeof styleData;
+            parse?: (v: string) => unknown;
+            init?: (v: unknown) => string;
+        }
+    >
+> = {
+    raduis: { path: "raduis", parse: Number },
+    outerRadius: { path: "outerRadius" },
+    bgType: { path: "bgType" },
+    bgColor: { path: "bgColor" },
+    bgUrl: { path: "bgUrl" },
+    angle: { path: "bg.gradient.angle", parse: Number },
+    // repeat: { path: "bg.gradient.repeat" },
+    // repeatSize: { path: "bg.gradient.repeatSize", parse: Number },
+    gx: { path: "bg.gradient.x", parse: Number },
+    gy: { path: "bg.gradient.y", parse: Number },
+    gColors: { path: "bg.gradient" },
+    sx: { path: "shadow.x", parse: Number },
+    sy: { path: "shadow.y", parse: Number },
+    blur: { path: "shadow.blur", parse: Number },
+    scolor: { path: "shadow.color" },
+    px: { path: "padding.x", parse: Number },
+    py: { path: "padding.y", parse: Number },
+};
+
+let photoSrc: HTMLImageElement | null = null;
+let photo: HTMLImageElement | null = null;
+
+function setConfig() {
+    if (configMap === undefined) return;
+    for (const key in configMap) {
+        const k = key as keyof typeof configMap;
+        const el = els[k];
+        // @ts-ignore
+        const value = configMap[k].init
+            ? // @ts-ignore
+              configMap[k].init(styleData[configMap[k].path])
+            : // @ts-ignore
+              styleData[configMap[k].path];
+        // @ts-ignore
+        el.sv(value);
+    }
+}
+
+function updatePreview() {
+    if (!photo) return;
+    const ctx = canvas.el.getContext("2d");
+    if (!ctx) throw new Error("canvas context is null");
+
+    const { naturalWidth: photoWidth, naturalHeight: photoHeight } = photo;
+    const raduis = styleData.raduis;
+    const {
+        bgType,
+        bgColor,
+        bgUrl,
+        "bg.gradient.angle": gAngle,
+        // "bg.gradient.repeat": repeat,
+        // "bg.gradient.repeatSize": repeatSize,
+        "bg.gradient.x": gx,
+        "bg.gradient.y": gy,
+        "bg.gradient": gradient,
+    } = styleData;
+    const {
+        "shadow.x": x,
+        "shadow.y": y,
+        "shadow.blur": blur,
+        "shadow.color": color,
+    } = styleData;
+    const { x: padX, y: padY } = styleData.autoPadding
+        ? { x: 0, y: 0 }
+        : { x: styleData["padding.x"], y: styleData["padding.y"] };
+
+    const outerRadius = styleData.outerRadius
+        ? raduis + Math.min(padX, padY)
+        : 0;
+
+    const finalWidth = photoWidth + 2 * padX;
+    const finalHeight = photoHeight + 2 * padY;
+
+    els.photoW.sv(finalWidth.toString()).attr({ max: finalWidth.toString() });
+    els.photoH.sv(finalHeight.toString()).attr({ max: finalHeight.toString() });
+
+    canvas.el.width = finalWidth;
+    canvas.el.height = finalHeight;
+
+    magicPenPreview
+        .style({
+            position: "absolute",
+        })
+        .attr({ width: finalWidth, height: finalHeight });
+
+    if (outerRadius) {
+        ctx.beginPath();
+        ctx.roundRect(0, 0, finalWidth, finalHeight, outerRadius);
+        ctx.clip();
+    }
+
+    if (bgType === "color") {
+        ctx.fillStyle = bgColor || "#0000";
+        ctx.fillRect(0, 0, finalWidth, finalHeight);
+    } else if (bgType === "image") {
+        const bgImg = new Image();
+        bgImg.onload = () => {
+            let scale = finalWidth / bgImg.naturalWidth;
+            if (bgImg.naturalHeight * scale < finalHeight) {
+                scale = finalHeight / bgImg.naturalHeight;
+            }
+
+            const w = bgImg.naturalWidth * scale;
+            const h = bgImg.naturalHeight * scale;
+            const x = (finalWidth - w) / 2;
+            const y = (finalHeight - h) / 2;
+
+            ctx.drawImage(bgImg, x, y, w, h);
+            setPhoto();
+        };
+        bgImg.src = bgUrl;
+    } else {
+        let grd: CanvasGradient;
+        const angle = (gAngle * Math.PI) / 180;
+        const x = gx * finalWidth;
+        const y = gy * finalHeight;
+        if (bgType === "linear-gradient") {
+            const r =
+                Math.sin(angle + Math.atan(finalHeight / finalWidth)) *
+                Math.sqrt(finalWidth ** 2 + finalHeight ** 2);
+            grd = ctx.createLinearGradient(
+                0,
+                finalHeight,
+                r * Math.sin(angle),
+                finalHeight - r * Math.cos(angle), // angle 基于y轴
+            );
+        } else if (bgType === "radial-gradient") {
+            grd = ctx.createRadialGradient(
+                x,
+                y,
+                0,
+                x,
+                y,
+                Math.max(finalWidth, finalHeight) / 2,
+            );
+        } else {
+            grd = ctx.createConicGradient(angle, x, y);
+        }
+        try {
+            for (const item of gradient) {
+                grd.addColorStop(item.offset, item.color);
+            }
+        } catch (error) {}
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, finalWidth, finalHeight);
+    }
+
+    function setPhoto() {
+        if (!ctx) throw new Error("canvas context is null");
+        if (!photo) return;
+        ctx.globalCompositeOperation = "source-over";
+        ctx.shadowOffsetX = x;
+        ctx.shadowOffsetY = y;
+        ctx.shadowBlur = blur;
+        ctx.shadowColor = color;
+
+        const matrix = new DOMMatrix();
+        const f = ctx.createPattern(photo, "no-repeat");
+        if (f) {
+            f.setTransform(matrix.translate(padX, padY));
+            ctx.fillStyle = f;
+        }
+        ctx.beginPath();
+        ctx.roundRect(padX, padY, photoWidth, photoHeight, raduis);
+        ctx.fill();
+
+        canvas.style({ borderRadius: `${outerRadius}px` });
+    }
+
+    setPhoto();
+}
+
+async function magicPen() {
+    if (!maskOrt) {
+        const modelPath = join(
+            renderSendSync("userDataPath", []),
+            "models",
+            "inpaint",
+            "migan_pipeline_v2.onnx",
+        );
+        if (!existsSync(modelPath)) {
+            alert("未下载魔法橡皮模型，请在设置的“人工智能”页面下载");
+            return;
+        }
+        maskOrt = await ort.InferenceSession.create(modelPath, {
+            executionProviders: [{ name: store.get("AI.运行后端") || "cpu" }],
+        });
+    }
+    if (!photo || !photoSrc) return;
+    const w = photo.naturalWidth;
+    const h = photo.naturalHeight;
+
+    const outW = magicPenPreview.el.width;
+    const outH = magicPenPreview.el.height;
+    const maskImg = new OffscreenCanvas(outW, outH);
+    const maskCtx = maskImg.getContext("2d")!;
+    maskCtx.clearRect(0, 0, outW, outH);
+    maskCtx.fillStyle = "#fff";
+    maskCtx.fillRect(0, 0, outW, outH);
+    maskCtx.lineCap = "round";
+    maskCtx.lineJoin = "round";
+    maskCtx.strokeStyle = "#000";
+    console.log("magicPen", maskPens);
+
+    for (const x of maskPens.values()) {
+        maskCtx.lineWidth = x.w;
+        maskCtx.moveTo(x.ps[0].x, x.ps[0].y);
+        for (const p of x.ps) {
+            maskCtx.lineTo(p.x, p.y);
+        }
+        maskCtx.stroke();
+    }
+    const mask = maskCtx.getImageData(
+        styleData["padding.x"],
+        styleData["padding.y"],
+        w,
+        h,
+    );
+    const outputData = await removeobj({
+        ort,
+        session: maskOrt,
+        img: photoSrc,
+        mask: mask,
+    });
+    // imagedata to image element
+    const outputImg = new Image();
+    outputImg.onload = () => {
+        photo = outputImg;
+        updatePreview();
+    };
+    const outputCanvas = ele("canvas").attr({
+        width: w,
+        height: h,
+    });
+    const outputCtx = outputCanvas.el.getContext("2d")!;
+    outputCtx.putImageData(outputData, 0, 0);
+    outputImg.src = outputCanvas.el.toDataURL("image/png", 1);
+}
+
+function previewPen(id: string) {
+    const ctx = magicPenPreviewCtx;
+    ctx.clearRect(0, 0, magicPenPreview.el.width, magicPenPreview.el.height);
+    if (!id) return;
+    const x = maskPens.get(id);
+    if (!x) return;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = x.w;
+    ctx.strokeStyle = "#0005";
+    ctx.beginPath();
+    ctx.moveTo(x.ps[0].x, x.ps[0].y);
+    for (const p of x.ps) {
+        ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+}
+
+controls.el.addInto();
+preview.addInto();
+
+for (const key in configMap) {
+    const k = key as keyof typeof configMap;
+    const el = els[k];
+    el.on("input", () => {
+        const v = el.gv as string;
+        if (configMap[k])
+            if (configMap[k].parse) {
+                // @ts-expect-error
+                styleData[configMap[k].path as string] = configMap[k].parse(v);
+            } else {
+                // @ts-expect-error
+                styleData[configMap[k].path as string] = v;
+            }
+        updatePreview();
+    });
+}
+
+setConfig();
+
+trackPoint(magicPenPreview, {
+    start: (e) => {
+        if (!els.magicPen.gv) return null;
+        const id = crypto.randomUUID();
+        maskPens.set(id, {
+            ps: [],
+            w: 10,
+        });
+        const ctx = magicPenPreviewCtx;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = "#0005";
+        const x =
+            (e.offsetX / magicPenPreview.el.offsetWidth) *
+            magicPenPreview.el.width;
+        const y =
+            (e.offsetY / magicPenPreview.el.offsetHeight) *
+            magicPenPreview.el.height;
+        ctx.moveTo(x, y);
+        return {
+            x: x,
+            y: y,
+            data: id,
+        };
+    },
+    ing: (_, e, { startData: id }) => {
+        const x =
+            (e.offsetX / magicPenPreview.el.offsetWidth) *
+            magicPenPreview.el.width;
+        const y =
+            (e.offsetY / magicPenPreview.el.offsetHeight) *
+            magicPenPreview.el.height;
+        // @ts-ignore
+        maskPens.get(id).ps.push({ x, y });
+        magicPenPreviewCtx.lineTo(x, y);
+        magicPenPreviewCtx.stroke();
+    },
+    end: (_, { startData: id }) => {
+        magicPenPreviewCtx.clearRect(
+            0,
+            0,
+            magicPenPreview.el.width,
+            magicPenPreview.el.height,
+        );
+        const items = button(icon("close"))
+            .on("click", () => {
+                maskPens.delete(id);
+                items.remove();
+                magicPen();
+            })
+            .on("pointerenter", () => previewPen(id))
+            .on("pointerleave", () => previewPen(""));
+        els.magicPenList.add(items);
+        magicPen();
+    },
+});
+
+renderOn("superPhotoEditorInit", ([data]) => {
+    const img = new Image();
+    img.onload = () => {
+        photo = img;
+        photoSrc = img;
+        updatePreview();
+    };
+    img.src = data;
+});
+
+updatePreview();

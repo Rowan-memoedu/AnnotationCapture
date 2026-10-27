@@ -1,0 +1,41 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+    "files": {
+        "includes": ["**", "!!src/renderer/assets"]
+    },
+    "assist": {
+        "actions": {
+            "source": {
+                "organizeImports": "on"
+            }
+        }
+    },
+    "formatter": {
+        "indentStyle": "space",
+        "indentWidth": 4
+    },
+    "linter": {
+        "enabled": true,
+        "rules": {
+            "preset": "recommended",
+            "complexity": {
+                "noImportantStyles": "off",
+                "useDateNow": "error"
+            },
+            "correctness": {
+                "noUnusedFunctionParameters": "off",
+                "noUnusedImports": "off",
+                "noUnusedVariables": "off",
+                "useValidForDirection": "error"
+            },
+            "style": {
+                "noDescendingSpecificity": "off",
+                "noNonNullAssertion": "off"
+            },
+            "suspicious": {
+                "noTemplateCurlyInString": "off",
+                "noTsIgnore": "off"
+            }
+        }
+    }
+}

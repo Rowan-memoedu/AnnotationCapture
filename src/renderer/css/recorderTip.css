@@ -1,0 +1,94 @@
+body {
+    user-select: none;
+}
+
+#recorder_rect {
+    border: 1px dashed #000;
+    box-sizing: border-box;
+    width: 100vw;
+    height: 100vh;
+}
+
+#mouse_c {
+    display: none;
+    position: fixed;
+    width: 24px;
+    height: 24px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background-color: #ff08;
+    overflow: hidden;
+}
+
+#recorder_bar {
+    position: absolute;
+}
+
+#recorder_key {
+    display: flex;
+    gap: 4px;
+}
+
+#recorder_key > div {
+    display: flex;
+    transition: var(--transition);
+}
+#recorder_key kbd {
+    transition: var(--transition);
+    display: flex;
+    flex-direction: column-reverse;
+    min-width: 2em;
+    height: 2em;
+    border-radius: 0.25em;
+    justify-content: space-between;
+}
+
+.only_key {
+    font-size: 1em;
+    font-weight: bold;
+    align-items: center;
+    justify-content: center !important;
+}
+.main_key {
+    font-size: 1em;
+    font-weight: bold;
+    height: 60%;
+}
+.top_key {
+    font-size: 0.75em;
+    height: 30%;
+    line-height: 100%;
+}
+.right_key {
+    align-items: end;
+}
+
+#recorder_key .key_hidden {
+    opacity: 0.5;
+}
+
+#mouse_c > div:nth-child(1) {
+    width: 10px;
+    height: 100%;
+}
+#mouse_c > div:nth-child(2) {
+    width: 4px;
+    height: 100%;
+}
+#mouse_c > div:nth-child(3) {
+    width: 10px;
+    height: 100%;
+}
+
+.wheel_u {
+    clip-path: polygon(50% 0, 0% 100%, 100% 100%);
+}
+.wheel_d {
+    clip-path: polygon(50% 100%, 0% 0%, 100% 0%);
+}
+.wheel_l {
+    clip-path: polygon(0 50%, 100% 0%, 100% 100%);
+}
+.wheel_r {
+    clip-path: polygon(100% 50%, 0% 0%, 0% 100%);
+}

@@ -1,0 +1,549 @@
+:root {
+    --hotkey-show: none;
+}
+body {
+    --hover-color: var(--bar-hover-color) !important;
+}
+html {
+    cursor: none;
+}
+body {
+    cursor: default;
+    user-select: none;
+    overflow: hidden;
+}
+html,
+body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* 居中栏 */
+#center_bar {
+    position: fixed;
+    left: 50%;
+    top: 35%;
+    transform: translate(round(-50%, 1px));
+    z-index: 111;
+    pointer-events: none;
+    opacity: 0;
+    transition: var(--transition);
+    padding: 2px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+}
+#center_bar > div {
+    overflow: hidden;
+}
+/* 保存 */
+#save_type > #suffix > div {
+    padding: 0 4px;
+}
+#save_type > #suffix > div,
+#save_type > div:nth-child(1) {
+    text-align: center;
+    line-height: 2rem;
+    border-radius: 6px;
+    transition: var(--transition);
+}
+#save_type > #suffix > div:hover {
+    background-color: var(--hover-color);
+}
+.suffix_h {
+    background-color: var(--bar-focus-color);
+}
+/* 快捷键 */
+#hotkeys_tip {
+    display: var(--hotkey-show);
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(round(-50%, 1px), round(-50%, 1px));
+    max-height: 400px;
+    overflow: scroll;
+    z-index: 111;
+    transition: var(--transition);
+    padding: 8px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+}
+#hotkeys_tip > p {
+    font-size: large;
+    font-weight: bold;
+}
+#hotkeys_tip > div {
+    display: flex;
+    gap: 4px;
+    padding: 0 4px;
+    border-radius: 4px;
+    transition: var(--transition);
+    &:hover {
+        background-color: var(--hover-color);
+    }
+}
+#hotkeys_tip > div > :first-child {
+    flex-grow: 1;
+}
+
+body input {
+    padding-inline: 0 !important;
+    background-color: transparent !important;
+}
+
+/* 工具 */
+#tool_bar {
+    display: flex;
+    flex-direction: column;
+    width: var(--bar-size);
+    position: fixed;
+    z-index: 99;
+    left: 10px;
+    top: 100px;
+    border-radius: calc(var(--bar-size) / 6);
+    overflow: hidden;
+    transition: opacity var(--transition);
+    box-shadow: var(--shadow);
+}
+#tool_bar > div {
+    width: var(--bar-size);
+    height: var(--bar-size);
+    border-radius: calc(var(--bar-size) / 6);
+    transition: var(--transition);
+    cursor: pointer;
+    position: relative;
+    &:active {
+        transform: var(--button-active);
+    }
+}
+#tool_bar > div > .icon {
+    width: calc(var(--bar-size) * var(--bar-icon));
+}
+#tool_bar > div:hover {
+    background-color: var(--hover-color);
+    transition: var(--transition);
+}
+
+#tool_screens {
+    cursor: default !important;
+}
+#tool_screens > div {
+    position: relative;
+    width: calc(var(--bar-size) * var(--bar-icon));
+    height: calc(var(--bar-size) * var(--bar-icon));
+    left: calc(var(--bar-size) * (1 - var(--bar-icon)) / 2);
+    top: calc(var(--bar-size) * (1 - var(--bar-icon)) / 2);
+}
+#tool_screens > div > div {
+    position: absolute;
+    border: 2px solid var(--font-color);
+    box-sizing: border-box;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.now_screen {
+    background-color: var(--bar-hover-color);
+}
+
+#tool_copy {
+    cursor: copy !important;
+}
+
+.side_select {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border: none;
+    appearance: none;
+    color: transparent;
+    right: 0px;
+    top: 0px;
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: var(--bar-focus-color);
+}
+
+.side_select_menu {
+    background: var(--bar-bg);
+    backdrop-filter: var(--blur);
+    box-shadow: var(--shadow);
+    border-radius: var(--border-radius);
+    padding: 0;
+    & > * {
+        color: var(--font-color);
+        transition: var(--transition);
+        font-size: 1rem;
+        border-radius: var(--border-radius);
+        padding: 2px;
+        &:hover {
+            background-color: var(--hover-color);
+        }
+    }
+    & > .selected {
+        background-color: var(--bar-focus-color);
+    }
+}
+
+#tool_bar > div::before,
+#draw_main > div::before,
+.draw_items > div::before {
+    content: attr(data-key);
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    background-color: var(--bar-bg);
+    border-radius: 4px;
+    backdrop-filter: var(--blur);
+    z-index: 1;
+    display: var(--hotkey-show);
+}
+
+/* 画 */
+.select {
+    background-color: var(--bar-focus-color) !important;
+}
+#draw_bar {
+    left: 80px;
+    top: 100px;
+    width: var(--bar-size);
+    height: calc(var(--bar-size) * 7);
+    position: fixed;
+    z-index: 100;
+    transition:
+        width var(--transition),
+        opacity var(--transition);
+}
+#draw_bar > div {
+    width: var(--bar-size);
+    border-radius: calc(var(--bar-size) / 6);
+    box-shadow: var(--shadow);
+}
+#draw_main > div,
+.draw_items > div {
+    width: var(--bar-size);
+    height: var(--bar-size);
+    border-radius: calc(var(--bar-size) / 6);
+    transition: var(--transition);
+    &:not(:has(.range-b)):active {
+        transform: var(--button-active);
+    }
+}
+#draw_main > div > .icon,
+.draw_items > div > .icon {
+    width: calc(var(--bar-size) * var(--bar-icon));
+}
+#draw_main > div:not(:has(.range-b)):hover,
+.draw_items > div:not(:has(.range-b)):hover {
+    background-color: var(--hover-color);
+    transition: var(--transition);
+}
+#draw_side {
+    position: absolute;
+    top: 0;
+    transition: var(--transition);
+    overflow: hidden;
+}
+.draw_side_hide {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+.draw_items {
+    transition: var(--transition);
+    display: flex;
+    flex-wrap: wrap;
+}
+.draw_items > div {
+    flex-shrink: 0;
+}
+
+#editor {
+    position: absolute;
+    transform-origin: 0% 0%;
+}
+#editor > * {
+    position: absolute;
+}
+
+.editor_bg {
+    background-color: var(--bg) !important;
+}
+.editor_bg > #editor > * {
+    box-shadow: var(--shadow);
+}
+
+#main_photo {
+    z-index: 8;
+    image-rendering: pixelated;
+}
+#clip_photo {
+    z-index: 10;
+    cursor: crosshair;
+}
+#clip_mask,
+#clip_line {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+    contain: paint;
+}
+#clip_mask {
+    z-index: 9;
+}
+#clip_line {
+    z-index: 10;
+}
+#clip_mask div,
+#clip_line div {
+    position: absolute;
+    pointer-events: none;
+}
+#draw_photo_top {
+    z-index: 9;
+}
+
+#mouse_bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: fixed;
+    z-index: 100;
+    padding: 2px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    pointer-events: none;
+    left: 0;
+    top: 0;
+}
+.mouse_bar_hide {
+    transition: var(--transition);
+    opacity: 0;
+}
+#point_color {
+    width: var(--color-size);
+    height: var(--color-size);
+    overflow: hidden;
+    transition: var(--transition);
+    border-radius: 6px;
+    position: relative;
+}
+#point_color > canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    image-rendering: pixelated;
+    width: var(--color-size);
+    height: var(--color-size);
+}
+#point_color > div {
+    position: absolute;
+}
+#point_color > div:nth-of-type(1) {
+    width: var(--color-i-size);
+    height: var(--color-i-size);
+    box-shadow:
+        #000 0 0 0 1px,
+        #fff 0 0 0 2px;
+}
+#point_color > div:nth-of-type(2),
+#point_color > div:nth-of-type(3) {
+    background: repeating-linear-gradient(45deg, #fff, #fff 2px, #000 4px);
+}
+#clip_xy {
+    font-family: var(--monospace);
+    cursor: copy;
+    width: 100%;
+}
+#clip_copy {
+    font-family: var(--monospace);
+    width: 100%;
+    transition: var(--transition);
+    overflow: hidden;
+    border-radius: 6px;
+    cursor: copy;
+}
+#clip_copy > div {
+    position: relative;
+    top: 0px;
+    transition: var(--transition);
+}
+#clip_xy,
+#clip_copy > div > div:nth-child(1),
+#clip_copy > div > div:not(:nth-child(1)) > div {
+    height: 32px;
+    line-height: 32px;
+    transition: background-color var(--transition);
+    text-align: center;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+#clip_copy > div > div:not(:nth-child(1)) {
+    border-radius: 6px;
+}
+#clip_xy:hover,
+#clip_copy > div > div:nth-child(1):hover,
+#clip_copy > div > div > div:hover {
+    background-color: var(--hover-color);
+}
+#clip_wh {
+    position: absolute;
+    z-index: 11;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    display: flex;
+    padding: var(--o-padding);
+}
+#clip_wh > div {
+    font-family: var(--monospace);
+}
+#clip_wh > div > input {
+    outline: none;
+    border: none;
+    cursor: text;
+    font-family: var(--monospace);
+    font-size: 1rem;
+    height: auto;
+}
+
+/* long */
+#long_rect {
+    position: fixed;
+    outline: 1px dashed #000;
+}
+
+#long_finish {
+    width: 16px;
+    height: 16px;
+    background-color: #f00;
+    border-radius: 8px;
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    cursor: pointer;
+}
+
+#long_finish:hover {
+    background-color: transparent;
+}
+
+/* 编辑栏 */
+.range-b {
+    font-size: calc(var(--bar-size) / 3.75);
+    border-radius: inherit;
+}
+#shadow_blur {
+    overflow: hidden;
+}
+#shadow_blur > .range-b {
+    height: var(--bar-size);
+}
+#draw_color {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+#draw_color > div {
+    width: calc(var(--bar-size) * var(--bar-icon));
+    height: calc(var(--bar-size) * var(--bar-icon));
+    border-radius: calc(var(--bar-size) / 10);
+    border-width: calc(var(--bar-size) / 15);
+    border-style: solid;
+    box-sizing: border-box;
+    border-color: #333;
+    background-color: #fff;
+}
+#draw_color_switch {
+    position: relative;
+}
+#draw_fill_storke_mark {
+    position: absolute;
+    height: 50%;
+    width: 100%;
+    background-color: var(--bar-focus-color);
+    transition: var(--transition);
+    border-radius: inherit;
+}
+#draw_color_p > div {
+    overflow: hidden;
+    border-radius: inherit;
+    height: 100%;
+    transition: var(--transition);
+}
+#draw_color_p > div > * {
+    width: 100%;
+}
+#draw_color_p > div > :first-child {
+    outline: none;
+    font-family: var(--monospace);
+    font-size: calc(var(--bar-size) / 5);
+    height: 50%;
+    line-height: calc(var(--bar-size) / 5);
+    text-align: start;
+    border-radius: inherit;
+    display: block;
+}
+#draw_color_p > div > :last-child {
+    height: calc(var(--bar-size) / 2);
+}
+#draw_stroke_width {
+    overflow: hidden;
+}
+#draw_stroke_width > .range-b {
+    height: var(--bar-size);
+}
+#draw_color_color {
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    &:active {
+        transform: none !important;
+    }
+}
+.color_i {
+    transition: var(--transition);
+    &:active {
+        transform: scale(1) !important;
+    }
+}
+.color_i:hover {
+    position: relative;
+    z-index: 2;
+    transform: scale(1.5);
+}
+
+#draw_filters_i > div {
+    overflow: hidden;
+}
+
+#draw_filters_i > div > .range-b {
+    height: var(--bar-size);
+}
+#draw_filters_i .filter_select::after {
+    position: absolute;
+    right: 2px;
+    top: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 5px;
+    content: "";
+    background-color: var(--bar-bg);
+}
+#draw_filters_grayscale > div {
+    height: calc(var(--bar-size) / 3) !important;
+}
+#draw_filters_grayscale > div:hover {
+    background-color: var(--hover-color);
+}
+
+#draw_filters_bs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+}
+#draw_filters_bs > div:hover {
+    background-color: var(--hover-color);
+}

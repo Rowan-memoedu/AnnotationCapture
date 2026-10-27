@@ -1,0 +1,217 @@
+import { addClass, button, type ElType, image, pack, view } from "dkh-ui";
+import initScreenShots from "../screenShot/screenShot";
+
+function iconEl(src: IconType) {
+    return image(getImgUrl(`${src}.svg`), "icon").class("icon");
+}
+
+import { renderOn, renderSend } from "../../../lib/ipc";
+import store from "../../../lib/store/renderStore";
+import { t } from "../../../lib/translate/translate";
+import type { IconType } from "../../iconTypes";
+import { writeText } from "../lib/clipboard";
+import { loadTranslator } from "../lib/translate";
+import { defaultOcrId, loadOCR } from "../ocr/ocr";
+import { Class, getImgUrl, initStyle, setTitle } from "../root/root";
+
+initStyle(store);
+
+setTitle(t("屏幕翻译"));
+
+const screenShots = initScreenShots(
+    {
+        c: store.get("额外截屏器.命令"),
+        path: store.get("额外截屏器.位置"),
+    },
+    undefined,
+    undefined,
+    store.get("使用XDGDesktopPortal"),
+);
+
+const translateE = loadTranslator(store) || (async (input: string[]) => input);
+
+type Rect = { x: number; y: number; w: number; h: number };
+let rect: Rect = { x: 0, y: 0, w: 0, h: 0 };
+
+let screenId = Number.NaN;
+
+let display: Electron.Display[];
+
+const frequencyTime: number = store.get("屏幕翻译.dTime") || 3000;
+const bgColor = store.get("屏幕翻译.color.bg") || "rgb(255,255,255,0.5)";
+const textColor = store.get("屏幕翻译.color.text") || "#000";
+
+let pause = false;
+
+async function screenshot(id: number, rect: Rect) {
+    const l = (await screenShots(display)).screen;
+    const screen = l.find((i) => i.id === id) || l[0];
+    if (!screen) return null;
+    const img = (await screen.capture()).toImageData();
+    if (!img) return null;
+    const canvas = document.createElement("canvas");
+
+    canvas.width = img.width;
+    canvas.height = img.height;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("can get canvas context");
+    ctx.putImageData(img, 0, 0);
+    return ctx.getImageData(rect.x, rect.y, rect.w, rect.h);
+}
+
+const tCache: Map<string, string> = new Map();
+
+async function translate(text: { text: string; el: ElType<HTMLDivElement> }[]) {
+    const toTran: typeof text = [];
+    for (const i of text) {
+        const t = tCache.get(i.text);
+        if (t) {
+            i.el.el.innerText = t;
+        } else {
+            toTran.push(i);
+        }
+    }
+
+    const tt = await translateE(toTran.map((i) => i.text));
+    for (let i = 0; i < tt.length; i++) {
+        const tran = tt[i];
+        const text = toTran[i].text;
+        tCache.set(text, tran);
+        toTran[i].el.el.innerText = tran;
+    }
+}
+
+const sl = () =>
+    new Promise((resolve) => {
+        setTimeout(() => {
+            resolve("");
+        }, 100);
+    });
+
+async function run() {
+    if (!OCR) return;
+    const data = await screenshot(screenId, rect);
+    if (!data) return;
+    document.body.style.opacity = "1";
+
+    const ocrData = await OCR.ocr(data);
+
+    textEl.clear();
+    const textL: { text: string; el: ElType<HTMLDivElement> }[] = [];
+    for (const _i of ocrData.columns.flatMap((c) => c.parragraphs)) {
+        const lineHeight = _i.src
+            .map((i) => i.box[3][1] - i.box[0][1])
+            .reduce((a, b) => (a + b) / 2);
+        const i = _i.parse;
+        const text = i.text;
+        const x0 = i.box[0][0];
+        const y0 = i.box[0][1];
+        const x1 = i.box[2][0];
+        const y1 = i.box[2][1];
+        const item = view().style({
+            position: "absolute",
+            left: `${x0}px`,
+            top: `${y0}px`,
+            width: `${x1 - x0}px`,
+            height: `${y1 - y0}px`,
+            lineHeight: `${lineHeight}px`,
+            fontSize: `${lineHeight}px`,
+            color: textColor,
+        });
+        textEl.add(item);
+        textL.push({ el: item, text });
+    }
+    translate(textL);
+}
+
+let refreshTimer: null | ReturnType<typeof setTimeout> = null;
+const runRun = () => {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = null;
+    if (pause) return;
+    run();
+    refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        runRun();
+    }, frequencyTime);
+};
+
+pack(document.body).style({
+    overflow: "hidden",
+});
+
+const playIcon = iconEl("pause");
+const playEl = button(playIcon).on("click", () => {
+    pause = !pause;
+    playIcon.el.src = pause ? getImgUrl("recume.svg") : getImgUrl("pause.svg");
+    runRun();
+});
+
+const runEl = button(iconEl("ocr")).on("click", async () => {
+    mainEl.el.style.opacity = "0";
+    await sl();
+    await sl();
+    await run();
+    mainEl.el.style.opacity = "1";
+});
+
+const toolsEl = view("x")
+    .style({ position: "absolute", right: 0, top: 0 })
+    .class(
+        addClass(
+            {},
+            {
+                "&>*": {
+                    // @ts-ignore
+                    "-webkit-app-region": "no-drag",
+                },
+            },
+        ),
+    )
+    .class(Class.smallSize, Class.screenBar)
+    .add([
+        playEl,
+        runEl,
+        button(iconEl("copy")).on("click", () => {
+            const text = textEl.el.innerText;
+            writeText(text);
+        }),
+        button(iconEl("close")).on("click", () =>
+            renderSend("windowClose", []),
+        ),
+    ]);
+
+let OCR: Awaited<ReturnType<typeof import("esearch-ocr").init>> | null = null;
+
+const ocrX = loadOCR(store, store.get("OCR.类型") || defaultOcrId);
+
+OCR = ocrX ? await ocrX.ocr.init(ocrX.config) : null;
+
+const mainEl = view().style({
+    position: "absolute",
+    overflow: "hidden",
+    width: "100vw",
+    height: "100vh",
+});
+const textEl = view().style({
+    position: "relative",
+    // @ts-ignore
+    "-webkit-app-region": "drag",
+    width: "100vw",
+    height: "100vh",
+    background: bgColor,
+    color: textColor,
+});
+mainEl.add([textEl]);
+
+mainEl.addInto();
+
+mainEl.add(toolsEl);
+
+renderOn("translatorInit", ([id, _display, _rect]) => {
+    display = _display;
+    screenId = id;
+    rect = _rect;
+    runRun();
+});
