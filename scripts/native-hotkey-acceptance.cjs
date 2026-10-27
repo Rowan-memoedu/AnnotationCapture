@@ -1,0 +1,33 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const { _electron } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const root = process.env.ANNOTATION_EVIDENCE || 'D:/Artifacts/AnnotationCapture/acceptance/native-hotkey';
+const data = path.join(root, `profile-${Date.now()}`);
+fs.mkdirSync(root, { recursive: true });
+let app;
+(async () => {
+    app = await _electron.launch({ executablePath: process.env.ANNOTATION_EXE, cwd: path.dirname(process.env.ANNOTATION_EXE), args: ['--userData', data, '--archiveRoot', path.join(data, 'Archive')], timeout: 30000 });
+    const panel = await app.firstWindow(); await panel.waitForSelector('#ac-start');
+    const state = await panel.evaluate(() => require('electron').ipcRenderer.invoke('annotation:state'));
+    const initial = await app.evaluate(({ app, globalShortcut }, key) => ({ version: app.getVersion(), data: app.getPath('userData'), registered: globalShortcut.isRegistered(key) }), state.config.shortcut);
+    assert.equal(initial.registered, true);
+    fs.writeFileSync(path.join(root, 'ready.json'), JSON.stringify({ ...initial, shortcut: state.config.shortcut, executable: process.env.ANNOTATION_EXE }, null, 2));
+    console.log('NATIVE_HOTKEY_READY', JSON.stringify(initial));
+    const capture = await app.waitForEvent('window', { timeout: 120000 });
+    await capture.waitForFunction(() => document.querySelector('#ac-completion') && document.body.style.opacity !== '0');
+    await capture.screenshot({ path: path.join(root, 'native-shortcut-capture.png') });
+    console.log('NATIVE_CAPTURE_READY');
+    await capture.waitForEvent('close', { timeout: 120000 });
+    const images = [];
+    function walk(directory) { if (!fs.existsSync(directory)) return; for (const entry of fs.readdirSync(directory, { withFileTypes: true })) { const value = path.join(directory, entry.name); if (entry.isDirectory()) walk(value); else if (entry.name === 'capture.png') images.push(value); } }
+    walk(path.join(data, 'Archive'));
+    assert.equal(images.length, 1);
+    const metadata = JSON.parse(fs.readFileSync(images[0].replace('.png', '.json'), 'utf8'));
+    const geometry = await app.evaluate(({ nativeImage }, file) => nativeImage.createFromPath(file).getSize(), images[0]);
+    assert.deepEqual(geometry, { width: metadata.rect.width, height: metadata.rect.height });
+    assert.ok(geometry.width > 100 && geometry.height > 100);
+    const report = { passed: true, ...initial, input: 'Native Windows shortcut followed by Escape', shortcut: state.config.shortcut, archive: images[0], geometry };
+    fs.writeFileSync(path.join(root, 'native-hotkey-report.json'), JSON.stringify(report, null, 2));
+    console.log('NATIVE_HOTKEY_ACCEPTANCE_PASSED', JSON.stringify(report));
+})().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (app) await app.evaluate(({ app }) => app.exit()); });
