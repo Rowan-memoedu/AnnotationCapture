@@ -17,14 +17,15 @@ import {
     Tray,
 } from "electron";
 import minimist from "minimist";
+import type { CaptureMode } from "../../lib/annotation";
 import { handle } from "../../lib/annotationIpc";
 import { mainOn, mainSend } from "../../lib/ipc";
 import Store from "../../lib/store/store";
 import { ArchiveStore, decodePng } from "./annotationArchive";
+import { AnnotationAuth } from "./annotationAuth";
 import { AnnotationConfig } from "./annotationConfig";
 import { captureDefaults } from "./captureDefaults";
 import { FormulaJobs } from "./formulaJobs";
-import { deepSeekProvider } from "./formulaProvider";
 
 app.setName("AnnotationCapture");
 const args = minimist(process.argv.slice(1));
@@ -42,6 +43,7 @@ app.setPath("userData", dataRoot);
 app.setPath("sessionData", join(dataRoot, "browser"));
 const store = new Store({ configPath: join(dataRoot, "config.json") });
 let config: AnnotationConfig;
+let auth: AnnotationAuth;
 let archive: ArchiveStore;
 let jobs: FormulaJobs;
 let captureWindow: BrowserWindow | null = null;
@@ -88,7 +90,7 @@ function showPanel() {
     void load(panel, "annotation.html");
 }
 
-async function capture(imagePath?: string) {
+async function capture(imagePath?: string, mode: CaptureMode = "region") {
     if (activeCapture || captureStarting) {
         captureWindow?.focus();
         return;
@@ -142,6 +144,7 @@ async function capture(imagePath?: string) {
             imagePath ? readFileSync(imagePath) : undefined,
             display.id,
             undefined,
+            mode,
         ]);
     } catch (error) {
         showPanel();
@@ -159,17 +162,43 @@ function finishCapture() {
     if (quitting) app.quit();
 }
 
-function registerShortcut(key: string) {
-    const old = config.public().shortcut;
-    if (key === old && globalShortcut.isRegistered(key)) return;
+type ShortcutEntry = { key: string; mode: CaptureMode };
+let registeredShortcuts: ShortcutEntry[] = [];
+function registerEntry(entry: ShortcutEntry) {
+    if (!entry.key) return;
     if (
-        key &&
-        !globalShortcut.register(key, () => {
-            void capture();
+        !globalShortcut.register(entry.key, () => {
+            void capture(undefined, entry.mode);
         })
     )
-        throw new Error("截图快捷键已被占用，请更换组合");
-    if (old && old !== key) globalShortcut.unregister(old);
+        throw new Error(
+            `${entry.mode === "full" ? "全屏批注" : "区域截图"}快捷键 ${entry.key} 已被占用，请更换组合`,
+        );
+    registeredShortcuts.push(entry);
+}
+function setShortcuts(entries: ShortcutEntry[]) {
+    for (const entry of registeredShortcuts)
+        globalShortcut.unregister(entry.key);
+    registeredShortcuts = [];
+    for (const entry of entries) registerEntry(entry);
+}
+function registerShortcuts(next: { shortcut: string; fullShortcut: string }) {
+    if (
+        next.shortcut &&
+        next.shortcut.toLowerCase() === next.fullShortcut.toLowerCase()
+    )
+        throw new Error("两种截图入口不能使用相同快捷键");
+    const previous = [...registeredShortcuts];
+    try {
+        setShortcuts([
+            { key: next.shortcut, mode: "region" },
+            { key: next.fullShortcut, mode: "full" },
+        ]);
+    } catch (error) {
+        setShortcuts(previous);
+        throw error;
+    }
+    return () => setShortcuts(previous);
 }
 
 async function clipboardRevision(): Promise<string> {
@@ -267,25 +296,19 @@ handle("formula", async (input) => {
 });
 handle("state", () => ({
     config: config.public(),
+    login: auth.public(),
     jobs: [...jobs.jobs.values()].reverse(),
     shortcutError,
 }));
 handle("configure", (input) => {
-    const old = config.public().shortcut;
-    registerShortcut(input.shortcut);
+    const rollback = registerShortcuts(input);
     try {
         const result = config.save(input);
         shortcutError = "";
         changed();
         return result;
     } catch (error) {
-        if (input.shortcut !== old) {
-            globalShortcut.unregister(input.shortcut);
-            if (old)
-                globalShortcut.register(old, () => {
-                    void capture();
-                });
-        }
+        rollback();
         throw error;
     }
 });
@@ -295,9 +318,13 @@ handle("retry", (id) => {
     void jobs.run(id);
     return result;
 });
-handle("capture", () => {
-    void capture();
+handle("capture", (mode = "region") => {
+    if (mode !== "region" && mode !== "full") throw new Error("截图模式无效");
+    void capture(undefined, mode);
 });
+handle("login", (code) => auth.login(code));
+handle("logout", () => auth.logout());
+handle("refreshLogin", () => auth.refresh());
 handle("openPanel", () => showPanel());
 handle("chooseArchive", async () => {
     const result = await dialog.showOpenDialog({
@@ -336,31 +363,43 @@ else {
             captureDefaults(app.getVersion(), config.public().archiveRoot),
         );
         archive = new ArchiveStore(() => config.public().archiveRoot);
+        auth = new AnnotationAuth(config, changed);
         jobs = new FormulaJobs(
             archive,
-            () =>
-                config.key()
-                    ? deepSeekProvider(config.key(), config.public().model)
-                    : null,
+            () => auth.provider(),
             {
                 revision: clipboardRevision,
                 writeText: (text) => clipboard.writeText(text),
             },
             changed,
         );
-        try {
-            registerShortcut(config.public().shortcut);
-        } catch (error) {
-            shortcutError = String(error);
+        const shortcuts = config.public();
+        const shortcutErrors: string[] = [];
+        for (const entry of [
+            { key: shortcuts.shortcut, mode: "region" as const },
+            { key: shortcuts.fullShortcut, mode: "full" as const },
+        ]) {
+            try {
+                registerEntry(entry);
+            } catch (error) {
+                shortcutErrors.push(String(error));
+            }
         }
+        shortcutError = shortcutErrors.join("；");
         tray = new Tray(icon);
         tray.setToolTip("AnnotationCapture");
         tray.setContextMenu(
             Menu.buildFromTemplate([
                 {
-                    label: "截图并批注",
+                    label: "区域截图并批注",
                     click: () => {
                         void capture();
+                    },
+                },
+                {
+                    label: "全屏截图并批注",
+                    click: () => {
+                        void capture(undefined, "full");
                     },
                 },
                 { label: "识别结果与设置", click: showPanel },
@@ -372,7 +411,9 @@ else {
             void capture();
         });
         if (args.input) void capture(args.input);
+        else if (args.full) void capture(undefined, "full");
         else if (args.capture) void capture();
         else showPanel();
+        void auth.refresh();
     });
 }

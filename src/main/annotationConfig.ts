@@ -7,13 +7,17 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { app, safeStorage } from "electron";
-import type { ConfigInput, PublicConfig } from "../../lib/annotation";
+import type {
+    ConfigInput,
+    LoginSession,
+    PublicConfig,
+} from "../../lib/annotation";
 
 type StoredConfig = {
     archiveRoot: string;
     shortcut: string;
-    model: string;
-    encryptedKey?: string;
+    fullShortcut: string;
+    encryptedSession?: string;
 };
 
 export class AnnotationConfig {
@@ -24,7 +28,7 @@ export class AnnotationConfig {
         this.config = {
             archiveRoot,
             shortcut: "Control+Alt+S",
-            model: "deepseek-flash",
+            fullShortcut: "Alt+W",
         };
         if (existsSync(this.file)) {
             this.config = {
@@ -33,56 +37,71 @@ export class AnnotationConfig {
             };
         }
     }
-    key(): string {
-        if (this.config.encryptedKey)
-            return safeStorage.decryptString(
-                Buffer.from(this.config.encryptedKey, "base64"),
+    session(): LoginSession | null {
+        if (!this.config.encryptedSession) return null;
+        try {
+            const value = JSON.parse(
+                safeStorage.decryptString(
+                    Buffer.from(this.config.encryptedSession, "base64"),
+                ),
             );
-        return (
-            process.env.ANNOTATION_DEEPSEEK_API_KEY ||
-            process.env.DEEPSEEK_API_KEY ||
-            ""
-        );
+            if (
+                typeof value.token !== "string" ||
+                typeof value.accountId !== "string" ||
+                typeof value.label !== "string"
+            )
+                return null;
+            return value;
+        } catch {
+            return null;
+        }
     }
     public(): PublicConfig {
-        const keySource = this.config.encryptedKey
-            ? "saved"
-            : this.key()
-              ? "environment"
-              : "none";
         return {
             archiveRoot: this.config.archiveRoot,
             shortcut: this.config.shortcut,
-            model: this.config.model,
-            hasKey: keySource !== "none",
-            keySource,
+            fullShortcut: this.config.fullShortcut,
             version: app.getVersion(),
         };
     }
     save(input: ConfigInput): PublicConfig {
         if (!isAbsolute(input.archiveRoot) || !input.archiveRoot.trim())
             throw new Error("归档目录必须是绝对路径");
-        if (!input.model.trim() || input.model.length > 100)
-            throw new Error("模型名称无效");
+        if (
+            ![input.shortcut, input.fullShortcut].every(
+                (key) => typeof key === "string" && key.length <= 80,
+            )
+        )
+            throw new Error("快捷键无效");
         const next: StoredConfig = {
             ...this.config,
             archiveRoot: input.archiveRoot,
             shortcut: input.shortcut,
-            model: input.model.trim(),
+            fullShortcut: input.fullShortcut,
         };
-        if (input.clearKey) delete next.encryptedKey;
-        if (input.apiKey?.trim()) {
-            if (!safeStorage.isEncryptionAvailable())
-                throw new Error("系统凭据加密不可用，无法保存密钥");
-            next.encryptedKey = safeStorage
-                .encryptString(input.apiKey.trim())
-                .toString("base64");
-        }
+        this.persist(next);
+        return this.public();
+    }
+    saveSession(session: LoginSession) {
+        if (!safeStorage.isEncryptionAvailable())
+            throw new Error("系统凭据加密不可用，无法保存登录状态");
+        this.persist({
+            ...this.config,
+            encryptedSession: safeStorage
+                .encryptString(JSON.stringify(session))
+                .toString("base64"),
+        });
+    }
+    clearSession() {
+        const next = { ...this.config };
+        delete next.encryptedSession;
+        this.persist(next);
+    }
+    private persist(next: StoredConfig) {
         mkdirSync(dirname(this.file), { recursive: true });
         const temporary = `${this.file}.tmp`;
         writeFileSync(temporary, JSON.stringify(next, null, 2));
         renameSync(temporary, this.file);
         this.config = next;
-        return this.public();
     }
 }

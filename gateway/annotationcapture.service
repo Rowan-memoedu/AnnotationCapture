@@ -1,0 +1,28 @@
+[Unit]
+Description=AnnotationCapture invitation and formula gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=annotationcapture
+Group=annotationcapture
+WorkingDirectory=/opt/annotationcapture/app
+EnvironmentFile=-/etc/annotationcapture/provider.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 gateway/server.py --data-dir /var/lib/annotationcapture serve --port 18879
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/annotationcapture
+UMask=0077
+MemoryMax=192M
+CPUQuota=50%
+TasksMax=64
+LimitNOFILE=128
+
+[Install]
+WantedBy=multi-user.target

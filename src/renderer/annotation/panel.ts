@@ -29,18 +29,25 @@ const archivePath = input()
 const shortcut = input()
     .class("ac-field")
     .attr({ id: "ac-shortcut", ariaLabel: t("截图快捷键") });
-const model = input()
+const fullShortcut = input()
     .class("ac-field")
-    .attr({ id: "ac-model", ariaLabel: t("DeepSeek 模型") });
-const key = input("password")
+    .attr({ id: "ac-full-shortcut", ariaLabel: t("全屏批注快捷键") });
+const inviteCode = input("password")
     .class("ac-field")
     .attr({
-        id: "ac-api-key",
-        placeholder: t("输入自己的 API Key；留空保留现有配置"),
+        id: "ac-invite-code",
+        placeholder: "AC-…",
         autocomplete: "off",
-        ariaLabel: "DeepSeek API Key",
+        ariaLabel: t("邀请码"),
+        ariaRequired: "true",
     });
-const keyStatus = p().attr({ id: "ac-key-status" });
+inviteCode.el.setAttribute("aria-describedby", "ac-login-status");
+const loginStatus = p().attr({
+    id: "ac-login-status",
+    role: "status",
+    ariaLive: "polite",
+});
+const accountLabel = p().attr({ id: "ac-account-label" });
 const summary = p().class("ac-status");
 function action(label: string, id: string, fn: () => Promise<unknown>) {
     const b = button(t(label))
@@ -48,6 +55,9 @@ function action(label: string, id: string, fn: () => Promise<unknown>) {
         .attr({ id })
         .on("click", async () => {
             b.el.disabled = true;
+            b.el.setAttribute("aria-busy", "true");
+            notice.el.classList.remove("ac-error");
+            notice.el.textContent = "";
             try {
                 await fn();
             } catch (error) {
@@ -55,10 +65,52 @@ function action(label: string, id: string, fn: () => Promise<unknown>) {
                 notice.class("ac-error");
             } finally {
                 b.el.disabled = false;
+                b.el.setAttribute("aria-busy", "false");
             }
         });
     return b;
 }
+const loginButton = action("登录", "ac-login", async () => {
+    loginStatus.el.textContent = t("正在登录…");
+    loginStatus.el.classList.remove("ac-error");
+    inviteCode.el.setAttribute("aria-invalid", "false");
+    inviteCode.el.disabled = true;
+    try {
+        await invoke("login", inviteCode.el.value);
+        inviteCode.el.value = "";
+        await refresh();
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        loginStatus.el.textContent = message
+            .replace(/^Error invoking remote method '[^']+': /, "")
+            .replace(/^Error: /, "");
+        loginStatus.class("ac-error");
+        inviteCode.el.setAttribute("aria-invalid", "true");
+    } finally {
+        inviteCode.el.disabled = false;
+    }
+});
+inviteCode.on("keydown", (event) => {
+    if (event.key === "Enter" && !event.isComposing) {
+        event.preventDefault();
+        loginButton.el.click();
+    }
+});
+const loginForm = view("y")
+    .style({ gap: "12px" })
+    .add([p(t("邀请码")), inviteCode, loginButton]);
+const accountActions = view("x")
+    .style({ gap: "12px" })
+    .add([
+        action("重新连接", "ac-refresh-login", async () => {
+            await invoke("refreshLogin");
+            await refresh();
+        }),
+        action("退出登录", "ac-logout", async () => {
+            await invoke("logout");
+            await refresh();
+        }),
+    ]);
 root.add([
     view("y")
         .style({ gap: "12px" })
@@ -70,15 +122,33 @@ root.add([
             view("x")
                 .style({ gap: "12px" })
                 .add([
-                    action("开始截图", "ac-start", () =>
-                        invoke("capture"),
+                    action("区域截图", "ac-start", () =>
+                        invoke("capture", "region"),
                     ).class("ac-primary"),
+                    action("全屏批注", "ac-start-full", () =>
+                        invoke("capture", "full"),
+                    ),
                     action("打开归档目录", "ac-open-archive", () =>
                         invoke("openArchive"),
                     ),
                 ]),
         ]),
     notice,
+    view()
+        .class("ac-card")
+        .attr({ id: "ac-login-card" })
+        .add([
+            ele("h2").add(t("邀请码登录")),
+            accountLabel,
+            loginStatus,
+            loginForm,
+            accountActions,
+            p(
+                t(
+                    "本机登录一次后会保留登录状态。登录后使用统一识别服务，无需填写 API。",
+                ),
+            ),
+        ]),
     view("y")
         .style({ gap: "12px" })
         .add([
@@ -96,16 +166,13 @@ root.add([
                 const path = await invoke("chooseArchive");
                 if (path) archivePath.el.value = path;
             }),
-            p(t("截图快捷键")),
+            p(t("区域截图快捷键")),
             shortcut,
-            p(t("DeepSeek 模型")),
-            model,
-            p("DeepSeek API Key"),
-            key,
-            keyStatus,
+            p(t("全屏批注快捷键")),
+            fullShortcut,
             p(
                 t(
-                    "仅主动选择识别时发送公式笔迹图。完整截图保存在本机；密钥由 Windows 加密保存。",
+                    "仅主动选择识别时发送公式笔迹图。完整截图保存在本机，登录凭据由 Windows 加密保存。",
                 ),
             ),
             view("x")
@@ -115,21 +182,10 @@ root.add([
                         await invoke("configure", {
                             archiveRoot: archivePath.el.value,
                             shortcut: shortcut.el.value,
-                            model: model.el.value,
-                            apiKey: key.el.value,
+                            fullShortcut: fullShortcut.el.value,
                         });
-                        key.el.value = "";
                         await refresh(true);
                         notice.el.textContent = t("设置已保存");
-                    }),
-                    action("清除已保存密钥", "ac-clear-key", async () => {
-                        await invoke("configure", {
-                            archiveRoot: archivePath.el.value,
-                            shortcut: shortcut.el.value,
-                            model: model.el.value,
-                            clearKey: true,
-                        });
-                        await refresh(true);
                     }),
                 ]),
         ]),
@@ -199,16 +255,16 @@ async function refresh(settings = false) {
     if (settings) {
         archivePath.el.value = state.config.archiveRoot;
         shortcut.el.value = state.config.shortcut;
-        model.el.value = state.config.model;
-        keyStatus.el.textContent = state.config.hasKey
-            ? t("识别服务已配置") +
-              (state.config.keySource === "environment"
-                  ? t("（来自本机环境变量）")
-                  : "")
-            : t("未配置识别服务；仍可截图、批注和归档");
-        summary.el.textContent = `${state.config.shortcut || t("点击按钮开始")} · ${t("Esc / Ctrl+Enter 归档退出；Ctrl+Shift+Enter 选择公式")}`;
+        fullShortcut.el.value = state.config.fullShortcut;
+        summary.el.textContent = `${state.config.fullShortcut || t("点击按钮开始")} ${t("全屏批注")} · ${state.config.shortcut || t("点击按钮开始")} ${t("区域截图")} · ${t("Esc / Ctrl+Enter 归档退出；Ctrl+Shift+Enter 选择公式")}`;
         if (state.shortcutError) notice.el.textContent = state.shortcutError;
     }
+    loginStatus.el.textContent = state.login.message;
+    accountLabel.el.textContent = state.login.loggedIn
+        ? `${t("已登录：")}${state.login.label}`
+        : t("未登录；仍可截图、批注和归档");
+    loginForm.el.style.display = state.login.loggedIn ? "none" : "flex";
+    accountActions.el.style.display = state.login.loggedIn ? "flex" : "none";
     const signature = JSON.stringify(state.jobs);
     if (signature !== previousResults) {
         previousResults = signature;

@@ -1,4 +1,5 @@
 export type PixelRect = { x: number; y: number; width: number; height: number };
+export type CaptureMode = "region" | "full";
 export type CaptureInput = {
     id: string;
     capturedAt: string;
@@ -36,20 +37,25 @@ export type FormulaResult = {
 export type PublicConfig = {
     archiveRoot: string;
     shortcut: string;
-    model: string;
-    hasKey: boolean;
-    keySource: "saved" | "environment" | "none";
+    fullShortcut: string;
     version: string;
+};
+export type LoginSession = { token: string; accountId: string; label: string };
+export type LoginState = {
+    loggedIn: boolean;
+    verified: boolean;
+    label: string;
+    providerReady: boolean;
+    message: string;
 };
 export type ConfigInput = {
     archiveRoot: string;
     shortcut: string;
-    model: string;
-    apiKey?: string;
-    clearKey?: boolean;
+    fullShortcut: string;
 };
 export type AppState = {
     config: PublicConfig;
+    login: LoginState;
     jobs: FormulaResult[];
     shortcutError: string;
 };
@@ -90,7 +96,10 @@ export type AnnotationMessages = {
     copy: (id: string, text: string) => FormulaResult;
     retry: (id: string) => FormulaResult;
     openArchive: () => void;
-    capture: () => void;
+    capture: (mode?: CaptureMode) => void;
+    login: (inviteCode: string) => LoginState;
+    logout: () => LoginState;
+    refreshLogin: () => LoginState;
     openPanel: () => void;
     chooseArchive: () => string | null;
 };

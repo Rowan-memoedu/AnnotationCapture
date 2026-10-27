@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const { _electron } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { isolateWindow } = require('./acceptance-window.cjs');
+const { isolateWindow, prepareProfile } = require('./acceptance-window.cjs');
 
 const root = process.env.ANNOTATION_EVIDENCE || 'D:/Artifacts/AnnotationCapture/acceptance';
 fs.mkdirSync(root, { recursive: true });
@@ -11,6 +11,7 @@ const data = path.join(root, run);
 const errors = [];
 let app;
 async function launch(extra = []) {
+    prepareProfile(data);
     app = await _electron.launch({ executablePath: process.env.ANNOTATION_EXE || path.resolve('node_modules/electron/dist/electron.exe'), cwd: process.env.ANNOTATION_EXE ? path.dirname(process.env.ANNOTATION_EXE) : process.cwd(), args: [...(process.env.ANNOTATION_EXE ? [] : ['.']), '--userData', data, '--archiveRoot', path.join(data, 'Archive'), '--testMode', ...extra], env: { ...process.env, ...(process.env.ANNOTATION_EXE ? { PATH: `${process.env.SystemRoot}/System32;${process.env.SystemRoot}`, NODE_PATH: '', NODE_OPTIONS: '' } : {}), DEEPSEEK_API_KEY: '', ANNOTATION_DEEPSEEK_API_KEY: '' }, timeout: 30000 });
     app.on('window', page => { page.on('pageerror', e => errors.push(e.message)); });
     const page = await app.firstWindow();
@@ -20,9 +21,8 @@ async function launch(extra = []) {
 }
 async function capture(panel) {
     const pending = app.waitForEvent('window');
-    await panel.locator('#ac-start').click();
+    await panel.locator('#ac-start-full').click();
     const page = await pending;
-    await isolateWindow(app, page);
     await page.waitForSelector('#ac-completion', { state: 'visible' });
     await page.waitForFunction(() => document.body.style.opacity !== '0');
     await isolateWindow(app, page);
@@ -48,7 +48,7 @@ async function draw(page, points) {
 
 (async () => {
     const panel = await launch();
-    assert.match(await panel.locator('#ac-key-status').innerText(), /未配置/);
+    assert.match(await panel.locator('#ac-login-status').innerText(), /邀请码/);
     await panel.screenshot({ path: path.join(root, 'settings-unconfigured.png') });
     const page = await capture(panel);
     await page.screenshot({ path: path.join(root, 'capture-before.png') });

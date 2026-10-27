@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const { _electron } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { isolateWindow } = require('./acceptance-window.cjs');
+const { isolateWindow, prepareProfile } = require('./acceptance-window.cjs');
 const root = process.env.ANNOTATION_EVIDENCE || 'D:/Artifacts/AnnotationCapture/acceptance';
 fs.mkdirSync(root, { recursive: true });
 const data = path.join(root, `live-${Date.now()}`);
@@ -29,15 +29,18 @@ if(caseName==='mixedcase'){
     expected='X+x=2';
     strokes=[[[430,325],[475,405]],[[430,405],[475,325]],[[495,382],[525,382]],[[510,367],[510,397]],[[550,365],[555,363],[563,365],[570,378],[580,396],[587,399]],[[585,364],[580,368],[570,383],[558,398],[551,400]],[[610,372],[650,372]],[[610,390],[650,390]],[[680,363],[686,353],[701,352],[710,358],[711,366],[704,375],[680,400],[714,400]]];
 }
-let app;
+let app;const errors=[];
 (async () => {
-    assert.ok(process.env.DEEPSEEK_API_KEY || process.env.ANNOTATION_DEEPSEEK_API_KEY, 'Live key is required');
+    assert.ok(process.env.ANNOTATION_INVITE_FILE, 'Private invitation file is required');
+    const invitation=JSON.parse(fs.readFileSync(process.env.ANNOTATION_INVITE_FILE,'utf8'));
+    prepareProfile(data);
     app = await _electron.launch({ executablePath: process.env.ANNOTATION_EXE || path.resolve('node_modules/electron/dist/electron.exe'), cwd: process.env.ANNOTATION_EXE ? path.dirname(process.env.ANNOTATION_EXE) : process.cwd(), args: [...(process.env.ANNOTATION_EXE ? [] : ['.']), '--userData', data, '--archiveRoot', path.join(data, 'Archive'), '--testMode'], env: { ...process.env, ...(process.env.ANNOTATION_EXE ? { PATH: `${process.env.SystemRoot}/System32;${process.env.SystemRoot}`, NODE_PATH:'',NODE_OPTIONS:'' } : {}) }, timeout: 30000 });
+    app.on('window',page=>page.on('pageerror',e=>errors.push(String(e))));
     const panel = await app.firstWindow(); await panel.waitForSelector('#ac-start');
     await isolateWindow(app, panel);
-    const keyStatus = await panel.locator('#ac-key-status').innerText(); assert.match(keyStatus, /已配置/);
-    const pending = app.waitForEvent('window'); await panel.locator('#ac-start').click(); const page = await pending;
-    await isolateWindow(app, page);
+    await panel.locator('#ac-invite-code').fill(invitation.inviteCode);await panel.locator('#ac-login').click();await panel.waitForFunction(()=>document.querySelector('#ac-login-status').textContent.includes('已登录'));
+    const login=await panel.evaluate(()=>require('electron').ipcRenderer.invoke('annotation:state'));assert.equal(login.login.providerReady,true,'The NEW shared API has not been configured');
+    const pending = app.waitForEvent('window'); await panel.locator('#ac-start-full').click(); const page = await pending;
     await page.waitForFunction(() => document.body.style.opacity !== '0' && document.querySelector('#ac-completion'));
     await isolateWindow(app, page);
     await page.locator('#draw_free').click();
@@ -56,9 +59,13 @@ let app;
     const state=await panel.evaluate(()=>require('electron').ipcRenderer.invoke('annotation:state'));
     const result=state.jobs[0];
     const clipboard=await app.evaluate(async ({clipboard})=>await clipboard.readText());
-    await panel.screenshot({path:path.join(root,`deepseek-${caseName}-result.png`)});
+    await panel.screenshot({path:path.join(root,`shared-api-${caseName}-result.png`)});
     const canonical=s=>s.replace(/\s/g,'').replace(/\\left|\\right/g,'').replace(/([_^])\{([A-Za-z0-9])\}/g,'$1$2');
     const exactMatch=canonical(result.latex)===canonical(expected);
+    if(process.env.ANNOTATION_PUBLIC_RESULT_SCREENSHOT&&caseName==='polynomial'&&result.status==='copied'&&exactMatch&&clipboard===result.latex){
+        // Only the synthetic formula result is captured; settings and desktop stay outside the image.
+        await panel.locator('#ac-results').screenshot({path:process.env.ANNOTATION_PUBLIC_RESULT_SCREENSHOT});
+    }
     let manualCorrectionVerified=false;
     if(process.env.ANNOTATION_TEST_CORRECTION==='1'&&result.latex){
         const corrected='x^{2}-1=0';
@@ -69,8 +76,12 @@ let app;
         assert.equal(after.jobs[0].recognizedLatex,result.latex);assert.equal(after.jobs[0].latex,corrected);
         manualCorrectionVerified=true;
     }
-    fs.copyFileSync(result.path,path.join(root,`deepseek-${caseName}-input.png`));
-    fs.writeFileSync(path.join(root,`deepseek-${caseName}-report.json`),JSON.stringify({passed:result.status==='copied'&&exactMatch&&clipboard===result.latex,inputKind:'Actual mouse strokes in upstream Fabric editor',expected,actual:result.latex,exactMatch,clipboardMatched:clipboard===result.latex,manualCorrectionVerified,result},null,2));
+    fs.copyFileSync(result.path,path.join(root,`shared-api-${caseName}-input.png`));
+    fs.writeFileSync(path.join(root,`shared-api-${caseName}-report.json`),JSON.stringify({passed:result.status==='copied'&&exactMatch&&clipboard===result.latex,inputKind:'Actual mouse strokes in upstream Fabric editor',expected,actual:result.latex,exactMatch,clipboardMatched:clipboard===result.latex,manualCorrectionVerified,result},null,2));
     assert.equal(result.status,'copied',result.message); assert.equal(canonical(result.latex),canonical(expected)); assert.equal(clipboard,result.latex);
     console.log('LIVE_OCR_PASSED',JSON.stringify({model:result.model,latex:result.latex,durationMs:result.durationMs}));
-})().catch(error=>{ console.error(error); process.exitCode=1; }).finally(async()=>{if(app)await app.evaluate(({app})=>app.exit());});
+})().catch(async error=>{
+    const message=String(error).replace(/AC-[A-Za-z0-9_-]+/g,'[invitation]');const states=[];
+    for(const page of app?.windows()||[])try{states.push(await page.evaluate(()=>({url:location.href,status:document.querySelector('#ac-capture-status')?.textContent,selection:document.querySelector('#ac-selection-status')?.textContent,buttons:[...document.querySelectorAll('#ac-selection button')].map(b=>({text:b.textContent,disabled:b.disabled}))})));await page.screenshot({path:path.join(root,`${caseName}-failure-${Date.now()}.png`),timeout:5000});}catch{}
+    fs.writeFileSync(path.join(root,`${caseName}-failure-${Date.now()}.json`),JSON.stringify({error:message,errors,states},null,2));console.error(message,JSON.stringify({errors,states}));process.exitCode=1;
+}).finally(async()=>{if(app)await app.evaluate(({app})=>app.exit()).catch(()=>{});});

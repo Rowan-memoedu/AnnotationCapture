@@ -4,6 +4,12 @@ const metadata = require('../package.json');
 const artifacts = process.env.ANNOTATION_ARTIFACTS || 'D:/Artifacts/AnnotationCapture';
 const staging = path.join(artifacts, 'package');
 fs.mkdirSync(staging, { recursive: true });
+const compiled=path.resolve(staging,'out');
+if(fs.existsSync(compiled)){
+    if(fs.lstatSync(compiled).isSymbolicLink()||fs.realpathSync(compiled).toLowerCase()!==compiled.toLowerCase())throw new Error('Refusing to clean linked package output');
+    // This directory contains only reproducible compiled application files.
+    fs.rmSync(compiled,{recursive:true,force:true});
+}
 for (const entry of ['out', 'assets/logo']) fs.cpSync(path.resolve(entry), path.join(staging, entry), { recursive: true });
 fs.mkdirSync(path.join(staging, 'lib/translate'), { recursive: true });
 for (const file of fs.readdirSync('lib/translate').filter(f=>f.endsWith('.json'))) fs.copyFileSync(path.join('lib/translate', file), path.join(staging,'lib/translate',file));

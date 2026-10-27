@@ -2,6 +2,10 @@ import { addStyle } from "dkh-ui";
 
 export function annotationStyles() {
     addStyle({
+        ":root": {
+            "--ac-error-color": "#c43b36",
+            "--ac-success-color": "#168346",
+        },
         ".ac-button": {
             padding: "8px 14px",
             borderRadius: "var(--border-radius, 8px)",
@@ -33,8 +37,13 @@ export function annotationStyles() {
             color: "var(--font-color)",
             font: "inherit",
         },
-        ".ac-error": { color: "#c43b36" },
-        ".ac-success": { color: "#168346" },
+        ".ac-field:hover": { background: "var(--bar-bg)" },
+        ".ac-field[aria-invalid='true']": {
+            borderColor: "var(--ac-error-color)",
+        },
+        ".ac-field:disabled": { opacity: "0.5", cursor: "not-allowed" },
+        ".ac-error": { color: "var(--ac-error-color)" },
+        ".ac-success": { color: "var(--ac-success-color)" },
         ".ac-overlay": {
             position: "fixed",
             inset: "0",

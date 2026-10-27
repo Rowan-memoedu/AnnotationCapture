@@ -43,7 +43,7 @@ export class FormulaJobs {
             rect,
             status: "unconfigured",
             latex: "",
-            message: "未配置识别服务；截图与公式图已保存",
+            message: "请先使用邀请码登录；截图与公式图已保存",
         };
         this.jobs.set(id, result);
         await this.archives.saveResult(result);
@@ -64,7 +64,7 @@ export class FormulaJobs {
             const provider = this.provider();
             if (!provider) {
                 result.status = "unconfigured";
-                result.message = "未配置识别服务；截图与公式图已保存";
+                result.message = "请先使用邀请码登录；截图与公式图已保存";
                 return result;
             }
             const revision = await this.clipboard.revision();

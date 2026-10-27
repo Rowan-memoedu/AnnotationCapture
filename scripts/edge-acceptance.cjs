@@ -3,7 +3,7 @@ const path = require('node:path');
 const zlib = require('node:zlib');
 const assert = require('node:assert/strict');
 const { _electron } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { isolateWindow } = require('./acceptance-window.cjs');
+const { isolateWindow, prepareProfile } = require('./acceptance-window.cjs');
 const root = process.env.ANNOTATION_EVIDENCE || 'D:/Artifacts/AnnotationCapture/acceptance';
 fs.mkdirSync(root,{recursive:true});
 function whitePng(w,h) {
@@ -17,6 +17,7 @@ let app,page,data;
 const report=[];
 async function launch(name,scale=1) {
     data=path.join(root,`edge-${name}-${Date.now()}`);
+    prepareProfile(data);
     app=await _electron.launch({executablePath:process.env.ANNOTATION_EXE||path.resolve('node_modules/electron/dist/electron.exe'),args:[...(process.env.ANNOTATION_EXE?[]:['.']),'--userData',data,'--archiveRoot',path.join(data,'Archive'),'--input',fixture,'--testMode',`--force-device-scale-factor=${scale}`],env:{...process.env,DEEPSEEK_API_KEY:'',ANNOTATION_DEEPSEEK_API_KEY:''},timeout:30000});
     page=await app.firstWindow();await page.waitForFunction(()=>document.querySelector('#ac-completion')&&document.body.style.opacity!=='0');
     await isolateWindow(app,page);
@@ -45,9 +46,9 @@ async function archivedInk(){const f=files()[0];return app.evaluate(({nativeImag
     await stroke([[330,250],[520,250]]);const erased=await waitInk(n=>n<second-100);
     await page.keyboard.press('Control+z');await waitInk(n=>Math.abs(n-second)<10);
     await page.keyboard.press('Control+y');await finish();const saved=await archivedInk();
-    assert.ok(saved.ink<second-100);report.push({case:'undo-redo-eraser-and-immediate-finish',first,second,erased,saved,passed:true});await stop();
+    assert.ok(saved.ink<second-100,JSON.stringify({first,second,erased,saved}));report.push({case:'undo-redo-eraser-and-immediate-finish',first,second,erased,saved,passed:true});await stop();
 
-    await launch('write-failure');await stroke([[330,250],[520,310]]);const before=await ink();
+    await launch('write-failure');await stroke([[330,250],[520,310]]);const before=await waitInk(n=>n>100);
     const blocked=path.join(data,'not-a-directory');fs.writeFileSync(blocked,'occupied');
     await page.evaluate(async root=>{const ipc=require('electron').ipcRenderer;const s=await ipc.invoke('annotation:state');await ipc.invoke('annotation:configure',{...s.config,archiveRoot:root});},blocked);
     await page.keyboard.press('Escape');await page.waitForFunction(()=>document.querySelector('#ac-capture-status').textContent.includes('画布已保留'));

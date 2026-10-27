@@ -2,10 +2,10 @@
 
 本仓库是基于 eSearch 15.6.1 的有限改造，运行入口为 `src/main/annotationMain.ts`，构建配置为 `electron.annotation.config.ts`。上游 `src/main/main.ts` 保留供参考，不是当前发行入口。
 
-- 当前能力：截图批注、完成时按日归档、独立公式框选、纯笔迹导出、DeepSeek Vision 识别与剪贴板。
+- 当前能力：全屏/区域截图批注、完成时按日归档、独立公式框选、纯笔迹导出、邀请码登录及统一识别网关与剪贴板。
 - `pnpm run typecheck`、`pnpm test`、`pnpm run lint` 验证当前应用；`pnpm run typecheck:upstream` 仅审计完整上游源码。后者存在上游 xtimelog 类型错误，不能冒充已通过。
 - `pnpm run build` 后可 `pnpm start`；`pnpm run release:win` 生成含运行时的独立 Windows x64 ZIP。构建、使用和验收以 README 为准。
-- API Key 只由环境变量或系统加密存储提供，发行包、源码与验收记录不得含真实密钥、用户截图或用户运行配置。
+- 上游 API Key 只在网关环境中配置；客户端只保存由 Windows 加密的个人会话。发行包、源码与公开验收记录不得含真实密钥、邀请码、用户截图或用户运行配置。旧 DeepSeek 配置不作为新版回退。
 - 截图归档成功后才能销毁画布；公式裁剪不能改变归档范围；测试要分别报告功能链路通过与 OCR 精确匹配结果。
 - Math Academy 浏览器及输入适配仍在当前范围之外。
 

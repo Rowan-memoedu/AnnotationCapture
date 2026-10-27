@@ -48,9 +48,11 @@ async function extract() {
     const checks = [];
     const tasks = [
         { script: 'portable-smoke' },
+        { script: 'shortcuts-acceptance' },
+        { script: 'capture-modes-acceptance' },
         { script: 'ui-acceptance' },
         { script: 'edge-acceptance' },
-        ...['polynomial', 'fraction', 'root', 'mixedcase'].map(formulaCase => ({ script: 'live-ocr-acceptance', formulaCase })),
+        ...(process.env.ANNOTATION_INVITE_FILE ? ['polynomial', 'fraction', 'root', 'mixedcase'].map(formulaCase => ({ script: 'live-ocr-acceptance', formulaCase })) : []),
     ];
     for (const task of tasks) {
         console.log(`RUN ${task.script}${task.formulaCase ? ` ${task.formulaCase}` : ''}`);
@@ -62,7 +64,8 @@ async function extract() {
         process.stdout.write(result.stdout || ''); process.stderr.write(result.stderr || '');
         checks.push({ ...task, exitCode: result.status, error: result.error?.message });
     }
-    const report = { passed: checks.every(check => check.exitCode === 0), version, zipPath, sha256, executable, evidence, isolation: 'Rendered Electron windows outside the visible desktop; native focus disabled', checks };
+    const liveProviderTested=!!process.env.ANNOTATION_INVITE_FILE;
+    const report = { passed: checks.every(check => check.exitCode === 0), releaseReady:liveProviderTested&&checks.every(check=>check.exitCode===0), liveProviderTested, pending:liveProviderTested?[]:['NEW unified API end-to-end acceptance'], version, zipPath, sha256, executable, evidence, isolation: 'Drawing windows moved outside the visible desktop after screen capture; native focus disabled', checks };
     fs.writeFileSync(path.join(evidence, 'release-acceptance.json'), JSON.stringify(report, null, 2));
     console.log(JSON.stringify(report, null, 2));
     if (!report.passed) process.exitCode = 1;

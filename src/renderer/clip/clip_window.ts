@@ -37,6 +37,7 @@ import { Class, cssColor, getImgUrl, initStyle, setTitle } from "../root/root";
 
 const screenShots = initScreenShots();
 let pendingCanvasWork = Promise.resolve();
+let entryMode: "region" | "full" = "region";
 
 import {
     button,
@@ -4126,104 +4127,113 @@ let willFilter: EditType["filter"] | "" = "";
 
 document.body.style.opacity = "0";
 
-renderOn("clip_init", async ([_displays, imgBuffer, mainid, act]) => {
-    const wx = await screenShots(_displays, imgBuffer); // 只是截屏 也可能是小图片
-    allScreens = wx.screen;
-    const mainId = mainid;
-    const i = getNowScreen(mainId);
-    windows = wx.window.map((w) => {
-        w.rect.x -= i.bounds?.x ?? 0;
-        w.rect.y -= i.bounds?.y ?? 0;
-        return w;
-    });
-    console.log(allScreens, windows);
-    await setScreen(i);
-    const nowScreen = _displays.find((i) => i.id === mainId) || _displays[0]; // 非截屏，是屏幕
-    const xy = { x: 0, y: 0 };
-    if (wx.type === "normal") {
-        zoomW = i.size.width;
-        ratio = i.scaleFactor;
-    } else if (wx.type === "command") {
-        const x = store.get("自定义屏幕属性");
-        const s = x.find((i) => i.id === mainId);
-        zoomW = i.size.width;
-        if (s) ratio = s.scaleFactor;
-        else ratio = nowScreen.scaleFactor;
-    } else if (wx.type === "img")
-        if (
-            i.size.width < nowScreen.size.width ||
-            i.size.height < nowScreen.size.height
-        ) {
-            const x =
-                (nowScreen.size.width * window.devicePixelRatio) / 2 -
-                i.size.width / 2;
-            const y =
-                (nowScreen.size.height * window.devicePixelRatio) / 2 -
-                i.size.height / 2;
-            xy.x = x;
-            xy.y = y;
+renderOn(
+    "clip_init",
+    async ([_displays, imgBuffer, mainid, _act, captureMode]) => {
+        entryMode = captureMode ?? "region";
+        const wx = await screenShots(_displays, imgBuffer); // 只是截屏 也可能是小图片
+        allScreens = wx.screen;
+        const mainId = mainid;
+        const i = getNowScreen(mainId);
+        windows = wx.window.map((w) => {
+            w.rect.x -= i.bounds?.x ?? 0;
+            w.rect.y -= i.bounds?.y ?? 0;
+            return w;
+        });
+        console.log(allScreens, windows);
+        await setScreen(i);
+        const nowScreen =
+            _displays.find((i) => i.id === mainId) || _displays[0]; // 非截屏，是屏幕
+        const xy = { x: 0, y: 0 };
+        if (wx.type === "normal") {
             zoomW = i.size.width;
-            ratio = devicePixelRatio;
-        }
-    setEditorP(1 / ratio, 0, 0);
-
-    document.body.style.opacity = "";
-
-    renderSend("clip_show", []);
-    const screensEl = toolsX.screens.el;
-    if (allScreens.length > 1) {
-        let minX = 0;
-        let maxX = 0;
-        let minY = 0;
-        let maxY = 0;
-        for (const i of allScreens) {
-            const right = i.bounds.x + i.bounds.width;
-            const bottom = i.bounds.y + i.bounds.height;
-            maxX = Math.max(maxX, right);
-            maxY = Math.max(maxY, bottom);
-            minX = Math.min(minX, i.bounds.x);
-            minY = Math.min(minY, i.bounds.y);
-        }
-        const tWidth = maxX - minX;
-        const tHeight = maxY - minY;
-        const el = view();
-        for (const i of allScreens) {
-            const x = (i.bounds.x - minX) / tWidth;
-            const y = (i.bounds.y - minY) / tHeight;
-            const width = i.bounds.width / tWidth;
-            const height = i.bounds.height / tHeight;
-            const div = view().style({
-                width: `${width * 100}%`,
-                height: `${height * 100}%`,
-                left: `${x * 100}%`,
-                top: `${y * 100}%`,
-            });
-            if (i.id === nowScreenId) {
-                div.el.classList.add("now_screen");
+            ratio = i.scaleFactor;
+        } else if (wx.type === "command") {
+            const x = store.get("自定义屏幕属性");
+            const s = x.find((i) => i.id === mainId);
+            zoomW = i.size.width;
+            if (s) ratio = s.scaleFactor;
+            else ratio = nowScreen.scaleFactor;
+        } else if (wx.type === "img")
+            if (
+                i.size.width < nowScreen.size.width ||
+                i.size.height < nowScreen.size.height
+            ) {
+                const x =
+                    (nowScreen.size.width * window.devicePixelRatio) / 2 -
+                    i.size.width / 2;
+                const y =
+                    (nowScreen.size.height * window.devicePixelRatio) / 2 -
+                    i.size.height / 2;
+                xy.x = x;
+                xy.y = y;
+                zoomW = i.size.width;
+                ratio = devicePixelRatio;
             }
-            el.add(div);
-            div.on("click", () => {
-                el.query(".now_screen")?.el.classList.remove("now_screen");
-                div.class("now_screen");
-                setScreen(i);
-            });
+        setEditorP(1 / ratio, 0, 0);
+
+        document.body.style.opacity = "";
+
+        renderSend("clip_show", []);
+        const screensEl = toolsX.screens.el;
+        if (allScreens.length > 1) {
+            let minX = 0;
+            let maxX = 0;
+            let minY = 0;
+            let maxY = 0;
+            for (const i of allScreens) {
+                const right = i.bounds.x + i.bounds.width;
+                const bottom = i.bounds.y + i.bounds.height;
+                maxX = Math.max(maxX, right);
+                maxY = Math.max(maxY, bottom);
+                minX = Math.min(minX, i.bounds.x);
+                minY = Math.min(minY, i.bounds.y);
+            }
+            const tWidth = maxX - minX;
+            const tHeight = maxY - minY;
+            const el = view();
+            for (const i of allScreens) {
+                const x = (i.bounds.x - minX) / tWidth;
+                const y = (i.bounds.y - minY) / tHeight;
+                const width = i.bounds.width / tWidth;
+                const height = i.bounds.height / tHeight;
+                const div = view().style({
+                    width: `${width * 100}%`,
+                    height: `${height * 100}%`,
+                    left: `${x * 100}%`,
+                    top: `${y * 100}%`,
+                });
+                if (i.id === nowScreenId) {
+                    div.el.classList.add("now_screen");
+                }
+                el.add(div);
+                div.on("click", () => {
+                    el.query(".now_screen")?.el.classList.remove("now_screen");
+                    div.class("now_screen");
+                    setScreen(i);
+                });
+            }
+            screensEl.clear().add(el);
+        } else {
+            screensEl.el.style.display = "none";
         }
-        screensEl.clear().add(el);
-    } else {
-        screensEl.el.style.display = "none";
-    }
 
-    setDefaultAction(act);
+        setDefaultAction("no");
+        finalRect = [0, 0, mainCanvas.width, mainCanvas.height];
+        rectSelect = entryMode === "full";
+        if (entryMode === "full") setEditType("draw", "free");
+        else setEditType("select", "rect");
 
-    getWin();
+        getWin();
 
-    drawClipRect();
-    setTimeout(() => {
-        whBar(finalRect);
-    }, 0);
-    rightKey = false;
-    changeRightBar(false);
-});
+        drawClipRect();
+        setTimeout(() => {
+            whBar(finalRect);
+        }, 0);
+        rightKey = false;
+        changeRightBar(false);
+    },
+);
 
 renderOn("clip_stop_long", () => stopLong());
 
@@ -4547,15 +4557,14 @@ clipEl.onmousedown = (e) => {
 };
 
 document.onmouseup = (e) => {
+    let selectedRegion = false;
     if (e.button === 0) {
         if (selecting) {
             clipEnd(e);
             // 抬起鼠标后工具栏跟随
             followBar({ x: e.clientX, y: e.clientY });
-            // 框选后默认操作
-            if (autoDo !== "no" && e.button === 0) {
-                toolsX[autoDo].f();
-            }
+            selectedRegion =
+                entryMode === "region" && finalRect[2] > 1 && finalRect[3] > 1;
             isShowBars = true;
             showBars(isShowBars);
         }
@@ -4573,6 +4582,7 @@ document.onmouseup = (e) => {
 
     down = false;
     moved = false;
+    if (selectedRegion) setEditType("draw", "free");
 };
 
 hotkeys("s", () => {

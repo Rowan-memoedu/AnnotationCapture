@@ -2,28 +2,40 @@
 
 截图、批注、每日归档，并把选定的手写公式识别为 LaTeX，放入剪贴板。基于 [eSearch 15.6.1](https://github.com/xushengfeng/eSearch/tree/15.6.1) 的批注编辑器，保留画笔、形状、文字、橡皮擦、撤销和重做。
 
+0.2.0 加入全屏画笔入口和邀请码登录，登录后统一使用管理员配置的 DeepSeek 服务。
+
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.1.1-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.2.0-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
-1. 点击“开始截图”，或按 `Ctrl+Alt+S`。截图后使用批注工具书写。
+1. 按 `Alt+W`，或点击“全屏批注”：截取鼠标所在显示器，直接进入画笔。按 `Ctrl+Alt+S`，或点击“区域截图”：框选后自动切换画笔，在选区上继续批注。
 2. 按 `Esc` 或 `Ctrl+Enter`：保存带批注的截图后退出。正在落笔时会等抬笔再保存。
 3. 按 `Ctrl+Shift+Enter`，或点击“选公式并识别”：先归档完整截图，再框选一个手写公式，点击“识别选定公式”。只发送选区内的批注笔迹，网页背景不会发送给识别服务。
 4. 成功后，LaTeX 文本进入剪贴板，结果窗口同时展示输入图和可编辑的识别结果。若等待期间剪贴板发生变化，会保留结果供手动复制。
 
-截图快捷键可在设置中修改。公式选择期间按 `Esc` 会退出，已经归档的截图仍保留。保存失败会显示错误并保留画布，修复归档目录后可重试。
+两种截图快捷键均可在设置中修改。区域模式只保存选定区域；全屏模式保存当前显示器完整画面。公式选择期间按 `Esc` 会退出，已经归档的截图仍保留。保存失败会显示错误并保留画布，修复归档目录后可重试。
 
-## 配置 DeepSeek
+## 从旧版覆盖升级
 
-在设置中填入自己的 API Key，默认模型为支持图片输入的 `deepseek-flash`。密钥由 Windows 的系统加密能力保护，仅存放在本机。发行包不含开发者密钥，也不提供共享额度。
+1. 完成当前批注，从系统托盘右键菜单选择“退出”。关闭设置窗口只会留在后台，不能代替退出程序。
+2. 将新版 ZIP 的全部内容解压到原来的程序目录，选择覆盖同名程序文件；保持 `AnnotationCapture.exe` 路径不变。不要先删除旧目录，也不要删除或替换 `AnnotationCapture-data`。
+3. 重新运行原来的 `AnnotationCapture.exe` 或桌面快捷方式。历史归档、自定义归档目录、快捷键和画笔设置继续保留。
 
-识别默认启用 DeepSeek 的低强度推理，以改善公式结构和字母大小写的识别；只使用最终公式文本，推理内容不会进入剪贴板。接口依据：[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)。
+从 0.1.1 升级后，首次识别须使用邀请码登录，此后自动恢复登录，不再填写个人 API。已在 0.2.0 登录的用户再次覆盖更新仍保留本机登录状态。使用 `--userData` 或 `--archiveRoot` 的用户继续使用原快捷方式及参数。
 
-也可通过 `ANNOTATION_DEEPSEEK_API_KEY` 或 `DEEPSEEK_API_KEY` 环境变量提供密钥。已保存密钥优先于环境变量。“清除已保存密钥”不会删除环境变量。
+已在本机使用 0.1.1 正式 ZIP 验证上述两种数据目录的覆盖升级，并逐文件核对归档哈希。快捷键若被其他程序占用，设置中会提示具体入口，可换一个组合；另一可用快捷键仍保留。
 
-未配置识别服务时，截图归档与公式图导出仍可使用；不会虚构识别结果或清空剪贴板。请求失败、余额不足或超时会显示相应状态，可在结果卡上重试。接口依据：[DeepSeek Vision](https://api-docs.deepseek.com/guides/vision/)。
+## 邀请码登录
+
+首次使用公式识别，在软件中输入管理员提供的个人邀请码。登录状态由 Windows 加密保存在本机，后续启动自动恢复。个人邀请码可用于自己的多台电脑；管理员可单独停用一个用户，该用户所有设备的登录随之失效。
+
+所有登录用户使用管理员配置的统一识别服务，无需填写 API Key 或模型。发行包不包含上游 API 密钥；登录凭据只用于访问独立网关。完整截图留在本机，仅主动选中的公式笔迹图发送到服务。
+
+旧版保存的个人密钥及 DeepSeek 环境变量不会用于 0.2.0 的识别请求。离线时保留本机登录状态，服务恢复后可重新连接。
+
+未登录或统一服务尚未配置时，截图归档与公式图导出仍可使用，剪贴板保持原样。请求失败或超时会显示状态，可在结果卡上重试。管理员配置见 [网关运维说明](gateway/README.md)。
 
 ## 保存内容
 
@@ -62,9 +74,13 @@ pnpm run release:win
 
 `ANNOTATION_ARTIFACTS` 可指定打包暂存与发行产物目录；本项目开发环境默认使用 `D:/Artifacts/AnnotationCapture`。发行包与源码独立，不引用开发机器的 `node_modules`。
 
-`scripts/ui-acceptance.cjs` 验证真实截图、绘画、归档与未配置状态；`scripts/edge-acceptance.cjs` 验证最后一笔、撤销重做、橡皮擦、保存失败、选区取消、文字编辑和 100%/150%/200% 显示缩放；`scripts/live-ocr-acceptance.cjs` 使用现有 DeepSeek Key 对实际编辑器鼠标笔迹进行端到端验收。脚本需要 Playwright，可通过 `PLAYWRIGHT_MODULE` 指向模块目录；实际使用软件不需要 Playwright。设置 `ANNOTATION_EXE` 可针对打包后的程序执行相同验收。
+`scripts/capture-modes-acceptance.cjs` 核对两种入口、默认画笔及归档像素；`scripts/invite-login-acceptance.cjs` 验证真实网关登录、重启、多设备及单用户撤销；`scripts/ui-acceptance.cjs` 验证真实截图、绘画、归档与未登录状态；`scripts/edge-acceptance.cjs` 验证最后一笔、撤销重做、橡皮擦、保存失败、选区取消、文字编辑和 100%/150%/200% 显示缩放。`scripts/live-ocr-acceptance.cjs` 通过私密的 `ANNOTATION_INVITE_FILE` 登录，使用统一 API 做四个真实笔迹样例；客户端无需上游密钥。
 
-`node scripts/accept-release.cjs` 会将当前版本 ZIP 解压到新的隔离目录，然后依次执行独立启动、截图批注、编辑边界和四个真实 OCR 样例，生成汇总报告。测试窗口移到可见桌面之外并关闭原生焦点，避免桌面操作混入绘画输入；识别的预期答案只用于验收比较，不发送给模型。
+脚本需要 Playwright，可通过 `PLAYWRIGHT_MODULE` 指向模块目录；实际使用软件不需要 Playwright。设置 `ANNOTATION_EXE` 可针对打包后的程序执行相同验收。`pnpm run test:gateway` 运行隔离网关测试，使用本机假上游验证协议与权限，不计为真实模型识别通过。
+
+`scripts/upgrade-acceptance.cjs` 从旧版正式 ZIP 启动，在同一程序路径覆盖新版，检查默认/自定义数据目录、原归档哈希、设置、首次邀请码登录及重复覆盖后免登录。需要分别指定旧、新 ZIP 和私密邀请码文件，可通过 `ANNOTATION_OLD_ZIP`、`ANNOTATION_NEW_ZIP`、`ANNOTATION_INVITE_FILE` 配置。
+
+`node scripts/accept-release.cjs` 将当前版本 ZIP 解压到新的隔离目录，执行独立启动、两种截图模式及编辑边界。提供 `ANNOTATION_INVITE_FILE` 时增加四个真实 OCR 样例；缺少该项时报告明确保留真实 API 待验收状态，不标记为可正式发布。完成实际屏幕捕获后才将绘画窗口移到可见桌面之外；识别的预期答案只用于验收比较，不发送给模型。
 
 ## 授权
 
