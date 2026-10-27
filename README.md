@@ -4,6 +4,8 @@
 
 ## 下载与使用
 
+访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
+
 从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.1.0-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 1. 点击“开始截图”，或按 `Ctrl+Alt+S`。截图后使用批注工具书写。

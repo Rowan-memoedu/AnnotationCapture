@@ -1,0 +1,32 @@
+/* Hallmark · genre: editorial · macrostructure: Workbench · theme: Garden · tone: utilitarian · anchor hue: 145 */
+/* Audience: Windows users who annotate screenshots. Purpose: download and start using the standalone app. */
+:root {
+  --color-paper: oklch(97.5% 0.01 95);
+  --color-paper-raised: oklch(99% 0.004 95);
+  --color-paper-inset: oklch(94% 0.014 95);
+  --color-ink: oklch(25% 0.017 145);
+  --color-muted: oklch(45% 0.019 145);
+  --color-rule: oklch(79% 0.02 105);
+  --color-accent: oklch(41% 0.09 145);
+  --color-focus: oklch(46% 0.12 145);
+  --color-selection: oklch(88% 0.06 145);
+  --font-display: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
+  --font-body: "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --font-code: "Cascadia Code", "SFMono-Regular", "DejaVu Sans Mono", monospace;
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+  --space-2xl: 4rem;
+  --space-3xl: 6rem;
+  --text-small: 0.875rem;
+  --text-body: 1rem;
+  --text-lead: 1.125rem;
+  --text-title: clamp(1.5rem, 2.2vw, 2rem);
+  --text-display: clamp(2.25rem, 3.7vw, 3.5rem);
+  --page-gutter: clamp(1rem, 4vw, 3rem);
+  --content-width: 72rem;
+  --rule-hairline: 1px;
+  --radius-control: 0.25rem;
+}

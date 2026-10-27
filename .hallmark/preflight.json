@@ -1,0 +1,9 @@
+{
+  "scope": "Static release page in docs; desktop application styles are separate",
+  "source": ["package.json", "src/renderer/annotation/styles.ts", "docs/ACCEPTANCE.md"],
+  "framework": "Static HTML and CSS; no site framework or build needed",
+  "fonts": "Local Chinese serif and sans-serif stacks; no external font requests",
+  "motion": "None",
+  "palette": "Garden: warm paper, dark ink, restrained green accent",
+  "preserved": ["Existing application code", "Existing upstream documentation", "Release binaries"]
+}
