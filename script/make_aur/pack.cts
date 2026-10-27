@@ -1,7 +1,7 @@
 const path = require("node:path") as typeof import("path");
 const fs = require("node:fs") as typeof import("fs");
-// biome-ignore format:
-const { execSync } = require("node:child_process") as typeof import("child_process");
+const { execSync } =
+    require("node:child_process") as typeof import("child_process");
 
 if (!__dirname.endsWith("make_aur")) {
     console.log("dir need in make_aur");
@@ -9,6 +9,12 @@ if (!__dirname.endsWith("make_aur")) {
 }
 
 const projectRoot = path.join(__dirname, "..", "..");
+
+const launcherDirectory = path.join(__dirname, "e-search", "usr", "bin");
+fs.mkdirSync(launcherDirectory, { recursive: true });
+const launcherPath = path.join(launcherDirectory, "e-search");
+fs.copyFileSync(path.join(__dirname, "e-search-launcher.sh"), launcherPath);
+fs.chmodSync(launcherPath, 0o755);
 
 const assetsPath = path.join(projectRoot, "assets", "logo");
 
