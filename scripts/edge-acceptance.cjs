@@ -3,6 +3,7 @@ const path = require('node:path');
 const zlib = require('node:zlib');
 const assert = require('node:assert/strict');
 const { _electron } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { isolateWindow } = require('./acceptance-window.cjs');
 const root = process.env.ANNOTATION_EVIDENCE || 'D:/Artifacts/AnnotationCapture/acceptance';
 fs.mkdirSync(root,{recursive:true});
 function whitePng(w,h) {
@@ -18,6 +19,7 @@ async function launch(name,scale=1) {
     data=path.join(root,`edge-${name}-${Date.now()}`);
     app=await _electron.launch({executablePath:process.env.ANNOTATION_EXE||path.resolve('node_modules/electron/dist/electron.exe'),args:[...(process.env.ANNOTATION_EXE?[]:['.']),'--userData',data,'--archiveRoot',path.join(data,'Archive'),'--input',fixture,'--testMode',`--force-device-scale-factor=${scale}`],env:{...process.env,DEEPSEEK_API_KEY:'',ANNOTATION_DEEPSEEK_API_KEY:''},timeout:30000});
     page=await app.firstWindow();await page.waitForFunction(()=>document.querySelector('#ac-completion')&&document.body.style.opacity!=='0');
+    await isolateWindow(app,page);
     await page.locator('#draw_free').click();
 }
 async function stop(){if(app){await app.evaluate(({app})=>app.exit());app=null;}}

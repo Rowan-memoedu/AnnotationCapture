@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const { _electron } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { isolateWindow } = require('./acceptance-window.cjs');
 const root = process.env.ANNOTATION_EVIDENCE || 'D:/Artifacts/AnnotationCapture/acceptance';
 fs.mkdirSync(root, { recursive: true });
 const data = path.join(root, `live-${Date.now()}`);
@@ -14,6 +15,7 @@ let strokes = [
     [[769,351],[751,356],[744,375],[747,395],[762,405],[778,400],[786,380],[782,360],[769,351]],
 ];
 const caseName=process.env.ANNOTATION_OCR_CASE||'polynomial';
+assert.ok(['polynomial','fraction','root','mixedcase'].includes(caseName),'Unknown OCR acceptance case');
 let expected='x^2+1=0';
 if(caseName==='fraction'){
     expected='\\frac{x+1}{2}';
@@ -23,14 +25,21 @@ if(caseName==='root'){
     expected='\\sqrt{x+1}';
     strokes=[[[430,371],[444,357],[458,405],[484,325],[680,325]],[[505,347],[545,397]],[[505,397],[545,347]],[[565,372],[605,372]],[[585,352],[585,392]],[[630,360],[643,347],[643,397]],[[630,398],[657,398]]];
 }
+if(caseName==='mixedcase'){
+    expected='X+x=2';
+    strokes=[[[430,325],[475,405]],[[430,405],[475,325]],[[495,382],[525,382]],[[510,367],[510,397]],[[550,365],[555,363],[563,365],[570,378],[580,396],[587,399]],[[585,364],[580,368],[570,383],[558,398],[551,400]],[[610,372],[650,372]],[[610,390],[650,390]],[[680,363],[686,353],[701,352],[710,358],[711,366],[704,375],[680,400],[714,400]]];
+}
 let app;
 (async () => {
     assert.ok(process.env.DEEPSEEK_API_KEY || process.env.ANNOTATION_DEEPSEEK_API_KEY, 'Live key is required');
     app = await _electron.launch({ executablePath: process.env.ANNOTATION_EXE || path.resolve('node_modules/electron/dist/electron.exe'), cwd: process.env.ANNOTATION_EXE ? path.dirname(process.env.ANNOTATION_EXE) : process.cwd(), args: [...(process.env.ANNOTATION_EXE ? [] : ['.']), '--userData', data, '--archiveRoot', path.join(data, 'Archive'), '--testMode'], env: { ...process.env, ...(process.env.ANNOTATION_EXE ? { PATH: `${process.env.SystemRoot}/System32;${process.env.SystemRoot}`, NODE_PATH:'',NODE_OPTIONS:'' } : {}) }, timeout: 30000 });
     const panel = await app.firstWindow(); await panel.waitForSelector('#ac-start');
+    await isolateWindow(app, panel);
     const keyStatus = await panel.locator('#ac-key-status').innerText(); assert.match(keyStatus, /已配置/);
     const pending = app.waitForEvent('window'); await panel.locator('#ac-start').click(); const page = await pending;
+    await isolateWindow(app, page);
     await page.waitForFunction(() => document.body.style.opacity !== '0' && document.querySelector('#ac-completion'));
+    await isolateWindow(app, page);
     await page.locator('#draw_free').click();
     for (const stroke of strokes) {
         await page.mouse.move(...stroke[0]); await page.mouse.down();

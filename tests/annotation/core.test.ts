@@ -215,7 +215,11 @@ describe("provider and pixel mapping", () => {
                         choices: [
                             {
                                 finish_reason: "stop",
-                                message: { content: "x^{2}+1=0" },
+                                message: {
+                                    content: "X^{2}+x=0",
+                                    reasoning_content:
+                                        "This must not enter the clipboard.",
+                                },
                             },
                         ],
                     }),
@@ -229,7 +233,7 @@ describe("provider and pixel mapping", () => {
         expect(
             (await provider.recognize(png(), new AbortController().signal))
                 .latex,
-        ).toBe("x^{2}+1=0");
+        ).toBe("X^{2}+x=0");
         const body = JSON.parse(
             vi.mocked(request).mock.calls[0][1]?.body as string,
         );

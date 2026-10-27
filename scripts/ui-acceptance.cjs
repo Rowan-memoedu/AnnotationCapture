@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const { _electron } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { isolateWindow } = require('./acceptance-window.cjs');
 
 const root = process.env.ANNOTATION_EVIDENCE || 'D:/Artifacts/AnnotationCapture/acceptance';
 fs.mkdirSync(root, { recursive: true });
@@ -14,14 +15,17 @@ async function launch(extra = []) {
     app.on('window', page => { page.on('pageerror', e => errors.push(e.message)); });
     const page = await app.firstWindow();
     await page.waitForSelector('#ac-start');
+    await isolateWindow(app, page);
     return page;
 }
 async function capture(panel) {
     const pending = app.waitForEvent('window');
     await panel.locator('#ac-start').click();
     const page = await pending;
+    await isolateWindow(app, page);
     await page.waitForSelector('#ac-completion', { state: 'visible' });
     await page.waitForFunction(() => document.body.style.opacity !== '0');
+    await isolateWindow(app, page);
     return page;
 }
 async function archiveFiles() {
@@ -76,4 +80,12 @@ async function draw(page, points) {
     assert.equal(errors.length, 0, errors.join('\n'));
     fs.writeFileSync(path.join(root, 'ui-report.json'), JSON.stringify({ run, data, files: await archiveFiles(), size, jobs: state.jobs, errors, passed: true }, null, 2));
     console.log('UI_ACCEPTANCE_PASSED');
-})().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => { if (app) { await app.evaluate(({ app }) => app.exit()); } });
+})().catch(async error => {
+    console.error(error);
+    const pages=[];
+    for(const page of app?.windows() || []) {
+        pages.push(await page.evaluate(()=>({url:location.href,opacity:document.body.style.opacity,text:document.body.innerText.slice(-1500),canvases:[...document.querySelectorAll('canvas')].map(c=>({id:c.id,width:c.width,height:c.height}))})).catch(e=>({error:String(e)})));
+    }
+    fs.writeFileSync(path.join(root,'ui-report.json'),JSON.stringify({passed:false,errors,error:String(error),pages},null,2));
+    process.exitCode = 1;
+}).finally(async () => { if (app) { await app.evaluate(({ app }) => app.exit()); } });

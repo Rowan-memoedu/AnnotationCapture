@@ -41,9 +41,9 @@ export function deepSeekProvider(
                     body: JSON.stringify({
                         model,
                         stream: false,
-                        max_tokens: 2048,
-                        temperature: 0,
-                        thinking: { type: "disabled" },
+                        max_tokens: 4096,
+                        thinking: { type: "enabled" },
+                        reasoning_effort: "low",
                         messages: [
                             {
                                 role: "system",

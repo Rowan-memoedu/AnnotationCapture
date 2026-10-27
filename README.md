@@ -6,7 +6,7 @@
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.1.0-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.1.1-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 1. 点击“开始截图”，或按 `Ctrl+Alt+S`。截图后使用批注工具书写。
 2. 按 `Esc` 或 `Ctrl+Enter`：保存带批注的截图后退出。正在落笔时会等抬笔再保存。
@@ -18,6 +18,8 @@
 ## 配置 DeepSeek
 
 在设置中填入自己的 API Key，默认模型为支持图片输入的 `deepseek-flash`。密钥由 Windows 的系统加密能力保护，仅存放在本机。发行包不含开发者密钥，也不提供共享额度。
+
+识别默认启用 DeepSeek 的低强度推理，以改善公式结构和字母大小写的识别；只使用最终公式文本，推理内容不会进入剪贴板。接口依据：[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)。
 
 也可通过 `ANNOTATION_DEEPSEEK_API_KEY` 或 `DEEPSEEK_API_KEY` 环境变量提供密钥。已保存密钥优先于环境变量。“清除已保存密钥”不会删除环境变量。
 
@@ -61,6 +63,8 @@ pnpm run release:win
 `ANNOTATION_ARTIFACTS` 可指定打包暂存与发行产物目录；本项目开发环境默认使用 `D:/Artifacts/AnnotationCapture`。发行包与源码独立，不引用开发机器的 `node_modules`。
 
 `scripts/ui-acceptance.cjs` 验证真实截图、绘画、归档与未配置状态；`scripts/edge-acceptance.cjs` 验证最后一笔、撤销重做、橡皮擦、保存失败、选区取消、文字编辑和 100%/150%/200% 显示缩放；`scripts/live-ocr-acceptance.cjs` 使用现有 DeepSeek Key 对实际编辑器鼠标笔迹进行端到端验收。脚本需要 Playwright，可通过 `PLAYWRIGHT_MODULE` 指向模块目录；实际使用软件不需要 Playwright。设置 `ANNOTATION_EXE` 可针对打包后的程序执行相同验收。
+
+`node scripts/accept-release.cjs` 会将当前版本 ZIP 解压到新的隔离目录，然后依次执行独立启动、截图批注、编辑边界和四个真实 OCR 样例，生成汇总报告。测试窗口移到可见桌面之外并关闭原生焦点，避免桌面操作混入绘画输入；识别的预期答案只用于验收比较，不发送给模型。
 
 ## 授权
 
