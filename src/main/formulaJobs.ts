@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { FormulaResult, PixelRect } from "../../lib/annotation";
+import {
+    type FormulaResult,
+    type OutputFormat,
+    outputFormats,
+    type PixelRect,
+} from "../../lib/annotation";
 import type { ArchiveStore } from "./annotationArchive";
 import type { FormulaProvider } from "./formulaProvider";
 
@@ -19,7 +24,14 @@ export class FormulaJobs {
         private changed: () => void,
     ) {}
 
-    async create(archiveId: string, png: string, rect: PixelRect) {
+    async create(
+        archiveId: string,
+        png: string,
+        rect: PixelRect,
+        outputFormat: OutputFormat = "latex",
+    ) {
+        if (!outputFormats.includes(outputFormat))
+            throw new Error("识别输出格式无效");
         const id = randomUUID();
         const archive = this.archives.records.get(archiveId);
         if (
@@ -41,6 +53,7 @@ export class FormulaJobs {
             archiveId,
             path,
             rect,
+            outputFormat,
             status: "unconfigured",
             latex: "",
             message: "请先使用邀请码登录；截图与公式图已保存",
@@ -57,7 +70,7 @@ export class FormulaJobs {
         this.running.add(id);
         this.latest = id;
         result.status = "recognizing";
-        result.message = "正在识别选定公式…";
+        result.message = "正在识别选定批注…";
         this.changed();
         const start = Date.now();
         try {
@@ -71,9 +84,11 @@ export class FormulaJobs {
             const recognized = await provider.recognize(
                 await this.archives.readFormula(result),
                 AbortSignal.timeout(60000),
+                result.outputFormat,
             );
             result.latex = recognized.latex;
             result.recognizedLatex = recognized.latex;
+            result.detectedType = recognized.detectedType;
             result.model = recognized.model;
             result.status = "ready";
             result.message = "识别完成";
@@ -84,7 +99,7 @@ export class FormulaJobs {
             ) {
                 await this.clipboard.writeText(result.latex);
                 result.status = "copied";
-                result.message = "公式已复制到剪贴板";
+                result.message = "识别结果已复制到剪贴板";
             } else {
                 result.status = "review";
                 result.message = "识别完成；剪贴板或当前任务已变化，请手动复制";

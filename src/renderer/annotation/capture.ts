@@ -1,6 +1,9 @@
 import { button, ele, p, view } from "dkh-ui";
 import {
     type CaptureInput,
+    type OutputFormat,
+    outputFormatLabels,
+    outputFormats,
     type PixelRect,
     selectedRect,
 } from "../../../lib/annotation";
@@ -18,6 +21,7 @@ export function installCompletion(
     snapshot: () => Promise<CaptureSnapshot>,
     rawClose: () => Promise<void>,
     drawingElement: HTMLElement,
+    saveDefaults: () => Promise<void>,
 ) {
     annotationStyles();
     const id = crypto.randomUUID();
@@ -34,15 +38,30 @@ export function installCompletion(
         .attr({ id: "ac-completion" })
         .add([
             status,
+            p().attr({ id: "ac-pen-width", ariaLive: "polite" }),
+            button(t("保存为默认"))
+                .class("ac-button")
+                .attr({
+                    id: "ac-save-defaults",
+                    title: t("保存当前画笔颜色和粗细，下次批注自动应用"),
+                })
+                .on("click", async () => {
+                    try {
+                        await saveDefaults();
+                        status.el.textContent = t("默认画笔已保存");
+                    } catch (error) {
+                        status.el.textContent = String(error);
+                    }
+                }),
             button(t("归档并退出"))
                 .class("ac-button")
                 .attr({ id: "ac-finish", title: "归档并退出" })
                 .on("click", () => {
                     void finish(false);
                 }),
-            button(t("选公式并识别"))
+            button(t("选区识别"))
                 .class("ac-button", "ac-primary")
-                .attr({ id: "ac-formula", title: "选公式并识别" })
+                .attr({ id: "ac-formula", title: t("选区识别") })
                 .on("click", () => {
                     void finish(true);
                 }),
@@ -86,7 +105,7 @@ export function installCompletion(
         true,
     );
 
-    async function finish(formula: boolean) {
+    async function finish(formula: boolean, directFormat?: OutputFormat) {
         if (busy) return;
         if (pointerDown) {
             queued = formula;
@@ -111,7 +130,19 @@ export function installCompletion(
             };
             await invoke("archive", input);
             blocker.remove();
-            if (formula) {
+            if (directFormat) {
+                await invoke("formula", {
+                    archiveId: id,
+                    png: frozen.composite.toDataURL(),
+                    rect: {
+                        x: 0,
+                        y: 0,
+                        width: frozen.rect.width,
+                        height: frozen.rect.height,
+                    },
+                    outputFormat: directFormat,
+                });
+            } else if (formula) {
                 selectionOpen = true;
                 await selectFormula(frozen);
                 selectionOpen = false;
@@ -126,17 +157,35 @@ export function installCompletion(
     }
 
     async function selectFormula(frozen: CaptureSnapshot) {
+        const { config } = await invoke("state");
         return new Promise<void>((resolve) => {
+            const outputFormat = ele("select")
+                .class("ac-field")
+                .attr({ id: "ac-output-format", ariaLabel: t("识别输出格式") })
+                .style({ width: "auto", maxWidth: "100%" })
+                .add(
+                    outputFormats.map((format) =>
+                        ele("option")
+                            .attr({ value: format })
+                            .add(t(outputFormatLabels[format])),
+                    ),
+                );
+            outputFormat.el.value = config.outputFormat;
+            outputFormat.add(
+                ele("option")
+                    .attr({ value: "ma", disabled: true })
+                    .add(t("Math Academy（后续接入）")),
+            );
             const display = ele("canvas")
                 .attr({
                     id: "ac-selection",
                     width: frozen.composite.width,
                     height: frozen.composite.height,
-                    ariaLabel: t("拖动框选手写公式"),
+                    ariaLabel: t("拖动框选要识别的批注"),
                 })
                 .style({
                     maxWidth: "calc(100vw - 80px)",
-                    maxHeight: "calc(100vh - 200px)",
+                    maxHeight: "max(120px, calc(100vh - 300px))",
                     width: "auto",
                     height: "auto",
                     cursor: "crosshair",
@@ -149,12 +198,12 @@ export function installCompletion(
             let submitting = false;
             const info = p(
                 t(
-                    "截图已归档。拖动框选一个手写公式；仅选区内的批注笔迹会发给识别服务。",
+                    "截图已归档。选择输出格式，再框选公式或图示；仅发送选区内的批注笔迹。",
                 ),
             )
                 .class("ac-status")
                 .attr({ id: "ac-selection-status", role: "status" });
-            const accept = button(t("识别选定公式"))
+            const accept = button(t("识别选区"))
                 .class("ac-button", "ac-primary")
                 .attr({ id: "ac-recognize", disabled: true })
                 .on("click", submit);
@@ -172,6 +221,7 @@ export function installCompletion(
                 })
                 .add([
                     info,
+                    outputFormat,
                     display,
                     view("x").style({ gap: "12px" }).add([accept, cancel]),
                 ])
@@ -282,12 +332,14 @@ export function installCompletion(
                 submitting = true;
                 accept.el.disabled = true;
                 cancel.el.disabled = true;
+                outputFormat.el.disabled = true;
                 info.el.textContent = t("正在保存公式图…");
                 try {
                     await invoke("formula", {
                         archiveId: id,
                         png: crop.toDataURL(),
                         rect,
+                        outputFormat: outputFormat.el.value as OutputFormat,
                     });
                     submitting = false;
                     close();
@@ -295,6 +347,7 @@ export function installCompletion(
                     submitting = false;
                     accept.el.disabled = false;
                     cancel.el.disabled = false;
+                    outputFormat.el.disabled = false;
                     info.class("ac-error");
                     info.el.textContent = `${t("公式图保存失败，可重试：")}${String(error)}`;
                 }

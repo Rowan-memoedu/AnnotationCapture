@@ -29,7 +29,7 @@ async function ink(){return page.locator('#draw_photo').evaluate(c=>{const a=c.g
 async function waitInk(predicate){let n;for(let i=0;i<30;i++){n=await ink();if(predicate(n))return n;await new Promise(r=>setTimeout(r,50));}throw new Error(`Unexpected ink count ${n}`);}
 async function finish(key='Escape'){const c=page.waitForEvent('close');await page.keyboard.press(key);await c;}
 function files(name='capture.png'){const out=[];const walk=d=>{if(!fs.existsSync(d))return;for(const f of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,f.name);if(f.isDirectory())walk(p);else if(f.name===name)out.push(p);}};walk(path.join(data,'Archive'));return out;}
-async function archivedInk(){const f=files()[0];return app.evaluate(({nativeImage},png)=>{const image=nativeImage.createFromDataURL(png);const b=image.toBitmap();let ink=0;for(let i=0;i<b.length;i+=4)if(b[i]<220&&b[i+1]<220&&b[i+2]<220)ink++;return {size:image.getSize(),ink};},`data:image/png;base64,${fs.readFileSync(f).toString('base64')}`);}
+async function archivedInk(){const f=files()[0];return app.evaluate(({nativeImage},png)=>{const image=nativeImage.createFromDataURL(png);const b=image.toBitmap();let ink=0;for(let i=0;i<b.length;i+=4)if(Math.min(b[i],b[i+1],b[i+2])<220)ink++;return {size:image.getSize(),ink};},`data:image/png;base64,${fs.readFileSync(f).toString('base64')}`);}
 (async()=>{
     await launch('last-stroke');
     await page.mouse.move(330,250);await page.mouse.down();await page.mouse.move(520,310,{steps:15});

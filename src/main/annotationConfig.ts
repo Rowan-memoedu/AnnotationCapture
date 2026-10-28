@@ -12,11 +12,17 @@ import type {
     LoginSession,
     PublicConfig,
 } from "../../lib/annotation";
+import { type OutputFormat, outputFormats } from "../../lib/annotation";
 
 type StoredConfig = {
     archiveRoot: string;
     shortcut: string;
     fullShortcut: string;
+    ocrShortcut: string;
+    penColor: string;
+    penWidth: number;
+    showMagnifier: boolean;
+    outputFormat: OutputFormat;
     encryptedSession?: string;
 };
 
@@ -29,6 +35,11 @@ export class AnnotationConfig {
             archiveRoot,
             shortcut: "Control+Alt+S",
             fullShortcut: "Alt+W",
+            ocrShortcut: "Control+Alt+O",
+            penColor: "#ff0000",
+            penWidth: 2,
+            showMagnifier: false,
+            outputFormat: "latex",
         };
         if (existsSync(this.file)) {
             this.config = {
@@ -61,6 +72,11 @@ export class AnnotationConfig {
             archiveRoot: this.config.archiveRoot,
             shortcut: this.config.shortcut,
             fullShortcut: this.config.fullShortcut,
+            ocrShortcut: this.config.ocrShortcut,
+            penColor: this.config.penColor,
+            penWidth: this.config.penWidth,
+            showMagnifier: this.config.showMagnifier,
+            outputFormat: this.config.outputFormat,
             version: app.getVersion(),
         };
     }
@@ -68,16 +84,45 @@ export class AnnotationConfig {
         if (!isAbsolute(input.archiveRoot) || !input.archiveRoot.trim())
             throw new Error("归档目录必须是绝对路径");
         if (
-            ![input.shortcut, input.fullShortcut].every(
-                (key) => typeof key === "string" && key.length <= 80,
-            )
+            ![
+                input.shortcut,
+                input.fullShortcut,
+                input.ocrShortcut ?? this.config.ocrShortcut,
+            ].every((key) => typeof key === "string" && key.length <= 80)
         )
             throw new Error("快捷键无效");
+        if (
+            input.penColor !== undefined &&
+            !/^#[0-9a-f]{6}$/i.test(input.penColor)
+        )
+            throw new Error("画笔颜色无效");
+        if (
+            input.showMagnifier !== undefined &&
+            typeof input.showMagnifier !== "boolean"
+        )
+            throw new Error("放大框设置无效");
+        if (
+            input.outputFormat !== undefined &&
+            !outputFormats.includes(input.outputFormat)
+        )
+            throw new Error("识别输出格式无效");
+        if (
+            input.penWidth !== undefined &&
+            (!Number.isInteger(input.penWidth) ||
+                input.penWidth < 1 ||
+                input.penWidth > 50)
+        )
+            throw new Error("画笔粗细须为 1 到 50");
         const next: StoredConfig = {
             ...this.config,
             archiveRoot: input.archiveRoot,
             shortcut: input.shortcut,
             fullShortcut: input.fullShortcut,
+            ocrShortcut: input.ocrShortcut ?? this.config.ocrShortcut,
+            penColor: input.penColor ?? this.config.penColor,
+            penWidth: input.penWidth ?? this.config.penWidth,
+            showMagnifier: input.showMagnifier ?? this.config.showMagnifier,
+            outputFormat: input.outputFormat ?? this.config.outputFormat,
         };
         this.persist(next);
         return this.public();

@@ -50,22 +50,28 @@ async function extract() {
         { script: 'portable-smoke' },
         { script: 'shortcuts-acceptance' },
         { script: 'capture-modes-acceptance' },
+        { script: 'continuous-writing-acceptance' },
+        { script: 'quit-acceptance' },
         { script: 'ui-acceptance' },
         { script: 'edge-acceptance' },
         ...(process.env.ANNOTATION_INVITE_FILE ? ['polynomial', 'fraction', 'root', 'mixedcase'].map(formulaCase => ({ script: 'live-ocr-acceptance', formulaCase })) : []),
+        ...(process.env.ANNOTATION_INVITE_FILE ? ['fraction','root'].map(formulaCase=>({script:'live-ocr-acceptance',formulaCase,outputFormat:'markdown'})) : []),
+        ...(process.env.ANNOTATION_INVITE_FILE ? [{script:'ocr-output-acceptance'}] : []),
     ];
     for (const task of tasks) {
         console.log(`RUN ${task.script}${task.formulaCase ? ` ${task.formulaCase}` : ''}`);
         const result = spawnSync(process.execPath, [path.join(__dirname, `${task.script}.cjs`)], {
             cwd: path.resolve(__dirname, '..'),
-            env: { ...env, ANNOTATION_OCR_CASE: task.formulaCase || '', ANNOTATION_TEST_CORRECTION: task.formulaCase === 'polynomial' ? '1' : '' },
-            encoding: 'utf8', timeout: 180000, windowsHide: true,
+            env: { ...env, ANNOTATION_OCR_CASE: task.formulaCase || '', ANNOTATION_OCR_FORMAT:task.outputFormat||'latex', ANNOTATION_TEST_CORRECTION: task.formulaCase === 'polynomial' ? '1' : '' },
+            encoding: 'utf8', timeout: task.script==='ocr-output-acceptance'?360000:180000, windowsHide: true,
         });
         process.stdout.write(result.stdout || ''); process.stderr.write(result.stderr || '');
         checks.push({ ...task, exitCode: result.status, error: result.error?.message });
     }
     const liveProviderTested=!!process.env.ANNOTATION_INVITE_FILE;
+    const ocrAccuracy=tasks.filter(t=>t.script==='live-ocr-acceptance').map(t=>{const file=path.join(evidence,`shared-api-${t.outputFormat||'latex'}-${t.formulaCase}-report.json`);const r=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{};return {case:t.formulaCase,format:t.outputFormat||'latex',exactMatch:r.exactMatch,expected:r.expected,actual:r.actual};});
     const report = { passed: checks.every(check => check.exitCode === 0), releaseReady:liveProviderTested&&checks.every(check=>check.exitCode===0), liveProviderTested, pending:liveProviderTested?[]:['NEW unified API end-to-end acceptance'], version, zipPath, sha256, executable, evidence, isolation: 'Drawing windows moved outside the visible desktop after screen capture; native focus disabled', checks };
+    report.ocrAccuracy=ocrAccuracy;report.ambiguityPolicy='Automatic copy followed by human review; functional acceptance and exact transcription are reported separately';
     fs.writeFileSync(path.join(evidence, 'release-acceptance.json'), JSON.stringify(report, null, 2));
     console.log(JSON.stringify(report, null, 2));
     if (!report.passed) process.exitCode = 1;

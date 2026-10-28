@@ -1,6 +1,6 @@
 import type { LoginSession, LoginState } from "../../lib/annotation";
 import type { AnnotationConfig } from "./annotationConfig";
-import { type FormulaProvider, normalizeLatex } from "./formulaProvider";
+import { type FormulaProvider, normalizeOutput } from "./formulaProvider";
 
 export const serviceUrl =
     process.env.ANNOTATION_SERVICE_URL ||
@@ -159,7 +159,7 @@ export class AnnotationAuth {
     provider(): FormulaProvider | null {
         if (!this.config.session()) return null;
         return {
-            recognize: async (png, signal) => {
+            recognize: async (png, signal, outputFormat = "latex") => {
                 const session = this.config.session();
                 if (!session) throw new Error("请先使用邀请码登录");
                 const response = await this.request(
@@ -170,7 +170,11 @@ export class AnnotationAuth {
                             Authorization: `Bearer ${session.token}`,
                             "Content-Type": "application/json",
                         },
-                        body: JSON.stringify({ png }),
+                        body: JSON.stringify(
+                            outputFormat === "latex"
+                                ? { png }
+                                : { png, outputFormat },
+                        ),
                         signal,
                         redirect: "error",
                     },
@@ -188,7 +192,7 @@ export class AnnotationAuth {
                             : response.status === 429
                               ? "识别请求过于频繁，请稍后重试"
                               : response.status === 400
-                                ? "公式图片无效，请重新框选"
+                                ? "未能读取选区或输出格式，请重新框选后重试"
                                 : response.status === 504
                                   ? "识别服务超时，可重试"
                                   : "识别服务调用失败，可重试",
@@ -196,6 +200,7 @@ export class AnnotationAuth {
                 const value = (await response.json()) as {
                     latex: string;
                     model: string;
+                    detectedType?: import("./formulaProvider").Recognition["detectedType"];
                 };
                 if (this.config.session()?.token !== session.token)
                     throw new Error("登录状态已变化，请重新识别");
@@ -213,8 +218,15 @@ export class AnnotationAuth {
                 };
                 this.changed();
                 return {
-                    latex: normalizeLatex(value.latex),
+                    latex: normalizeOutput(
+                        value.latex,
+                        outputFormat,
+                        value.detectedType,
+                    ),
                     model: value.model,
+                    ...(value.detectedType
+                        ? { detectedType: value.detectedType }
+                        : {}),
                 };
             },
         };

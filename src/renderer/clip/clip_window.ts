@@ -26,6 +26,7 @@ import {
 } from "fabric";
 import hotkeys from "hotkeys-js";
 import { findOffset } from "picture_match";
+import { invoke } from "../../../lib/annotationIpc";
 import { ele2jsKeyCode, jsKeyCodeDisplay } from "../../../lib/key";
 import open_with from "../../../lib/open_with";
 import store from "../../../lib/store/renderStore";
@@ -37,7 +38,8 @@ import { Class, cssColor, getImgUrl, initStyle, setTitle } from "../root/root";
 
 const screenShots = initScreenShots();
 let pendingCanvasWork = Promise.resolve();
-let entryMode: "region" | "full" = "region";
+let entryMode: "region" | "full" | "ocr" = "region";
+let showAnnotationMagnifier = false;
 
 import {
     button,
@@ -654,6 +656,13 @@ function runQr() {
 }
 
 function drawM(v: boolean) {
+    mouseBarEl.style({
+        display:
+            (v && !showAnnotationMagnifier) ||
+            (!v && !store.get("鼠标跟随栏.显示"))
+                ? "none"
+                : "",
+    });
     if (v) {
         // 绘画模式
         clipEl.style.pointerEvents = "none";
@@ -3417,14 +3426,14 @@ const toolsX: Record<功能, { el: ElType<HTMLElement>; f: () => void }> = {
 };
 
 for (const [_, { el, f }] of Object.entries(toolsX)) {
-    el.on("pointerup", (e) => {
-        if (e.target === el.el)
-            if (e.button === 0) {
-                f();
-            } else if (e.button === 1) {
-                el.el.style.backgroundColor = ""; // todo class
-                autoDo = "no";
-            }
+    el.on("click", (e) => {
+        if (e.target === el.el && e.button === 0) f();
+    });
+    el.on("auxclick", (e) => {
+        if (e.target === el.el && e.button === 1) {
+            el.el.style.backgroundColor = ""; // todo class
+            autoDo = "no";
+        }
     });
 }
 
@@ -4131,6 +4140,14 @@ renderOn(
     "clip_init",
     async ([_displays, imgBuffer, mainid, _act, captureMode]) => {
         entryMode = captureMode ?? "region";
+        const { config } = await invoke("state");
+        freeColor = config.penColor;
+        shapePro.free = {
+            ...shapePro.free,
+            sc: config.penColor,
+            sw: config.penWidth,
+        };
+        showAnnotationMagnifier = config.showMagnifier;
         const wx = await screenShots(_displays, imgBuffer); // 只是截屏 也可能是小图片
         allScreens = wx.screen;
         const mainId = mainid;
@@ -4248,10 +4265,12 @@ document.onwheel = (e) => {
     document.body.classList.add("editor_bg");
 
     if ((nowType === "draw" || nowType === "shape") && !e.ctrlKey) {
+        e.preventDefault();
         let v = strokeWidthEl.gv;
-        v += e.deltaY / 50;
-        v = Math.max(1, v);
+        v -= Math.sign(e.deltaY) * (e.shiftKey ? 5 : 1);
+        v = Math.max(1, Math.min(50, v));
         strokeWidthF.set(v);
+        document.querySelector("#ac-pen-width")!.textContent = `${v} px`;
         return;
     }
 
@@ -4337,9 +4356,6 @@ for (const k of tools) {
         .split("+")
         .map((k) => jsKeyCodeDisplay(ele2jsKeyCode(k)).primary)
         .join("");
-    if (k === "copy") {
-        key += ` ${t("双击")}`;
-    }
     toolsX[k].el.data({ key: key.trim() });
 }
 for (const [mainKey, k] of typedEntries(drawHotKey)) {
@@ -4546,7 +4562,6 @@ clipEl.onmousedown = (e) => {
     }
     if (e.button === 2) {
         if (store.get("鼠标快捷键.右键") === "取色器") pickColor(e);
-        else toolsX.close.f();
     }
     toolBar.style.pointerEvents =
         drawBar.style.pointerEvents =
@@ -4564,7 +4579,7 @@ document.onmouseup = (e) => {
             // 抬起鼠标后工具栏跟随
             followBar({ x: e.clientX, y: e.clientY });
             selectedRegion =
-                entryMode === "region" && finalRect[2] > 1 && finalRect[3] > 1;
+                entryMode !== "full" && finalRect[2] > 1 && finalRect[3] > 1;
             isShowBars = true;
             showBars(isShowBars);
         }
@@ -4582,7 +4597,10 @@ document.onmouseup = (e) => {
 
     down = false;
     moved = false;
-    if (selectedRegion) setEditType("draw", "free");
+    if (selectedRegion) {
+        if (entryMode === "ocr") void completion.finish(false, "auto");
+        else setEditType("draw", "free");
+    }
 };
 
 hotkeys("s", () => {
@@ -4702,11 +4720,6 @@ hotkeys(store.get("其他快捷键.复制颜色"), () => {
     copy(getColorFormatEl());
 });
 
-clipEl.ondblclick = () => {
-    if (store.get("鼠标快捷键.双击") === "复制") toolsX.copy.f();
-    else toolsX.save.f();
-};
-
 document.onmousemove = (e) => {
     nowMouseE = e;
     // 一帧内的多次移动只渲染最后一次
@@ -4814,7 +4827,7 @@ hisPush();
 const fillColor = store.get("图像编辑.默认属性.填充颜色");
 const strokeColor = store.get("图像编辑.默认属性.边框颜色");
 const strokeWidth = store.get("图像编辑.默认属性.边框宽度");
-const freeColor = store.get("图像编辑.默认属性.画笔颜色");
+let freeColor = store.get("图像编辑.默认属性.画笔颜色");
 const freeWidth = store.get("图像编辑.默认属性.画笔粗细");
 
 const shapePro: setting["图像编辑"]["形状属性"] = {};
@@ -5082,7 +5095,7 @@ ableChangeColor();
 
 colorBar();
 
-const strokeWidthEl = rangeBar(0, 25, 1, "px").on("input", () => {
+const strokeWidthEl = rangeBar(1, 50, 1, "px").on("input", () => {
     setFObjectV(null, null, strokeWidthEl.gv);
 });
 
@@ -5172,6 +5185,15 @@ const completion = installCompletion(
     },
     closeArchivedWindow,
     fabricCanvas.upperCanvasEl,
+    async () => {
+        const pen = getShapePro(mode === "spray" ? "spray" : "free");
+        const { config } = await invoke("state");
+        await invoke("configure", {
+            ...config,
+            penColor: chroma(pen.sc).hex(),
+            penWidth: Math.max(1, Math.min(50, Math.round(pen.sw))),
+        });
+    },
 );
 renderOn("annotation_finish", () => {
     void completion.finish(false);

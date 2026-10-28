@@ -162,6 +162,12 @@ function finishCapture() {
     if (quitting) app.quit();
 }
 
+function quitImmediately() {
+    globalShortcut.unregisterAll();
+    tray?.destroy();
+    app.exit(0);
+}
+
 type ShortcutEntry = { key: string; mode: CaptureMode };
 let registeredShortcuts: ShortcutEntry[] = [];
 function registerEntry(entry: ShortcutEntry) {
@@ -172,7 +178,7 @@ function registerEntry(entry: ShortcutEntry) {
         })
     )
         throw new Error(
-            `${entry.mode === "full" ? "全屏批注" : "区域截图"}快捷键 ${entry.key} 已被占用，请更换组合`,
+            `${entry.mode === "full" ? "全屏批注" : entry.mode === "ocr" ? "区域 OCR" : "区域截图"}快捷键 ${entry.key} 已被占用，请更换组合`,
         );
     registeredShortcuts.push(entry);
 }
@@ -182,17 +188,28 @@ function setShortcuts(entries: ShortcutEntry[]) {
     registeredShortcuts = [];
     for (const entry of entries) registerEntry(entry);
 }
-function registerShortcuts(next: { shortcut: string; fullShortcut: string }) {
+function registerShortcuts(next: {
+    shortcut: string;
+    fullShortcut: string;
+    ocrShortcut?: string;
+}) {
     if (
         next.shortcut &&
         next.shortcut.toLowerCase() === next.fullShortcut.toLowerCase()
     )
         throw new Error("两种截图入口不能使用相同快捷键");
+    const ocrShortcut = next.ocrShortcut ?? config.public().ocrShortcut;
+    const keys = [next.shortcut, next.fullShortcut, ocrShortcut]
+        .filter(Boolean)
+        .map((key) => key.toLowerCase());
+    if (new Set(keys).size !== keys.length)
+        throw new Error("截图与 OCR 入口不能使用相同快捷键");
     const previous = [...registeredShortcuts];
     try {
         setShortcuts([
             { key: next.shortcut, mode: "region" },
             { key: next.fullShortcut, mode: "full" },
+            { key: ocrShortcut, mode: "ocr" },
         ]);
     } catch (error) {
         setShortcuts(previous);
@@ -287,7 +304,12 @@ handle("archive", async (input) => {
     return archive.save(input);
 });
 handle("formula", async (input) => {
-    const result = await jobs.create(input.archiveId, input.png, input.rect);
+    const result = await jobs.create(
+        input.archiveId,
+        input.png,
+        input.rect,
+        input.outputFormat,
+    );
     setTimeout(() => {
         showPanel();
         void jobs.run(result.id);
@@ -319,13 +341,15 @@ handle("retry", (id) => {
     return result;
 });
 handle("capture", (mode = "region") => {
-    if (mode !== "region" && mode !== "full") throw new Error("截图模式无效");
+    if (!["region", "full", "ocr"].includes(mode))
+        throw new Error("截图模式无效");
     void capture(undefined, mode);
 });
 handle("login", (code) => auth.login(code));
 handle("logout", () => auth.logout());
 handle("refreshLogin", () => auth.refresh());
 handle("openPanel", () => showPanel());
+handle("quit", quitImmediately);
 handle("chooseArchive", async () => {
     const result = await dialog.showOpenDialog({
         properties: ["openDirectory", "createDirectory"],
@@ -378,6 +402,7 @@ else {
         for (const entry of [
             { key: shortcuts.shortcut, mode: "region" as const },
             { key: shortcuts.fullShortcut, mode: "full" as const },
+            { key: shortcuts.ocrShortcut, mode: "ocr" as const },
         ]) {
             try {
                 registerEntry(entry);
@@ -403,14 +428,20 @@ else {
                     },
                 },
                 { label: "识别结果与设置", click: showPanel },
+                {
+                    label: "区域 OCR（框选后直接识别）",
+                    click: () => {
+                        void capture(undefined, "ocr");
+                    },
+                },
                 { type: "separator" },
-                { label: "退出", click: () => app.quit() },
+                { label: "退出", click: quitImmediately },
             ]),
         );
         tray.on("click", () => {
             void capture();
         });
-        if (args.input) void capture(args.input);
+        if (args.input) void capture(args.input, args.ocr ? "ocr" : "region");
         else if (args.full) void capture(undefined, "full");
         else if (args.capture) void capture();
         else showPanel();

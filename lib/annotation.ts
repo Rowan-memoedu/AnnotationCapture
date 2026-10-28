@@ -1,5 +1,24 @@
 export type PixelRect = { x: number; y: number; width: number; height: number };
-export type CaptureMode = "region" | "full";
+export type CaptureMode = "region" | "full" | "ocr";
+export const outputFormats = [
+    "auto",
+    "text",
+    "markdownText",
+    "inlineMath",
+    "latex",
+    "markdown",
+    "mermaid",
+] as const;
+export type OutputFormat = (typeof outputFormats)[number];
+export const outputFormatLabels = {
+    auto: "自动判断（公式用 $）",
+    text: "普通文字",
+    markdownText: "Markdown 文字",
+    inlineMath: "公式（$…$）",
+    latex: "原始 LaTeX",
+    markdown: "Markdown 公式（RemNote / Obsidian）",
+    mermaid: "Mermaid 图",
+};
 export type CaptureInput = {
     id: string;
     capturedAt: string;
@@ -30,6 +49,8 @@ export type FormulaResult = {
     status: FormulaState;
     latex: string;
     recognizedLatex?: string;
+    outputFormat?: OutputFormat;
+    detectedType?: "text" | "markdown" | "mermaid" | "formula";
     message: string;
     model?: string;
     durationMs?: number;
@@ -38,6 +59,11 @@ export type PublicConfig = {
     archiveRoot: string;
     shortcut: string;
     fullShortcut: string;
+    ocrShortcut: string;
+    penColor: string;
+    penWidth: number;
+    showMagnifier: boolean;
+    outputFormat: OutputFormat;
     version: string;
 };
 export type LoginSession = { token: string; accountId: string; label: string };
@@ -52,6 +78,11 @@ export type ConfigInput = {
     archiveRoot: string;
     shortcut: string;
     fullShortcut: string;
+    ocrShortcut?: string;
+    penColor?: string;
+    penWidth?: number;
+    showMagnifier?: boolean;
+    outputFormat?: OutputFormat;
 };
 export type AppState = {
     config: PublicConfig;
@@ -90,6 +121,7 @@ export type AnnotationMessages = {
         archiveId: string;
         png: string;
         rect: PixelRect;
+        outputFormat?: OutputFormat;
     }) => FormulaResult;
     state: () => AppState;
     configure: (config: ConfigInput) => PublicConfig;
@@ -101,5 +133,6 @@ export type AnnotationMessages = {
     logout: () => LoginState;
     refreshLogin: () => LoginState;
     openPanel: () => void;
+    quit: () => void;
     chooseArchive: () => string | null;
 };

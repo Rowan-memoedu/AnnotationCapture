@@ -1,7 +1,64 @@
-export type Recognition = { latex: string; model: string };
-export type FormulaProvider = {
-    recognize: (png: string, signal: AbortSignal) => Promise<Recognition>;
+import type { OutputFormat } from "../../lib/annotation";
+
+export type Recognition = {
+    latex: string;
+    model: string;
+    detectedType?: "text" | "markdown" | "mermaid" | "formula";
 };
+export type FormulaProvider = {
+    recognize: (
+        png: string,
+        signal: AbortSignal,
+        outputFormat?: OutputFormat,
+    ) => Promise<Recognition>;
+};
+
+export function normalizeOutput(
+    text: string,
+    format: OutputFormat = "latex",
+    detectedType?: Recognition["detectedType"],
+): string {
+    if (format === "auto") {
+        const formats = {
+            text: "text",
+            markdown: "markdownText",
+            mermaid: "mermaid",
+            formula: "inlineMath",
+        } as const;
+        if (!detectedType || !Object.hasOwn(formats, detectedType))
+            throw new Error("未能判断内容类型，请选择输出格式后重试");
+        return normalizeOutput(text, formats[detectedType]);
+    }
+    if (format === "text" || format === "markdownText") {
+        const value = text.trim();
+        if (!value || value === "UNREADABLE" || value.length > 10000)
+            throw new Error("未能识别选区内容，请重新框选");
+        return value;
+    }
+    if (format !== "mermaid") {
+        const latex = normalizeLatex(text);
+        return format === "markdown"
+            ? `$$\n${latex}\n$$`
+            : format === "inlineMath"
+              ? `$${latex}$`
+              : latex;
+    }
+    const code = text
+        .trim()
+        .replace(/^```(?:mermaid)?\s*/i, "")
+        .replace(/\s*```$/, "")
+        .trim();
+    if (
+        !code ||
+        code.length > 9900 ||
+        code.includes("```") ||
+        !/^(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|mindmap|timeline|gantt|pie|journey|gitGraph|quadrantChart|requirementDiagram|C4Context|sankey-beta|xychart-beta|block-beta|packet-beta|architecture-beta)\b/.test(
+            code,
+        )
+    )
+        throw new Error("未能得到有效的 Mermaid 图，请检查选区后重试");
+    return `\`\`\`mermaid\n${code}\n\`\`\``;
+}
 
 export function normalizeLatex(text: string): string {
     let value = text

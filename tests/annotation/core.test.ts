@@ -10,7 +10,35 @@ import {
     deepSeekProvider,
     type FormulaProvider,
     normalizeLatex,
+    normalizeOutput,
 } from "../../src/main/formulaProvider";
+
+describe("OCR output formats", () => {
+    it("formats automatic detection without changing the transcription", () => {
+        expect(normalizeOutput("x^2+1", "auto", "formula")).toBe("$x^2+1$");
+        expect(normalizeOutput("Hello", "auto", "text")).toBe("Hello");
+        expect(normalizeOutput("# Heading\n- Item", "auto", "markdown")).toBe(
+            "# Heading\n- Item",
+        );
+        expect(() => normalizeOutput("x", "auto")).toThrow();
+    });
+    it("wraps display math exactly once without changing symbols", () => {
+        expect(normalizeOutput("$$\n\\frac{X+x}{2}\n$$", "markdown")).toBe(
+            "$$\n\\frac{X+x}{2}\n$$",
+        );
+        expect(normalizeOutput("x^2+1", "latex")).toBe("x^2+1");
+    });
+    it("keeps Mermaid labels and arrow direction in one code block", () => {
+        const code = 'flowchart LR\n  a["A"] --> b["B"]';
+        expect(
+            normalizeOutput(`\`\`\`mermaid\n${code}\n\`\`\``, "mermaid"),
+        ).toBe(`\`\`\`mermaid\n${code}\n\`\`\``);
+        expect(() => normalizeOutput("UNREADABLE", "mermaid")).toThrow();
+        expect(() =>
+            normalizeOutput("Here is your diagram", "mermaid"),
+        ).toThrow();
+    });
+});
 
 function png(width = 4, height = 4) {
     function chunk(type: string, data: Buffer) {

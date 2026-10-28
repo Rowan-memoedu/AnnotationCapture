@@ -3,7 +3,7 @@ const path = require('node:path');
 function prepareProfile(directory, shortcuts = {}) {
     fs.mkdirSync(directory, {recursive: true});
     const file = path.join(directory, 'annotation-settings.json');
-    if (!fs.existsSync(file)) fs.writeFileSync(file, JSON.stringify({shortcut: 'Control+Alt+F13', fullShortcut: 'Alt+F14', ...shortcuts}));
+    if (!fs.existsSync(file)) fs.writeFileSync(file, JSON.stringify({shortcut: 'Control+Alt+F13', fullShortcut: 'Alt+F14', ocrShortcut: 'Control+Alt+F16', ...shortcuts}));
 }
 async function isolateWindow(app, page) {
     return app.evaluate(({ BrowserWindow }, url) => {

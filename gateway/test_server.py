@@ -9,7 +9,7 @@ import unittest
 import urllib.error
 import urllib.request
 
-from server import AccessStore, Gateway, Provider, normalize_latex
+from server import AccessStore, Gateway, Provider, PROMPTS, normalize_latex, normalize_output
 
 
 def png():
@@ -27,7 +27,7 @@ class Upstream(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         value = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         self.server.requests.append({"path": self.path, "authorization": self.headers.get("Authorization"), "body": value})
-        body = json.dumps({"choices": [{"finish_reason": self.server.finish_reason, "message": {"content": "\\frac{X+x}{2}", "reasoning_content": "must remain private"}}]}).encode()
+        body = json.dumps({"choices": [{"finish_reason": self.server.finish_reason, "message": {"content": getattr(self.server, "content", "\\frac{X+x}{2}"), "reasoning_content": "must remain private"}}]}).encode()
         self.send_response(self.server.status)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -118,6 +118,39 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.request("/session", token=token)[1]["providerReady"], False)
         self.assertEqual(self.request("/recognize", {"png": png()}, token)[0], 503)
         self.assertEqual(self.upstream.requests, [])
+
+    def test_output_format_selects_server_prompt_and_canonical_markdown(self):
+        token = self.login()
+        status, value = self.request("/recognize", {"png": png(), "outputFormat": "markdown"}, token)
+        self.assertEqual(status, 200)
+        self.assertEqual(value["latex"], "$$\n\\frac{X+x}{2}\n$$")
+        self.assertEqual(self.upstream.requests[-1]["body"]["messages"][0]["content"], PROMPTS["markdown"])
+        self.upstream.content = 'flowchart LR\n a["A"] --> b["B"]'
+        status, value = self.request("/recognize", {"png": png(), "outputFormat": "mermaid"}, token)
+        self.assertEqual(status, 200)
+        self.assertEqual(value["latex"], '```mermaid\nflowchart LR\n a["A"] --> b["B"]\n```')
+        self.assertEqual(self.upstream.requests[-1]["body"]["messages"][0]["content"], PROMPTS["mermaid"])
+        calls = len(self.upstream.requests)
+        for mode in ("ma", "arbitrary prompt", [], None):
+            self.assertEqual(self.request("/recognize", {"png": png(), "outputFormat": mode}, token)[0], 400)
+        self.assertEqual(len(self.upstream.requests), calls)
+        with self.assertRaises(ValueError):
+            normalize_output("UNREADABLE", "mermaid")
+
+    def test_auto_transcribes_each_content_type_and_wraps_formula_with_single_dollars(self):
+        token = self.login()
+        for kind, content, expected in (
+                ("text", "Keep the original words.", "Keep the original words."),
+                ("markdown", "# Heading\n- Item", "# Heading\n- Item"),
+                ("formula", "\\frac{X+x}{2}", "$\\frac{X+x}{2}$"),
+                ("mermaid", 'flowchart LR\n a["A"] --> b["B"]', '```mermaid\nflowchart LR\n a["A"] --> b["B"]\n```')):
+            self.upstream.content = json.dumps({"type": kind, "content": content})
+            status, value = self.request("/recognize", {"png": png(), "outputFormat": "auto"}, token)
+            self.assertEqual(status, 200)
+            self.assertEqual(value["detectedType"], kind)
+            self.assertEqual(value["latex"], expected)
+        self.upstream.content = json.dumps({"type": "arbitrary", "content": "bad"})
+        self.assertEqual(self.request("/recognize", {"png": png(), "outputFormat": "auto"}, token)[0], 400)
 
     def test_invalid_images_do_not_consume_provider_calls(self):
         token = self.login()

@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import re
 import shutil
 import socket
 import subprocess
@@ -106,7 +107,8 @@ def main():
         else:
             raise RuntimeError("Public gateway or existing service health failed")
         marker.write_text("AnnotationCapture managed gateway\n")
-        print(json.dumps({"deployed": True, "gatewayHealthy": True, "learningServiceHealthy": True, "linuxGatewayTests": 10, "hashes": manifest}))
+        test_count = int(re.search(r"Ran (\d+) tests", result.stdout + result.stderr).group(1))
+        print(json.dumps({"deployed": True, "gatewayHealthy": True, "learningServiceHealthy": True, "linuxGatewayTests": test_count, "hashes": manifest}))
     except Exception:
         if not marker.exists():
             subprocess.run(["systemctl", "disable", "--now", "annotationcapture"], capture_output=True)

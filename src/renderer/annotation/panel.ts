@@ -1,5 +1,10 @@
 import { button, ele, input, p, textarea, view } from "dkh-ui";
 import type { AppState, FormulaResult } from "../../../lib/annotation";
+import {
+    type OutputFormat,
+    outputFormatLabels,
+    outputFormats,
+} from "../../../lib/annotation";
 import { invoke } from "../../../lib/annotationIpc";
 import store from "../../../lib/store/renderStore";
 import { t } from "../../../lib/translate/translate";
@@ -32,6 +37,35 @@ const shortcut = input()
 const fullShortcut = input()
     .class("ac-field")
     .attr({ id: "ac-full-shortcut", ariaLabel: t("全屏批注快捷键") });
+const ocrShortcut = input()
+    .class("ac-field")
+    .attr({ id: "ac-ocr-shortcut", ariaLabel: t("区域 OCR 快捷键") });
+const penColor = input("color")
+    .attr({ id: "ac-pen-color", ariaLabel: t("默认画笔颜色") })
+    .style({ width: "80px", height: "40px", cursor: "pointer" });
+const showMagnifier = input("checkbox").attr({
+    id: "ac-show-magnifier",
+    ariaLabel: t("批注时显示放大框"),
+});
+const penWidth = input("number")
+    .class("ac-field")
+    .attr({
+        id: "ac-pen-width-setting",
+        ariaLabel: t("默认画笔粗细"),
+        min: "1",
+        max: "50",
+        step: "1",
+    });
+const outputFormat = ele("select")
+    .class("ac-field")
+    .attr({ id: "ac-default-output-format", ariaLabel: t("默认识别输出格式") })
+    .add(
+        outputFormats.map((format) =>
+            ele("option")
+                .attr({ value: format })
+                .add(t(outputFormatLabels[format])),
+        ),
+    );
 const inviteCode = input("password")
     .class("ac-field")
     .attr({
@@ -120,7 +154,7 @@ root.add([
                 .add("AnnotationCapture"),
             summary,
             view("x")
-                .style({ gap: "12px" })
+                .style({ gap: "12px", flexWrap: "wrap" })
                 .add([
                     action("区域截图", "ac-start", () =>
                         invoke("capture", "region"),
@@ -128,6 +162,10 @@ root.add([
                     action("全屏批注", "ac-start-full", () =>
                         invoke("capture", "full"),
                     ),
+                    action("区域 OCR", "ac-start-ocr", () =>
+                        invoke("capture", "ocr"),
+                    ),
+                    action("退出软件", "ac-quit", () => invoke("quit")),
                     action("打开归档目录", "ac-open-archive", () =>
                         invoke("openArchive"),
                     ),
@@ -152,7 +190,7 @@ root.add([
     view("y")
         .style({ gap: "12px" })
         .add([
-            ele("h2").add(t("公式识别结果")),
+            ele("h2").add(t("识别结果")),
             p(t("请核对字母大小写和上下标；可修改结果后重新复制。")),
             resultList,
         ]),
@@ -170,6 +208,22 @@ root.add([
             shortcut,
             p(t("全屏批注快捷键")),
             fullShortcut,
+            p(t("区域 OCR 快捷键")),
+            ocrShortcut,
+            p(
+                t(
+                    "区域 OCR 框选后自动判断内容，选区画面会发送给识别服务；不会进入批注。",
+                ),
+            ),
+            p(t("默认画笔颜色")),
+            penColor,
+            p(t("默认画笔粗细")),
+            penWidth,
+            ele("label")
+                .style({ display: "flex", alignItems: "center", gap: "8px" })
+                .add([showMagnifier, t("批注时显示放大框")]),
+            p(t("默认识别输出格式")),
+            outputFormat,
             p(
                 t(
                     "仅主动选择识别时发送公式笔迹图。完整截图保存在本机，登录凭据由 Windows 加密保存。",
@@ -183,6 +237,11 @@ root.add([
                             archiveRoot: archivePath.el.value,
                             shortcut: shortcut.el.value,
                             fullShortcut: fullShortcut.el.value,
+                            ocrShortcut: ocrShortcut.el.value,
+                            penColor: penColor.el.value,
+                            penWidth: Number(penWidth.el.value),
+                            showMagnifier: showMagnifier.el.checked,
+                            outputFormat: outputFormat.el.value as OutputFormat,
                         });
                         await refresh(true);
                         notice.el.textContent = t("设置已保存");
@@ -201,14 +260,14 @@ function resultCard(result: FormulaResult) {
         .class("ac-field")
         .attr({
             id: `result-${result.id}`,
-            ariaLabel: t("公式 LaTeX"),
+            ariaLabel: t("识别结果"),
             rows: 3,
         });
     output.el.value = result.latex;
     const preview = ele("img")
         .attr({
             src: `file:///${result.path.replaceAll("\\", "/")}`,
-            alt: t("提交识别的纯笔迹选区"),
+            alt: t("提交识别的选区"),
         })
         .style({
             maxWidth: "100%",
@@ -222,6 +281,7 @@ function resultCard(result: FormulaResult) {
         .data({ "job-id": result.id, status: result.status })
         .add([
             preview,
+            p(t(outputFormatLabels[result.outputFormat ?? "latex"])),
             p(result.message).class(
                 result.status === "error"
                     ? "ac-error"
@@ -256,6 +316,11 @@ async function refresh(settings = false) {
         archivePath.el.value = state.config.archiveRoot;
         shortcut.el.value = state.config.shortcut;
         fullShortcut.el.value = state.config.fullShortcut;
+        ocrShortcut.el.value = state.config.ocrShortcut;
+        penColor.el.value = state.config.penColor;
+        penWidth.el.value = String(state.config.penWidth);
+        showMagnifier.el.checked = state.config.showMagnifier;
+        outputFormat.el.value = state.config.outputFormat;
         summary.el.textContent = `${state.config.fullShortcut || t("点击按钮开始")} ${t("全屏批注")} · ${state.config.shortcut || t("点击按钮开始")} ${t("区域截图")} · ${t("Esc / Ctrl+Enter 归档退出；Ctrl+Shift+Enter 选择公式")}`;
         if (state.shortcutError) notice.el.textContent = state.shortcutError;
     }
