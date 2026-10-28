@@ -39,33 +39,45 @@ export function installCompletion(
         .attr({ id: "ac-completion" })
         .add([
             status,
-            p().attr({ id: "ac-pen-width", ariaLive: "polite" }),
-            button(t("保存为默认"))
-                .class("ac-button")
-                .attr({
-                    id: "ac-save-defaults",
-                    title: t("保存当前画笔颜色和粗细，下次批注自动应用"),
-                })
-                .on("click", async () => {
-                    try {
-                        await saveDefaults();
-                        status.el.textContent = t("默认画笔已保存");
-                    } catch (error) {
-                        status.el.textContent = String(error);
-                    }
-                }),
+            p().attr({ id: "ac-selection-hint", role: "status" }),
+            view("x")
+                .class("ac-toolbar-group")
+                .add([
+                    p().attr({ id: "ac-pen-width", ariaLive: "polite" }),
+                    button(t("保存为默认"))
+                        .class("ac-button")
+                        .attr({
+                            id: "ac-save-defaults",
+                            title: t(
+                                "保存当前画笔颜色和粗细，下次批注自动应用",
+                            ),
+                        })
+                        .on("click", async () => {
+                            try {
+                                await saveDefaults();
+                                status.el.textContent = t("默认画笔已保存");
+                            } catch (error) {
+                                status.el.textContent = String(error);
+                            }
+                        }),
+                ]),
             button(t("归档并退出"))
                 .class("ac-button")
                 .attr({ id: "ac-finish", title: "归档并退出" })
                 .on("click", () => {
                     void finish(false);
                 }),
-            button(t("选区识别"))
-                .class("ac-button", "ac-primary")
-                .attr({ id: "ac-formula", title: t("选区识别") })
-                .on("click", () => {
-                    void finish(true);
-                }),
+            view("x")
+                .class("ac-toolbar-group")
+                .attr({ id: "ac-formula-actions", hidden: true })
+                .add([
+                    button(t("选区识别"))
+                        .class("ac-button", "ac-primary")
+                        .attr({ id: "ac-formula", title: t("选区识别") })
+                        .on("click", () => {
+                            void finish(true);
+                        }),
+                ]),
         ])
         .addInto();
     document.addEventListener(

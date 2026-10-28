@@ -1,7 +1,7 @@
 {
     "name": "annotation-capture",
     "productName": "AnnotationCapture",
-    "version": "0.4.1",
+    "version": "0.4.2",
     "description": "截图批注归档与选定公式识别",
     "main": "./out/main/main.js",
     "scripts": {

@@ -1,3 +1,4 @@
+import { button } from "dkh-ui";
 import {
     type Canvas,
     config,
@@ -45,15 +46,15 @@ export function installFormulaInk(
     let tapTimer: ReturnType<typeof setTimeout> | undefined;
     let down = { x: 0, y: 0, time: 0, blank: false };
     const toolbar = document.querySelector("#ac-completion") as HTMLElement;
-    const tool = document.createElement("button");
+    const tool = button("ƒx").el;
     tool.id = "ac-formula-pen";
-    tool.className = "ac-button";
-    tool.textContent = t("公式画笔");
+    tool.className = "ac-formula-tool";
+    tool.setAttribute("aria-label", t("公式画笔"));
     tool.title = t(
         "写完公式后双击空白处，或按 Ctrl+Shift+T 转换；保留原笔迹供撤销",
     );
     tool.setAttribute("aria-pressed", "false");
-    const convert = document.createElement("button");
+    const convert = button(t("转换公式")).el;
     convert.id = "ac-typeset";
     convert.className = "ac-button";
     convert.textContent = t("转换公式");
@@ -61,14 +62,27 @@ export function installFormulaInk(
     status.id = "ac-ink-status";
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
-    toolbar.prepend(tool, convert, status);
+    document.querySelector("#draw_free")!.after(tool);
+    const actions = document.querySelector(
+        "#ac-formula-actions",
+    ) as HTMLElement;
+    actions.prepend(convert);
+    toolbar.prepend(status);
     const setActive = (value: boolean) => {
         active = value;
         tool.setAttribute("aria-pressed", String(value));
+        tool.classList.toggle("select", value);
+        actions.hidden = !value;
+        if (!value) status.textContent = "";
     };
     tool.onclick = () => {
         pencil();
         setActive(true);
+        for (const element of document.querySelectorAll(
+            "#draw_main > .select",
+        )) {
+            if (element !== tool) element.classList.remove("select");
+        }
         status.textContent = t("公式画笔：写完后双击空白处转换");
     };
     convert.onclick = () => {

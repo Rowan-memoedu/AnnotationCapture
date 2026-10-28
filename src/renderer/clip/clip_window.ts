@@ -33,6 +33,7 @@ import store from "../../../lib/store/renderStore";
 import { t } from "../../../lib/translate/translate";
 import { installCompletion } from "../annotation/capture";
 import { installFormulaInk } from "../annotation/formulaInk";
+import { installInkSelection } from "../annotation/inkSelection";
 import initScreenShots from "../annotation/screenshot";
 import { writeImage, writeText } from "../lib/clipboard";
 import { Class, cssColor, getImgUrl, initStyle, setTitle } from "../root/root";
@@ -42,6 +43,7 @@ let pendingCanvasWork = Promise.resolve();
 let entryMode: "region" | "full" | "ocr" = "region";
 let showAnnotationMagnifier = false;
 let formulaInk: ReturnType<typeof installFormulaInk> | undefined;
+let inkSelection: ReturnType<typeof installInkSelection> | undefined;
 
 import {
     button,
@@ -2493,6 +2495,7 @@ function setEditType<T extends keyof EditType>(
     mainType: T,
     type: EditType[T],
 ): void {
+    inkSelection?.cancel();
     formulaInk?.setActive(false);
     if (!(mainType === "select" && type === "draw")) {
         editType[mainType] = type;
@@ -2603,7 +2606,10 @@ function showSideBarItem(index: number) {
             if (drawBar.offsetLeft + bSize + bSize * x > window.innerWidth)
                 left = -bSize * x;
             drawSideBar.style.left = `${left}px`;
-            drawSideBar.style.top = `${bSize * Math.min(i, drawMainBar.children.length - y)}px`;
+            const row = Array.from(drawMainBar.children).indexOf(
+                drawBarMainElList[i].el,
+            );
+            drawSideBar.style.top = `${bSize * Math.min(row, drawMainBar.children.length - y)}px`;
             drawSideBar.style.width = `${bSize * x}px`;
             drawSideBar.style.height = `${bSize * y}px`;
         } else {
@@ -2708,9 +2714,13 @@ function freeInit() {
 }
 
 function fabricDelete() {
-    for (const o of fabricCanvas.getActiveObjects()) {
+    const objects = fabricCanvas.getActiveObjects();
+    if (!objects.length) return;
+    fabricCanvas.discardActiveObject();
+    for (const o of objects) {
         fabricCanvas.remove(o);
     }
+    fabricCanvas.requestRenderAll();
     getFObjectV();
     getFilters();
     hisPush();
@@ -5270,6 +5280,12 @@ const completion = installCompletion(
 );
 formulaInk = installFormulaInk(fabricCanvas, hisPush, () =>
     setEditType("draw", "free"),
+);
+inkSelection = installInkSelection(
+    fabricCanvas,
+    hisPush,
+    () => setEditType("select", "draw"),
+    () => setEditType("draw", "free"),
 );
 void invoke("state").then(({ config }) =>
     formulaInk?.setFont(config.formulaFont),
