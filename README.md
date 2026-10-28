@@ -8,11 +8,13 @@
 
 0.4.0 加入公式画笔：手写后双击空白处转换为 STIX2 或 New Computer Modern，回填后继续批注，支持撤销、编辑 LaTeX 与重新排版。
 
+0.4.1 取消批注画布的 Ctrl+C 截图响应，避免划词软件注入复制键时打断书写；需要复制截图时点击工具栏，画布保持打开。文字输入框仍支持 Ctrl+C，按 Esc 才归档退出。鼠标移动每帧合并处理，隐藏放大框时停止像素采样；加入每日自动检查、下载和覆盖更新。
+
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.4.0-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.4.1-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 1. 按 `Alt+W`，或点击“全屏批注”：截取鼠标所在显示器，直接进入画笔。按 `Ctrl+Alt+S`，或点击“区域截图”：框选后自动切换画笔，在选区上继续批注。
 2. 按 `Esc` 或 `Ctrl+Enter`：保存带批注的截图后退出。正在落笔时会等抬笔再保存。
@@ -26,6 +28,14 @@
 按 `Ctrl+Alt+O` 或点击“区域 OCR”，框选结束后直接识别选区画面并复制，不进入批注。默认自动判断普通文字、Markdown、Mermaid 图或数学公式，公式使用 `$…$`。该入口会发送选中的屏幕内容；只框选需要识别的区域。快捷键可在设置修改。
 
 批注后的 OCR 可选自动判断、普通文字、Markdown 文字、`$…$` 公式、原始 LaTeX、`$$…$$` Markdown 公式（RemNote / Obsidian）和 Mermaid 代码块。每个任务保留所选格式，重试不改变格式。这个选区识别入口输出到结果区和剪贴板，独立于公式画笔；Math Academy 专用输出后续接入。
+
+## 自动更新
+
+0.4.1 起默认每天检查一次本仓库的已发布 Windows x64 ZIP，包含当前预览版通道；关闭软件期间不另起常驻进程，下次启动补查。设置页可关闭自动更新、立即检查，或手动安装已经下载的新版。
+
+新版通过 GitHub 提供的 SHA-256 和包内文件清单校验后暂存。正在批注、识别或使用设置页时延后自动安装；空闲时退出、覆盖原程序并重新启动，保留登录、设置、归档和程序目录中的其他用户文件。启动健康检查失败会恢复旧程序并重启；回滚副本保存在用户数据目录的 Updates 中，至少保留 14 天。
+
+第一次从 0.4.0 或更早版本升级，仍需完整解压 0.4.1 ZIP 覆盖原程序目录；之后可以自动更新。ZIP 中的 `program-manifest.json`、`resources` 等程序文件须完整保留，不能只替换 EXE。程序目录须可写，更新时需至少 2 GB 可用空间。网络或校验失败不会改动现有程序，可稍后手动重试。
 
 ## 公式画笔
 

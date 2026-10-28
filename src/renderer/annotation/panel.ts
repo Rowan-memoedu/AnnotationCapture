@@ -94,6 +94,21 @@ const loginStatus = p().attr({
 });
 const accountLabel = p().attr({ id: "ac-account-label" });
 const summary = p().class("ac-status");
+const updateStatus = p()
+    .attr({ id: "ac-update-status", role: "status", ariaLive: "polite" })
+    .class("ac-status");
+const automaticUpdates = input("checkbox").attr({
+    id: "ac-auto-update",
+    ariaLabel: t("每天自动检查并安装更新"),
+});
+automaticUpdates.on("change", async () => {
+    try {
+        await invoke("setAutoUpdate", automaticUpdates.el.checked);
+        await refresh();
+    } catch (error) {
+        notice.el.textContent = String(error);
+    }
+});
 function action(label: string, id: string, fn: () => Promise<unknown>) {
     const b = button(t(label))
         .class("ac-button")
@@ -156,6 +171,22 @@ const accountActions = view("x")
             await refresh();
         }),
     ]);
+const checkUpdateButton = action(
+    "立即检查更新",
+    "ac-check-updates",
+    async () => {
+        await invoke("checkUpdates");
+        await refresh();
+    },
+);
+const installUpdateButton = action(
+    "安装更新并重启",
+    "ac-install-update",
+    async () => {
+        await invoke("installUpdate");
+        await refresh();
+    },
+);
 root.add([
     view("y")
         .style({ gap: "12px" })
@@ -262,6 +293,24 @@ root.add([
                     }),
                 ]),
         ]),
+    view()
+        .class("ac-card")
+        .attr({ id: "ac-updates" })
+        .add([
+            ele("h2").add(t("软件更新")),
+            ele("label")
+                .style({ display: "flex", alignItems: "center", gap: "8px" })
+                .add([automaticUpdates, t("每天自动检查并安装更新")]),
+            p(
+                t(
+                    "批注或识别期间延后安装；更新保留登录、设置和归档。关闭软件时，下次启动补查。",
+                ),
+            ),
+            updateStatus,
+            view("x")
+                .style({ gap: "12px", flexWrap: "wrap" })
+                .add([checkUpdateButton, installUpdateButton]),
+        ]),
     p(
         t(
             "基于 eSearch 15.6.1 · GPL-3.0。公式以 LaTeX 文本复制；Math Academy 输入适配尚未加入。",
@@ -326,6 +375,20 @@ function resultCard(result: FormulaResult) {
 }
 async function refresh(settings = false) {
     const state: AppState = await invoke("state");
+    automaticUpdates.el.checked = state.update.enabled;
+    updateStatus.el.textContent = `${state.config.version} · ${state.update.message}`;
+    updateStatus.el.classList.toggle(
+        "ac-error",
+        state.update.phase === "error",
+    );
+    checkUpdateButton.el.disabled = [
+        "checking",
+        "downloading",
+        "installing",
+        "ready",
+    ].includes(state.update.phase);
+    installUpdateButton.el.style.display =
+        state.update.phase === "ready" ? "" : "none";
     if (settings) {
         archivePath.el.value = state.config.archiveRoot;
         shortcut.el.value = state.config.shortcut;

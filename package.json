@@ -1,7 +1,7 @@
 {
     "name": "annotation-capture",
     "productName": "AnnotationCapture",
-    "version": "0.4.0",
+    "version": "0.4.1",
     "description": "截图批注归档与选定公式识别",
     "main": "./out/main/main.js",
     "scripts": {
@@ -18,7 +18,7 @@
         "typecheck": "tsc -p tsconfig.annotation.json",
         "typecheck:upstream": "tsc -b --noEmit --force",
         "format": "biome format --write src/",
-        "lint": "biome check lib/annotation.ts lib/annotationIpc.ts lib/ipc.ts src/ShareTypes.d.ts src/main/annotationArchive.ts src/main/annotationAuth.ts src/main/annotationConfig.ts src/main/annotationMain.ts src/main/captureDefaults.ts src/main/formulaJobs.ts src/main/formulaProvider.ts src/main/formulaTypeset.ts src/renderer/annotation src/renderer/clip/clip_window.ts tests/annotation",
+        "lint": "biome check lib/annotation.ts lib/annotationIpc.ts lib/ipc.ts src/ShareTypes.d.ts src/main/annotationArchive.ts src/main/annotationAuth.ts src/main/annotationConfig.ts src/main/annotationMain.ts src/main/annotationUpdate.ts src/main/captureDefaults.ts src/main/formulaJobs.ts src/main/formulaProvider.ts src/main/formulaTypeset.ts src/renderer/annotation src/renderer/clip/clip_window.ts tests/annotation",
         "fix": "biome check --write src/"
     },
     "author": {

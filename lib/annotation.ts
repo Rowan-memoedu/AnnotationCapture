@@ -89,10 +89,25 @@ export type ConfigInput = {
     formulaFont?: FormulaFont;
 };
 export type AppState = {
+    update: UpdateState;
     config: PublicConfig;
     login: LoginState;
     jobs: FormulaResult[];
     shortcutError: string;
+};
+export type UpdateState = {
+    enabled: boolean;
+    phase:
+        | "idle"
+        | "checking"
+        | "current"
+        | "downloading"
+        | "ready"
+        | "installing"
+        | "error";
+    message: string;
+    lastCheckedAt?: string;
+    version?: string;
 };
 
 export function selectedRect(
@@ -114,6 +129,9 @@ export function selectedRect(
 }
 
 export type AnnotationMessages = {
+    checkUpdates: () => UpdateState;
+    installUpdate: () => UpdateState;
+    setAutoUpdate: (enabled: boolean) => UpdateState;
     inkRecognize: (id: string, png: string) => { latex: string; model: string };
     inkCancel: (id: string) => void;
     typeset: (latex: string, font: FormulaFont, color: string) => string;

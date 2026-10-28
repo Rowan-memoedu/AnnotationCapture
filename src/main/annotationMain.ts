@@ -24,6 +24,7 @@ import Store from "../../lib/store/store";
 import { ArchiveStore, decodePng } from "./annotationArchive";
 import { AnnotationAuth } from "./annotationAuth";
 import { AnnotationConfig } from "./annotationConfig";
+import { AnnotationUpdater, acknowledgeUpdate } from "./annotationUpdate";
 import { captureDefaults } from "./captureDefaults";
 import { FormulaJobs } from "./formulaJobs";
 import { FormulaTypesetter } from "./formulaTypeset";
@@ -47,6 +48,7 @@ let config: AnnotationConfig;
 let auth: AnnotationAuth;
 let archive: ArchiveStore;
 let jobs: FormulaJobs;
+let updater: AnnotationUpdater;
 let captureWindow: BrowserWindow | null = null;
 let panel: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -98,6 +100,7 @@ function showPanel() {
 }
 
 async function capture(imagePath?: string, mode: CaptureMode = "region") {
+    if (updater?.installing) return;
     if (activeCapture || captureStarting) {
         showCaptureWindow();
         return;
@@ -368,6 +371,7 @@ handle("inkRecognize", async (id, png) => {
     }
 });
 handle("state", () => ({
+    update: updater.public(),
     config: config.public(),
     login: auth.public(),
     jobs: [...jobs.jobs.values()].reverse(),
@@ -401,6 +405,9 @@ handle("logout", () => auth.logout());
 handle("refreshLogin", () => auth.refresh());
 handle("openPanel", () => showPanel());
 handle("quit", quitImmediately);
+handle("checkUpdates", () => updater.check());
+handle("setAutoUpdate", (enabled) => updater.setEnabled(enabled));
+handle("installUpdate", () => updater.install(true));
 handle("chooseArchive", async () => {
     const result = await dialog.showOpenDialog({
         properties: ["openDirectory", "createDirectory"],
@@ -426,6 +433,7 @@ else {
         }
     });
     app.on("will-quit", () => {
+        updater?.dispose();
         globalShortcut.unregisterAll();
         tray?.destroy();
     });
@@ -448,6 +456,28 @@ else {
             },
             changed,
         );
+        updater = new AnnotationUpdater({
+            dataRoot,
+            archiveRoot: () => config.public().archiveRoot,
+            worker: app.isPackaged
+                ? join(process.resourcesPath, "update-worker.ps1")
+                : join(runPath, "src/main/update-worker.ps1"),
+            busy: (manual) =>
+                activeCapture ||
+                captureStarting ||
+                inkRequests.size > 0 ||
+                [...jobs.jobs.values()].some(
+                    (j) => j.status === "recognizing",
+                ) ||
+                (!manual && !!panel?.isFocused()),
+            changed,
+            quit: quitImmediately,
+            disabled: !!args.testMode,
+            testFeed:
+                args.testMode && typeof args.updateTestFeed === "string"
+                    ? args.updateTestFeed
+                    : undefined,
+        });
         const shortcuts = config.public();
         const shortcutErrors: string[] = [];
         for (const entry of [
@@ -495,7 +525,9 @@ else {
         if (args.input) void capture(args.input, args.ocr ? "ocr" : "region");
         else if (args.full) void capture(undefined, "full");
         else if (args.capture) void capture();
-        else showPanel();
+        else if (!args.updateReceipt && !args.background) showPanel();
+        acknowledgeUpdate(args.updateReceipt, dataRoot);
+        updater.start();
         void auth.refresh();
     });
 }

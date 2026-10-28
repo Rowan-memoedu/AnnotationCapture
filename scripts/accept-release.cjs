@@ -55,6 +55,8 @@ async function extract() {
         { script: 'ui-acceptance' },
         { script: 'edge-acceptance' },
         { script: 'tablet-selection-acceptance' },
+        { script: 'copy-stays-open-acceptance' },
+        { script: 'keyboard-performance-acceptance' },
         ...['1','1.5','2'].map(scale=>({script:'formula-pen-acceptance',scale})),
         ...(process.env.ANNOTATION_INVITE_FILE ? [{script:'formula-pen-live'}] : []),
         ...(process.env.ANNOTATION_INVITE_FILE ? ['polynomial', 'fraction', 'root', 'mixedcase'].map(formulaCase => ({ script: 'live-ocr-acceptance', formulaCase })) : []),

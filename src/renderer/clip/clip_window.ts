@@ -1138,7 +1138,6 @@ async function runCopy() {
     const c = getClipPhoto();
     const blob = await getBlob(c, "image/png");
     if (blob) await writeImage(blob);
-    toolsX.close.f();
 }
 // 保存
 function runSave() {
@@ -3611,9 +3610,7 @@ const drawSide操作 = {
     重做: iconEl("right")
         .attr({ title: "重做" })
         .data({ key: showShortKey("Control+Y") }),
-    复制: iconEl("copy")
-        .attr({ title: "复制" })
-        .data({ key: showShortKey("Control+C") }),
+    复制: iconEl("copy").attr({ title: "复制" }),
     删除: iconEl("clear")
         .attr({ title: "删除" })
         .data({ key: showShortKey("Delete") }),
@@ -4349,8 +4346,28 @@ hotkeys.filter = (event) => {
     return v;
 };
 
+// Selection-capture utilities inject Ctrl+C on mouse release. The annotation
+// canvas copies only through its toolbar; text editors retain native copying.
+document.addEventListener(
+    "keydown",
+    (event) => {
+        const target = event.target as HTMLElement;
+        if (
+            (event.ctrlKey || event.metaKey) &&
+            event.key.toLowerCase() === "c" &&
+            !target.isContentEditable &&
+            !["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
+        ) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }
+    },
+    true,
+);
+
 toHotkeyScope("normal");
 for (const k of tools) {
+    if (k === "copy") continue;
     let key = store.get(`工具快捷键.${k}`) as string;
     if (["esc", "escape"].includes(key.toLowerCase()))
         hotkeys(key, "normal", toolsX[k].f);
@@ -4766,14 +4783,21 @@ hotkeys(store.get("其他快捷键.复制颜色"), () => {
     copy(getColorFormatEl());
 });
 
+let pointerFramePending = false;
 document.onpointermove = (e) => {
     if (selectionPointer !== null && e.pointerId !== selectionPointer) return;
     nowMouseE = e;
-    // 一帧内的多次移动只渲染最后一次
+    if (pointerFramePending) return;
+    pointerFramePending = true;
     requestAnimationFrame(() => {
+        pointerFramePending = false;
         const ev = nowMouseE;
         renderClip(ev);
-        if (!rightKey) {
+        if (drawBarMovingXY) {
+            drawBar.style.left = `${ev.clientX - drawBarMovingXY[0]}px`;
+            drawBar.style.top = `${ev.clientY - drawBarMovingXY[1]}px`;
+        }
+        if (!rightKey && mouseBarEl.el.style.display !== "none") {
             // 鼠标跟随栏
             mouseBar(finalRect, e2srcPoint(ev));
 
@@ -4809,12 +4833,6 @@ document.onpointermove = (e) => {
                 "mouse_bar_hide",
                 isDrawBar || isToolBar,
             );
-
-            // 画板栏移动
-            if (drawBarMovingXY) {
-                drawBar.style.left = `${ev.clientX - drawBarMovingXY[0]}px`;
-                drawBar.style.top = `${ev.clientY - drawBarMovingXY[1]}px`;
-            }
         }
     });
 };
