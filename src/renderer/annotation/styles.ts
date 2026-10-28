@@ -65,10 +65,17 @@ export function annotationStyles() {
             display: "flex",
             gap: "8px",
             alignItems: "center",
+            flexWrap: "wrap",
+            maxWidth: "calc(100vw - 40px)",
             padding: "10px",
             borderRadius: "12px",
             background: "var(--bg)",
             boxShadow: "0 2px 16px #0003",
+        },
+        "#ac-ink-status": { maxWidth: "32ch", fontSize: "13px" },
+        "#ac-formula-pen[aria-pressed='true']": {
+            background: "var(--emphasis-color)",
+            color: "var(--font-color-emphasis)",
         },
         ".ac-status": {
             whiteSpace: "pre-wrap",

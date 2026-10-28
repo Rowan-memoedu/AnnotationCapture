@@ -32,6 +32,7 @@ import open_with from "../../../lib/open_with";
 import store from "../../../lib/store/renderStore";
 import { t } from "../../../lib/translate/translate";
 import { installCompletion } from "../annotation/capture";
+import { installFormulaInk } from "../annotation/formulaInk";
 import initScreenShots from "../annotation/screenshot";
 import { writeImage, writeText } from "../lib/clipboard";
 import { Class, cssColor, getImgUrl, initStyle, setTitle } from "../root/root";
@@ -40,6 +41,7 @@ const screenShots = initScreenShots();
 let pendingCanvasWork = Promise.resolve();
 let entryMode: "region" | "full" | "ocr" = "region";
 let showAnnotationMagnifier = false;
+let formulaInk: ReturnType<typeof installFormulaInk> | undefined;
 
 import {
     button,
@@ -2437,6 +2439,7 @@ function hisPush() {
  * @param {boolean} v true向前 false向后
  */
 function undo(v: boolean) {
+    formulaInk?.cancel();
     pendingCanvasWork = pendingCanvasWork.then(async () => {
         if (v) {
             undoStack.undo();
@@ -2491,6 +2494,7 @@ function setEditType<T extends keyof EditType>(
     mainType: T,
     type: EditType[T],
 ): void {
+    formulaInk?.setActive(false);
     if (!(mainType === "select" && type === "draw")) {
         editType[mainType] = type;
         nowType = mainType;
@@ -4550,19 +4554,33 @@ document.body.onkeydown = (e) => {
     }
 };
 
-clipEl.onmousedown = (e) => {
+let selectionPointer: number | null = null;
+let selectionBefore: { rect: rect; poly: point[]; selected: boolean } | null =
+    null;
+clipEl.style.touchAction = "none";
+clipEl.onpointerdown = (e) => {
+    if (!e.isPrimary || selectionPointer !== null) return;
+    nowMouseE = e;
+    if (e.button === 2) {
+        if (store.get("鼠标快捷键.右键") === "取色器") pickColor(e);
+        return;
+    }
+    if (e.button !== 0) return;
+    e.preventDefault();
+    selectionPointer = e.pointerId;
+    selectionBefore = {
+        rect: [...finalRect],
+        poly: structuredClone(freeSelect),
+        selected: rectSelect,
+    };
+    clipEl.setPointerCapture(e.pointerId);
     let inRect = false;
     if (isRect) {
         inRect = isInClipRect({ x: e.offsetX, y: e.offsetY });
     } else {
         inRect = isPointInPolygon({ x: e.offsetX, y: e.offsetY });
     }
-    if (e.button === 0) {
-        clipStart(e, inRect);
-    }
-    if (e.button === 2) {
-        if (store.get("鼠标快捷键.右键") === "取色器") pickColor(e);
-    }
+    clipStart(e, inRect);
     toolBar.style.pointerEvents =
         drawBar.style.pointerEvents =
         whEl.el.style.pointerEvents =
@@ -4571,7 +4589,12 @@ clipEl.onmousedown = (e) => {
     down = true;
 };
 
-document.onmouseup = (e) => {
+document.onpointerup = (e) => {
+    if (e.pointerId !== selectionPointer) return;
+    selectionPointer = null;
+    selectionBefore = null;
+    if (clipEl.hasPointerCapture(e.pointerId))
+        clipEl.releasePointerCapture(e.pointerId);
     let selectedRegion = false;
     if (e.button === 0) {
         if (selecting) {
@@ -4599,9 +4622,32 @@ document.onmouseup = (e) => {
     moved = false;
     if (selectedRegion) {
         if (entryMode === "ocr") void completion.finish(false, "auto");
-        else setEditType("draw", "free");
+        else {
+            setEditType("draw", "free");
+            renderSend("clip_show", []);
+        }
     }
 };
+
+document.addEventListener("pointercancel", (e) => {
+    if (e.pointerId !== selectionPointer) return;
+    selectionPointer = null;
+    if (clipEl.hasPointerCapture(e.pointerId))
+        clipEl.releasePointerCapture(e.pointerId);
+    if (selectionBefore) {
+        finalRect = selectionBefore.rect;
+        freeSelect = selectionBefore.poly;
+        rectSelect = selectionBefore.selected;
+    }
+    selectionBefore = null;
+    selecting = moving = down = moved = false;
+    toolBar.style.pointerEvents =
+        drawBar.style.pointerEvents =
+        whEl.el.style.pointerEvents =
+            "auto";
+    drawClip();
+    showBars(true);
+});
 
 hotkeys("s", () => {
     if (autoPhotoSelectRect) {
@@ -4720,7 +4766,8 @@ hotkeys(store.get("其他快捷键.复制颜色"), () => {
     copy(getColorFormatEl());
 });
 
-document.onmousemove = (e) => {
+document.onpointermove = (e) => {
+    if (selectionPointer !== null && e.pointerId !== selectionPointer) return;
     nowMouseE = e;
     // 一帧内的多次移动只渲染最后一次
     requestAnimationFrame(() => {
@@ -4820,7 +4867,7 @@ drawSide操作.删除.on("click", () => {
 
 const Filters = filters;
 
-const fabricCanvas = new Canvas("draw_photo");
+const fabricCanvas = new Canvas("draw_photo", { enablePointerEvents: true });
 
 hisPush();
 
@@ -5150,9 +5197,12 @@ setEditType("select", editType.select);
 fabricCanvas.on("object:added", ({ target }) => {
     target.set("erasable", true);
 });
-fabricCanvas.on("path:created", () => hisPush());
+fabricCanvas.on("path:created", ({ path }) =>
+    formulaInk ? formulaInk.pathCreated(path) : hisPush(),
+);
 const completion = installCompletion(
     async () => {
+        formulaInk?.cancel();
         await new Promise<void>((resolve) =>
             requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
         );
@@ -5181,6 +5231,11 @@ const completion = installCompletion(
                 height: finalRect[3],
             },
             screenId: nowScreenId,
+            annotations: {
+                version: 1,
+                canvas: fabricCanvas.toJSON(),
+                rect: finalRect,
+            },
         };
     },
     closeArchivedWindow,
@@ -5194,6 +5249,12 @@ const completion = installCompletion(
             penWidth: Math.max(1, Math.min(50, Math.round(pen.sw))),
         });
     },
+);
+formulaInk = installFormulaInk(fabricCanvas, hisPush, () =>
+    setEditType("draw", "free"),
+);
+void invoke("state").then(({ config }) =>
+    formulaInk?.setFont(config.formulaFont),
 );
 renderOn("annotation_finish", () => {
     void completion.finish(false);

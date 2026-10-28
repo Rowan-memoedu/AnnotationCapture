@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>公式排版</title><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'"></head><body>
+<script>
+const font = new URLSearchParams(location.search).get('font') === 'newcm' ? 'newcm' : 'stix2';
+window.MathJax = {
+    loader: {load: ['input/tex-base', '[tex]/ams', 'output/svg'], paths: {'mathjax-stix2': './stix2', 'mathjax-newcm': './newcm'}},
+    startup: {typeset: false},
+    tex: {packages: ['base', 'ams'], maxBuffer: 4000, maxMacros: 1000},
+    svg: {font: `[mathjax-${font}]`, fontCache: 'none', mtextInheritFont: false, merrorInheritFont: false}
+};
+window.renderFormula = async (latex, color) => {
+    await MathJax.startup.promise;
+    const container = await MathJax.tex2svgPromise(latex, {display: true});
+    const svg = container.querySelector('svg');
+    if (!svg || svg.querySelector('[data-mml-node="merror"],text,foreignObject,image,a')) throw new Error('公式无法排版，请检查 LaTeX 或使用支持的数学符号');
+    const box = svg.viewBox.baseVal;
+    if (!box.width || !box.height || svg.querySelectorAll('path').length > 10000) throw new Error('公式尺寸或复杂度无效');
+    svg.setAttribute('width', String(box.width)); svg.setAttribute('height', String(box.height));
+    const result = svg.outerHTML.replace(/currentColor/g, color);
+    if (/(?:href|src)=|<use\b/i.test(result) || result.length > 4000000) throw new Error('公式含有不支持的资源');
+    return result;
+};
+</script><script src="startup.js"></script></body></html>

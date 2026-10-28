@@ -26,6 +26,7 @@ import { AnnotationAuth } from "./annotationAuth";
 import { AnnotationConfig } from "./annotationConfig";
 import { captureDefaults } from "./captureDefaults";
 import { FormulaJobs } from "./formulaJobs";
+import { FormulaTypesetter } from "./formulaTypeset";
 
 app.setName("AnnotationCapture");
 const args = minimist(process.argv.slice(1));
@@ -54,6 +55,12 @@ let captureStarting = false;
 let closing = false;
 let quitting = false;
 let shortcutError = "";
+const typesetter = new FormulaTypesetter();
+const inkRequests = new Map<string, AbortController>();
+function cancelInk() {
+    for (const controller of inkRequests.values()) controller.abort();
+    inkRequests.clear();
+}
 const icon = join(runPath, "assets/logo/64x64.png");
 
 function load(win: BrowserWindow, file: string) {
@@ -92,7 +99,7 @@ function showPanel() {
 
 async function capture(imagePath?: string, mode: CaptureMode = "region") {
     if (activeCapture || captureStarting) {
-        captureWindow?.focus();
+        showCaptureWindow();
         return;
     }
     captureStarting = true;
@@ -111,6 +118,7 @@ async function capture(imagePath?: string, mode: CaptureMode = "region") {
             skipTaskbar: !args.testMode,
             fullscreenable: true,
             resizable: false,
+            minimizable: false,
             webPreferences: {
                 nodeIntegration: true,
                 contextIsolation: false,
@@ -125,6 +133,7 @@ async function capture(imagePath?: string, mode: CaptureMode = "region") {
             }
         });
         win.on("closed", () => {
+            cancelInk();
             captureWindow = null;
             activeCapture = false;
         });
@@ -155,6 +164,7 @@ async function capture(imagePath?: string, mode: CaptureMode = "region") {
 }
 
 function finishCapture() {
+    cancelInk();
     activeCapture = false;
     closing = true;
     captureWindow?.close();
@@ -245,10 +255,17 @@ ipcMain.on("store", (event, message) => {
 mainOn("runPath", () => runPath);
 mainOn("userDataPath", () => dataRoot);
 mainOn("systemLan", () => "zh-HANS");
-mainOn("clip_show", () => {
-    captureWindow?.show();
-    captureWindow?.setSimpleFullScreen(true);
-});
+function showCaptureWindow() {
+    const win = captureWindow;
+    if (!win || win.isDestroyed()) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    if (process.platform === "darwin") win.setSimpleFullScreen(true);
+    win.setAlwaysOnTop(!args.testMode, "screen-saver");
+    win.focus();
+    win.webContents.focus();
+}
+mainOn("clip_show", showCaptureWindow);
 mainOn("clip_close", finishCapture);
 mainOn("clip_hide", () => captureWindow?.hide());
 mainOn("windowIgnoreMouse", ([ignore]) =>
@@ -315,6 +332,40 @@ handle("formula", async (input) => {
         void jobs.run(result.id);
     }, 200);
     return result;
+});
+handle("typeset", (latex, font, color) =>
+    typesetter.render(latex, font, color),
+);
+handle("inkCancel", (id) => {
+    inkRequests.get(id)?.abort();
+    inkRequests.delete(id);
+});
+handle("inkRecognize", async (id, png) => {
+    if (
+        !/^[a-f0-9-]{36}$/.test(id) ||
+        inkRequests.has(id) ||
+        inkRequests.size >= 2
+    )
+        throw new Error("公式识别请求无效或过多");
+    if (nativeImage.createFromBuffer(decodePng(png)).isEmpty())
+        throw new Error("公式笔迹图无效");
+    const provider = auth.provider();
+    if (!provider) throw new Error("请先使用邀请码登录");
+    const controller = new AbortController();
+    inkRequests.set(id, controller);
+    const timer = setTimeout(() => controller.abort(), 90_000);
+    try {
+        const result = await provider.recognize(
+            png,
+            controller.signal,
+            "latex",
+        );
+        if (controller.signal.aborted) throw new Error("公式识别已取消");
+        return result;
+    } finally {
+        clearTimeout(timer);
+        if (inkRequests.get(id) === controller) inkRequests.delete(id);
+    }
 });
 handle("state", () => ({
     config: config.public(),

@@ -1,5 +1,6 @@
 export type PixelRect = { x: number; y: number; width: number; height: number };
 export type CaptureMode = "region" | "full" | "ocr";
+export type FormulaFont = "stix2" | "newcm";
 export const outputFormats = [
     "auto",
     "text",
@@ -25,6 +26,7 @@ export type CaptureInput = {
     png: string;
     rect: PixelRect;
     screenId: number;
+    annotations?: object;
 };
 export type ArchiveRecord = {
     id: string;
@@ -64,6 +66,7 @@ export type PublicConfig = {
     penWidth: number;
     showMagnifier: boolean;
     outputFormat: OutputFormat;
+    formulaFont: FormulaFont;
     version: string;
 };
 export type LoginSession = { token: string; accountId: string; label: string };
@@ -83,6 +86,7 @@ export type ConfigInput = {
     penWidth?: number;
     showMagnifier?: boolean;
     outputFormat?: OutputFormat;
+    formulaFont?: FormulaFont;
 };
 export type AppState = {
     config: PublicConfig;
@@ -110,6 +114,9 @@ export function selectedRect(
 }
 
 export type AnnotationMessages = {
+    inkRecognize: (id: string, png: string) => { latex: string; model: string };
+    inkCancel: (id: string) => void;
+    typeset: (latex: string, font: FormulaFont, color: string) => string;
     screenshots: () => {
         id: number;
         png: string;

@@ -83,6 +83,47 @@ async function fixture() {
 }
 
 describe("archive correctness", () => {
+    it("stores recoverable formula sources in the same atomic archive", async () => {
+        const { archive, input } = await fixture();
+        const annotations = {
+            version: 1,
+            canvas: {
+                objects: [
+                    {
+                        acFormula: {
+                            latex: "X+x",
+                            font: "stix2",
+                            source: [
+                                {
+                                    type: "Path",
+                                    path: [
+                                        ["M", 1, 2],
+                                        ["L", 4, 5],
+                                    ],
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+        };
+        const record = await archive.save({ ...input, annotations });
+        expect(
+            JSON.parse(
+                await readFile(
+                    join(record.path, "..", "annotations.json"),
+                    "utf8",
+                ),
+            ),
+        ).toEqual(annotations);
+        expect(() =>
+            archive.save({
+                ...input,
+                id: randomUUID(),
+                annotations: { large: "x".repeat(20_000_001) },
+            }),
+        ).toThrow("批注源数据过大");
+    });
     it("commits annotated PNG and metadata atomically and deduplicates repeated finish", async () => {
         const { root, archive, input } = await fixture();
         const records = await Promise.all([

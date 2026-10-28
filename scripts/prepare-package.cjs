@@ -16,7 +16,7 @@ for (const file of fs.readdirSync('lib/translate').filter(f=>f.endsWith('.json')
 for (const file of ['LICENSE','README.md','README.eSearch.md','THIRD_PARTY_NOTICES.md']) fs.copyFileSync(file,path.join(staging,file));
 fs.writeFileSync(path.join(staging,'package.json'),JSON.stringify({name:'annotation-capture',productName:'AnnotationCapture',version:metadata.version,description:metadata.description,main:'out/main/main.js',license:'GPL-3.0',author:metadata.author,dependencies:{},optionalDependencies:{}},null,2));
 const licenses=[];
-for(const name of ['@erase2d/fabric','bmp-js','chroma-js','dkh-ui','edge_det','fabric','hex-to-css-filter','hotkeys-js','minimist','picture_match','xtranslator']) {
+for(const name of ['mathjax','@mathjax/mathjax-stix2-font','@mathjax/mathjax-newcm-font','@erase2d/fabric','bmp-js','chroma-js','dkh-ui','edge_det','fabric','hex-to-css-filter','hotkeys-js','minimist','picture_match','xtranslator']) {
     const directory=path.join('node_modules',name);
     const license=fs.readdirSync(directory).find(f=>/^(license|licence|copying)(\.|$)/i.test(f));
     if(license) licenses.push(`\n========== ${name} ==========\n${fs.readFileSync(path.join(directory,license),'utf8')}`);

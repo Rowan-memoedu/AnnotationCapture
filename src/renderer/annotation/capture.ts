@@ -16,6 +16,7 @@ export type CaptureSnapshot = {
     ink: HTMLCanvasElement;
     rect: PixelRect;
     screenId: number;
+    annotations?: object;
 };
 export function installCompletion(
     snapshot: () => Promise<CaptureSnapshot>,
@@ -68,7 +69,7 @@ export function installCompletion(
         ])
         .addInto();
     document.addEventListener(
-        "mousedown",
+        "pointerdown",
         (event) => {
             if (event.button === 0 && event.target === drawingElement)
                 pointerDown = true;
@@ -76,7 +77,7 @@ export function installCompletion(
         true,
     );
     document.addEventListener(
-        "mouseup",
+        "pointerup",
         () => {
             pointerDown = false;
             if (queued !== null) {
@@ -86,6 +87,13 @@ export function installCompletion(
                     void finish(formula);
                 }, 0);
             }
+        },
+        true,
+    );
+    document.addEventListener(
+        "pointercancel",
+        () => {
+            pointerDown = false;
         },
         true,
     );
@@ -127,6 +135,7 @@ export function installCompletion(
                 png: frozen.composite.toDataURL(),
                 rect: frozen.rect,
                 screenId: frozen.screenId,
+                annotations: frozen.annotations,
             };
             await invoke("archive", input);
             blocker.remove();

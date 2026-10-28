@@ -1,5 +1,9 @@
 import { button, ele, input, p, textarea, view } from "dkh-ui";
-import type { AppState, FormulaResult } from "../../../lib/annotation";
+import type {
+    AppState,
+    FormulaFont,
+    FormulaResult,
+} from "../../../lib/annotation";
 import {
     type OutputFormat,
     outputFormatLabels,
@@ -66,6 +70,13 @@ const outputFormat = ele("select")
                 .add(t(outputFormatLabels[format])),
         ),
     );
+const formulaFont = ele("select")
+    .class("ac-field")
+    .attr({ id: "ac-formula-font", ariaLabel: t("公式字体") })
+    .add([
+        ele("option").attr({ value: "stix2" }).add("STIX2"),
+        ele("option").attr({ value: "newcm" }).add("New Computer Modern"),
+    ]);
 const inviteCode = input("password")
     .class("ac-field")
     .attr({
@@ -219,6 +230,8 @@ root.add([
             penColor,
             p(t("默认画笔粗细")),
             penWidth,
+            p(t("公式字体")),
+            formulaFont,
             ele("label")
                 .style({ display: "flex", alignItems: "center", gap: "8px" })
                 .add([showMagnifier, t("批注时显示放大框")]),
@@ -240,6 +253,7 @@ root.add([
                             ocrShortcut: ocrShortcut.el.value,
                             penColor: penColor.el.value,
                             penWidth: Number(penWidth.el.value),
+                            formulaFont: formulaFont.el.value as FormulaFont,
                             showMagnifier: showMagnifier.el.checked,
                             outputFormat: outputFormat.el.value as OutputFormat,
                         });
@@ -319,6 +333,7 @@ async function refresh(settings = false) {
         ocrShortcut.el.value = state.config.ocrShortcut;
         penColor.el.value = state.config.penColor;
         penWidth.el.value = String(state.config.penWidth);
+        formulaFont.el.value = state.config.formulaFont;
         showMagnifier.el.checked = state.config.showMagnifier;
         outputFormat.el.value = state.config.outputFormat;
         summary.el.textContent = `${state.config.fullShortcut || t("点击按钮开始")} ${t("全屏批注")} · ${state.config.shortcut || t("点击按钮开始")} ${t("区域截图")} · ${t("Esc / Ctrl+Enter 归档退出；Ctrl+Shift+Enter 选择公式")}`;

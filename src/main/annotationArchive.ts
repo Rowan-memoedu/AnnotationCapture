@@ -47,6 +47,11 @@ export class ArchiveStore {
         )
             throw new Error("归档尺寸与选区不一致");
         const hash = createHash("sha256").update(png).digest("hex");
+        if (
+            input.annotations &&
+            JSON.stringify(input.annotations).length > 20_000_000
+        )
+            throw new Error("批注源数据过大，请减少笔迹后重试");
         const pending = this.saves.get(input.id);
         if (pending) {
             if (pending.hash !== hash)
@@ -80,6 +85,12 @@ export class ArchiveStore {
             screenId: input.screenId,
         };
         await writeFile(join(pending, "capture.png"), png, { flag: "wx" });
+        if (input.annotations)
+            await writeFile(
+                join(pending, "annotations.json"),
+                JSON.stringify(input.annotations),
+                { flag: "wx" },
+            );
         await writeFile(
             join(pending, "capture.json"),
             JSON.stringify(record, null, 2),

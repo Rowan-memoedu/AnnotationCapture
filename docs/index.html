@@ -9,7 +9,7 @@
     <meta property="og:description" content="按 Esc 保存批注截图，框选公式识别到剪贴板。Windows 独立版，解压即用。">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://rowan-memoedu.github.io/AnnotationCapture/">
-    <meta property="og:image" content="https://rowan-memoedu.github.io/AnnotationCapture/assets/formula-result.png">
+    <meta property="og:image" content="https://rowan-memoedu.github.io/AnnotationCapture/assets/formula-pen.png">
     <link rel="canonical" href="https://rowan-memoedu.github.io/AnnotationCapture/">
     <link rel="stylesheet" href="theme.css">
     <link rel="stylesheet" href="release.css">
@@ -25,20 +25,20 @@
     <main id="main" class="shell">
       <section class="intro" aria-labelledby="headline">
         <div class="intro-copy">
-          <p class="release-meta">v0.3.0 · Windows x64 · 预览版</p>
+          <p class="release-meta">v0.4.0 · Windows x64 · 预览版</p>
           <h1 id="headline">截图批注，<br>退出就归档。</h1>
-          <p class="lead">在截图上写下思路，按 Esc 保存。再框选一个手写公式，识别为 LaTeX，放进剪贴板。</p>
+          <p class="lead">在截图上写下思路，按 Esc 保存。用公式画笔书写，双击即可排版回填；也能框选识别到剪贴板。</p>
           <div class="download-actions">
-            <a class="download-button" href="https://github.com/Rowan-memoedu/AnnotationCapture/releases/download/v0.3.0/AnnotationCapture-0.3.0-windows-x64.zip">下载 Windows 版 <span aria-hidden="true">↓</span></a>
-            <a class="text-link" href="https://github.com/Rowan-memoedu/AnnotationCapture/releases/tag/v0.3.0">发行说明 <span aria-hidden="true">↗</span></a>
+            <a class="download-button" href="https://github.com/Rowan-memoedu/AnnotationCapture/releases/download/v0.4.0/AnnotationCapture-0.4.0-windows-x64.zip">下载 Windows 版 <span aria-hidden="true">↓</span></a>
+            <a class="text-link" href="https://github.com/Rowan-memoedu/AnnotationCapture/releases/tag/v0.4.0">发行说明 <span aria-hidden="true">↗</span></a>
           </div>
-          <p class="file-meta">ZIP · 147.2 MiB · 解压即用</p>
+          <p class="file-meta">ZIP · 内含本地公式字体 · 解压即用</p>
           <p class="intro-note">截图与批注可离线使用。公式识别需联网，用邀请码登录即可，无需填写 API。</p>
           <a class="text-link guide-link" href="#get-started">查看使用方法 <span aria-hidden="true">↓</span></a>
         </div>
         <figure class="product-figure">
-          <img src="assets/formula-result.png" width="1410" height="930" alt="AnnotationCapture 0.2.0 实际结果卡：手写公式识别为 x^2+1=0，已复制到剪贴板，并可修改后重新复制。" fetchpriority="high">
-          <figcaption>实际识别结果卡。识别后可核对、修改，再复制。</figcaption>
+          <img src="assets/formula-pen.png" width="2880" height="1800" alt="AnnotationCapture 0.4.0 在空白测试截图上手写公式，DeepSeek 识别后按 STIX2 回填为 x^2+1=0，继续保持批注。" fetchpriority="high">
+          <figcaption>真实识别与本地排版回填。转换后继续批注，可撤销或编辑公式。</figcaption>
         </figure>
       </section>
 
@@ -55,6 +55,11 @@
               <h3>写完，直接归档</h3>
               <p>使用画笔、文字、形状和橡皮擦完成批注。按 <kbd>Esc</kbd> 或 <kbd>Ctrl</kbd> + <kbd>Enter</kbd>，保存带批注的截图选区并退出。</p>
               <p class="muted">归档按日期保存。写入失败会保留画布，修复保存位置后可重试。</p>
+            </li>
+            <li>
+              <h3>公式画笔，双击排版</h3>
+              <p>在工具栏选择“公式画笔”，写完一条公式后双击空白处，或按 <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd>。默认按 STIX2 排版，可在设置中改为 New Computer Modern。</p>
+              <p class="muted">转换后继续批注，可撤销恢复笔迹；选择公式可编辑 LaTeX、移动和缩放。此操作不会复制或提前退出。</p>
             </li>
             <li>
               <h3>选择输出格式，再识别</h3>
@@ -90,19 +95,19 @@
         <div class="limits-copy">
           <h2 id="limits-title">预览版的使用边界</h2>
           <p class="limit-emphasis">识别后，请核对字母大小写和上下标。</p>
-          <p>本版从独立 ZIP 解压后完成本机验收。多项式、分式、根式和大小写混合四个真实 API 样例均精确匹配，并验证了剪贴板；识别结果仍可编辑后重新复制。</p>
+          <p>公式画笔单独验收双击、撤销重做、编辑字体、失败重试和取消；真实 API 的转写准确性另行记录。原笔迹随归档保留，识别结果可编辑。</p>
           <ul class="limits-list">
             <li>当前提供 Windows x64 版本，未做代码签名；Windows 可能提示发布者未验证。</li>
-            <li>Math Academy 专用输出、公式画笔回填仍未接入。</li>
+            <li>Math Academy 专用输出尚未接入。公式画笔支持两种内置字体，暂不支持任意系统字体。</li>
             <li>托盘“退出”立即关停，不等待保存；请先按 Esc 保存需要保留的批注。</li>
           </ul>
-          <a class="text-link" href="https://github.com/Rowan-memoedu/AnnotationCapture/blob/main/docs/ACCEPTANCE-0.3.0.md">查看验收范围 <span aria-hidden="true">↗</span></a>
+          <a class="text-link" href="https://github.com/Rowan-memoedu/AnnotationCapture/blob/main/docs/ACCEPTANCE-0.4.0.md">查看验收范围 <span aria-hidden="true">↗</span></a>
         </div>
         <div class="release-files" aria-labelledby="files-title">
-          <h3 id="files-title">v0.3.0 发行文件</h3>
-          <a href="https://github.com/Rowan-memoedu/AnnotationCapture/releases/download/v0.3.0/AnnotationCapture-0.3.0-windows-x64.zip"><span>Windows 独立版</span><span aria-hidden="true">↓</span></a>
-          <a href="https://github.com/Rowan-memoedu/AnnotationCapture/releases/download/v0.3.0/AnnotationCapture-0.3.0-source.zip"><span>对应版本源码</span><span aria-hidden="true">↓</span></a>
-          <a href="https://github.com/Rowan-memoedu/AnnotationCapture/releases/download/v0.3.0/SHA256SUMS.txt"><span>SHA-256 校验文件</span><span aria-hidden="true">↓</span></a>
+          <h3 id="files-title">v0.4.0 发行文件</h3>
+          <a href="https://github.com/Rowan-memoedu/AnnotationCapture/releases/download/v0.4.0/AnnotationCapture-0.4.0-windows-x64.zip"><span>Windows 独立版</span><span aria-hidden="true">↓</span></a>
+          <a href="https://github.com/Rowan-memoedu/AnnotationCapture/releases/download/v0.4.0/AnnotationCapture-0.4.0-source.zip"><span>对应版本源码</span><span aria-hidden="true">↓</span></a>
+          <a href="https://github.com/Rowan-memoedu/AnnotationCapture/releases/download/v0.4.0/SHA256SUMS.txt"><span>SHA-256 校验文件</span><span aria-hidden="true">↓</span></a>
           <p class="muted">源码与程序一同发布，采用 GPL-3.0 授权。</p>
         </div>
       </section>

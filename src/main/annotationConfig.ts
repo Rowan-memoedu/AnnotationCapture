@@ -9,6 +9,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import { app, safeStorage } from "electron";
 import type {
     ConfigInput,
+    FormulaFont,
     LoginSession,
     PublicConfig,
 } from "../../lib/annotation";
@@ -23,6 +24,7 @@ type StoredConfig = {
     penWidth: number;
     showMagnifier: boolean;
     outputFormat: OutputFormat;
+    formulaFont: FormulaFont;
     encryptedSession?: string;
 };
 
@@ -40,6 +42,7 @@ export class AnnotationConfig {
             penWidth: 2,
             showMagnifier: false,
             outputFormat: "latex",
+            formulaFont: "stix2",
         };
         if (existsSync(this.file)) {
             this.config = {
@@ -77,10 +80,16 @@ export class AnnotationConfig {
             penWidth: this.config.penWidth,
             showMagnifier: this.config.showMagnifier,
             outputFormat: this.config.outputFormat,
+            formulaFont: this.config.formulaFont,
             version: app.getVersion(),
         };
     }
     save(input: ConfigInput): PublicConfig {
+        if (
+            input.formulaFont !== undefined &&
+            !["stix2", "newcm"].includes(input.formulaFont)
+        )
+            throw new Error("公式字体无效");
         if (!isAbsolute(input.archiveRoot) || !input.archiveRoot.trim())
             throw new Error("归档目录必须是绝对路径");
         if (
@@ -123,6 +132,7 @@ export class AnnotationConfig {
             penWidth: input.penWidth ?? this.config.penWidth,
             showMagnifier: input.showMagnifier ?? this.config.showMagnifier,
             outputFormat: input.outputFormat ?? this.config.outputFormat,
+            formulaFont: input.formulaFont ?? this.config.formulaFont,
         };
         this.persist(next);
         return this.public();
