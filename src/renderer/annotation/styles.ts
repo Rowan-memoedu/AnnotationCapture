@@ -47,6 +47,12 @@ export function annotationStyles() {
             font: "inherit",
         },
         ".ac-field:hover": { background: "var(--bar-bg)" },
+        "select.ac-field": {
+            height: "auto",
+            minHeight: "44px",
+            padding: "8px 10px",
+            lineHeight: "1.5",
+        },
         ".ac-field[aria-invalid='true']": {
             borderColor: "var(--ac-error-color)",
         },

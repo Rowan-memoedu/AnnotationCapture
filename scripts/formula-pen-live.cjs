@@ -11,7 +11,7 @@ const cases=[
 let app;const checks=[],errors=[];const canonical=s=>s.replace(/\s/g,'').replace(/\\left|\\right/g,'').replace(/([_^])\{([A-Za-z0-9])\}/g,'$1$2');
 (async()=>{
  app=await _electron.launch({executablePath:process.env.ANNOTATION_EXE||path.resolve('node_modules/electron/dist/electron.exe'),args:[...(process.env.ANNOTATION_EXE?[]:['.']),'--userData',data,'--testMode'],timeout:30000});
- const panel=await app.firstWindow();await panel.waitForSelector('#ac-start');await isolateWindow(app,panel);
+ const panel=await app.firstWindow();await panel.waitForSelector('#ac-save-settings');await isolateWindow(app,panel);
  const invite=JSON.parse(fs.readFileSync(process.env.ANNOTATION_INVITE_FILE||'D:/AppData/AnnotationCapture/Admin/owner-invite.json','utf8'));await panel.locator('#ac-invite-code').fill(invite.inviteCode);await panel.locator('#ac-login').click();await panel.waitForFunction(()=>document.querySelector('#ac-login-status').textContent.includes('识别服务可用'));
  // Only the background is synthetic. The actual production recognition handler,
  // authentication and gateway remain untouched; expected answers are assertions.

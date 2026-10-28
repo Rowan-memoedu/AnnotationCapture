@@ -10,7 +10,7 @@ prepareProfile(data,{fullShortcut:process.env.ANNOTATION_NATIVE_FULL_SHORTCUT||'
 let app;
 (async () => {
     app = await _electron.launch({ executablePath: process.env.ANNOTATION_EXE, cwd: path.dirname(process.env.ANNOTATION_EXE), args: ['--userData', data, '--archiveRoot', path.join(data, 'Archive')], timeout: 30000 });
-    const panel = await app.firstWindow(); await panel.waitForSelector('#ac-start');
+    const panel = await app.firstWindow(); await panel.waitForSelector('#ac-save-settings');
     const state = await panel.evaluate(() => require('electron').ipcRenderer.invoke('annotation:state'));
     const initial = await app.evaluate(({ app, globalShortcut }, key) => ({ version: app.getVersion(), data: app.getPath('userData'), registered: globalShortcut.isRegistered(key) }), state.config.fullShortcut);
     assert.equal(initial.registered, true, JSON.stringify({shortcutError:state.shortcutError,shortcut:state.config.shortcut,fullShortcut:state.config.fullShortcut}));

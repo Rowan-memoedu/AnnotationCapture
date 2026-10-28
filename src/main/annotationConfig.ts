@@ -10,6 +10,7 @@ import { app, safeStorage } from "electron";
 import type {
     ConfigInput,
     FormulaFont,
+    LassoRule,
     LoginSession,
     PublicConfig,
 } from "../../lib/annotation";
@@ -25,6 +26,7 @@ type StoredConfig = {
     showMagnifier: boolean;
     outputFormat: OutputFormat;
     formulaFont: FormulaFont;
+    lassoRule: LassoRule;
     encryptedSession?: string;
 };
 
@@ -43,6 +45,7 @@ export class AnnotationConfig {
             showMagnifier: false,
             outputFormat: "latex",
             formulaFont: "stix2",
+            lassoRule: "intersect",
         };
         if (existsSync(this.file)) {
             this.config = {
@@ -81,10 +84,16 @@ export class AnnotationConfig {
             showMagnifier: this.config.showMagnifier,
             outputFormat: this.config.outputFormat,
             formulaFont: this.config.formulaFont,
+            lassoRule: this.config.lassoRule,
             version: app.getVersion(),
         };
     }
     save(input: ConfigInput): PublicConfig {
+        if (
+            input.lassoRule !== undefined &&
+            !["intersect", "contain"].includes(input.lassoRule)
+        )
+            throw new Error("自由圈选规则无效");
         if (
             input.formulaFont !== undefined &&
             !["stix2", "newcm"].includes(input.formulaFont)
@@ -133,6 +142,7 @@ export class AnnotationConfig {
             showMagnifier: input.showMagnifier ?? this.config.showMagnifier,
             outputFormat: input.outputFormat ?? this.config.outputFormat,
             formulaFont: input.formulaFont ?? this.config.formulaFont,
+            lassoRule: input.lassoRule ?? this.config.lassoRule,
         };
         this.persist(next);
         return this.public();

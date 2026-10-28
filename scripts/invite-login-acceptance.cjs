@@ -38,7 +38,7 @@ async function request(route,token,body){const r=await fetch(endpoint+route,{met
  await login(b.inviteCode);
  assert.equal((await state()).login.providerReady,false,'This acceptance expects the NEW provider to be unconfigured');
  const clipboardBefore=await app.evaluate(({clipboard})=>clipboard.readText());
- const pending=app.waitForEvent('window');await panel.locator('#ac-start-full').click();const page=await pending;await page.waitForFunction(()=>document.querySelector('#ac-completion')&&document.body.style.opacity!=='0');await isolateWindow(app,page);
+ const pending=app.waitForEvent('window');await panel.evaluate(() => require('electron').ipcRenderer.invoke('annotation:capture', 'full'));const page=await pending;await page.waitForFunction(()=>document.querySelector('#ac-completion')&&document.body.style.opacity!=='0');await isolateWindow(app,page);
  await page.mouse.move(430,350);await page.mouse.down();await page.mouse.move(475,405,{steps:8});await page.mouse.up();
  await page.keyboard.press('Control+Shift+Enter');await page.waitForSelector('#ac-selection');
  const bounds=await page.locator('#ac-selection').boundingBox();

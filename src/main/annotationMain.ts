@@ -28,6 +28,7 @@ import { AnnotationUpdater, acknowledgeUpdate } from "./annotationUpdate";
 import { captureDefaults } from "./captureDefaults";
 import { FormulaJobs } from "./formulaJobs";
 import { FormulaTypesetter } from "./formulaTypeset";
+import { screenshotSource } from "./screenshotSource";
 
 app.setName("AnnotationCapture");
 const args = minimist(process.argv.slice(1));
@@ -307,7 +308,7 @@ handle("screenshots", async () => {
         thumbnailSize: { width, height },
     });
     return displays.map((d) => {
-        const source = sources.find((s) => s.display_id === String(d.id));
+        const source = screenshotSource(d.id, displays.length, sources);
         if (!source || source.thumbnail.isEmpty())
             throw new Error("无法获取屏幕图像");
         return {
@@ -519,9 +520,7 @@ else {
                 { label: "退出", click: quitImmediately },
             ]),
         );
-        tray.on("click", () => {
-            void capture();
-        });
+        tray.on("click", showPanel);
         if (args.input) void capture(args.input, args.ocr ? "ocr" : "region");
         else if (args.full) void capture(undefined, "full");
         else if (args.capture) void capture();

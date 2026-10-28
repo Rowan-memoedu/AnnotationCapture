@@ -86,7 +86,7 @@ async function select(page) {
 }
 (async () => {
     app = await _electron.launch({ executablePath: process.env.ANNOTATION_EXE || path.resolve('node_modules/electron/dist/electron.exe'), args: [...(process.env.ANNOTATION_EXE ? [] : ['.']), '--userData', data, '--testMode', ...(process.env.ANNOTATION_SCALE ? ['--force-device-scale-factor=' + process.env.ANNOTATION_SCALE] : [])], timeout: 30000 });
-    panel = await app.firstWindow(); await panel.waitForSelector('#ac-start'); await isolateWindow(app, panel);
+    panel = await app.firstWindow(); await panel.waitForSelector('#ac-save-settings'); await isolateWindow(app, panel);
     await app.evaluate(({ ipcMain, screen, nativeImage }) => {
         ipcMain.removeHandler('annotation:screenshots');
         ipcMain.handle('annotation:screenshots', () => screen.getAllDisplays().map(d => {
@@ -94,6 +94,33 @@ async function select(page) {
             return { id: d.id, bounds: d.bounds, scaleFactor: d.scaleFactor, png: nativeImage.createFromBitmap(Buffer.alloc(width * height * 4, 255), { width, height }).toDataURL() };
         }));
     });
+    assert.equal((await panel.evaluate(() => require('electron').ipcRenderer.invoke('annotation:state'))).config.lassoRule, 'intersect');
+    assert.equal(await panel.locator('#ac-start, #ac-start-full, #ac-start-ocr').count(), 0);
+    assert.equal(await panel.locator('#ac-lasso-rule').inputValue(), 'intersect');
+    for (const rule of ['contain', 'intersect']) {
+        await panel.locator('#ac-lasso-rule').selectOption(rule);
+        await panel.locator('#ac-save-settings').click();
+        await panel.waitForFunction(rule => require('electron').ipcRenderer.invoke('annotation:state').then(s => s.config.lassoRule === rule), rule);
+        await panel.reload(); await panel.waitForSelector('#ac-lasso-rule');
+        assert.equal(await panel.locator('#ac-lasso-rule').inputValue(), rule);
+        for (const mode of ['full', 'region']) for (const erase of [false, true]) {
+            const page = await open(mode);
+            const canvasBounds = await page.locator('.upper-canvas').boundingBox();
+            assert.ok(canvasBounds.x + canvasBounds.width >= 650 && canvasBounds.y + canvasBounds.height >= 430, 'Both controlled strokes must fit the screenshot at this display scale');
+            await stroke(page, [[250, 320], [650, 320]]);
+            await stroke(page, [[550, 410], [650, 430]]);
+            if (erase) await page.keyboard.down('d'); else await page.keyboard.press('d');
+            await stroke(page, loop);
+            if (erase) await page.keyboard.up('d'); else await page.keyboard.press('Delete');
+            assert.equal((await finish(page)).canvas.objects.length, rule === 'intersect' ? 1 : 2);
+            checks.push(`${mode}: ${rule} rule ${erase ? 'hold-clear' : 'select-delete'} handles partial stroke, keeps outside stroke`);
+        }
+    }
+    const persisted = JSON.parse(fs.readFileSync(path.join(data, 'annotation-settings.json'), 'utf8'));
+    assert.equal(persisted.lassoRule, 'intersect');
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('annotation.html')).show());
+    await panel.screenshot({ path: path.join(root, 'settings-lasso-rule.png') });
+    checks.push('legacy profile defaults to intersect; settings save and reload persist rule; capture buttons removed');
     for (const mode of ['full', 'region']) {
         let page = await open(mode);
         assert.equal(await page.locator('#draw_main > #ac-formula-pen').count(), 1);

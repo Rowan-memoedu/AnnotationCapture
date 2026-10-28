@@ -44,7 +44,7 @@ async function mermaid(code,name,expected){
   const diagram=kind==='mermaid'?await mermaid(job.latex.slice(11,-4),`direct-${kind}`,['A->B']):undefined;
   checks.push({case:`direct-auto-${kind}`,selectionImmediatelyRecognized:true,annotationSkipped:true,type:job.detectedType,clipboardMatched:true,actual:job.latex,...diagram});console.log('DIRECT_OCR_PASSED',kind);await stop();
  }
- panel=await launch();await panel.waitForSelector('#ac-start');await isolateWindow(app,panel);
+ panel=await launch();await panel.waitForSelector('#ac-save-settings');await isolateWindow(app,panel);
  for(const branch of [false,true]){
   if(checks.some(c=>c.case===(branch?'ink-mermaid-branch':'ink-mermaid-chain')))continue;
   await panel.waitForFunction(()=>document.querySelector('#ac-login-status').textContent.includes('识别服务可用'));

@@ -30,7 +30,7 @@ async function extract(zipPath,destination,overlay=false){
 }
 async function launch(executable,data,custom){
  app=await _electron.launch({executablePath:executable,cwd:path.dirname(executable),args:['--testMode',...(custom?['--userData',data]:[])],env:{...process.env,ANNOTATION_DATA_DIR:'',PATH:`${process.env.SystemRoot}/System32;${process.env.SystemRoot}`,NODE_PATH:'',NODE_OPTIONS:'',DEEPSEEK_API_KEY:'',ANNOTATION_DEEPSEEK_API_KEY:''},timeout:30000});
- const panel=await app.firstWindow();await panel.waitForSelector('#ac-start');await isolateWindow(app,panel);return panel;
+ const panel=await app.firstWindow();await panel.waitForSelector('#ac-save-settings');await isolateWindow(app,panel);return panel;
 }
 async function stop(){if(app){await app.close();app=null;}}
 (async()=>{
@@ -40,7 +40,7 @@ async function stop(){if(app){await app.close();app=null;}}
   await extract(oldZip,install);fs.mkdirSync(data,{recursive:true});
   fs.writeFileSync(path.join(data,'annotation-settings.json'),JSON.stringify({archiveRoot,shortcut:'Control+Alt+F13',fullShortcut:'Alt+F14',ocrShortcut:'Control+Alt+F16',model:'deepseek-flash'}));
   const executable=path.join(install,'AnnotationCapture.exe');let panel=await launch(executable,data,mode==='external-data');
-  const oldVersion=await app.evaluate(({app})=>app.getVersion());assert.ok(['0.1.1','0.2.0','0.3.0','0.4.0'].includes(oldVersion));
+  const oldVersion=await app.evaluate(({app})=>app.getVersion());assert.ok(['0.1.1','0.2.0','0.3.0','0.4.0','0.4.1','0.4.2'].includes(oldVersion));
   await panel.evaluate(async legacy=>{const ipc=require('electron').ipcRenderer;const s=await ipc.invoke('annotation:state');await ipc.invoke('annotation:configure',legacy?{archiveRoot:s.config.archiveRoot,shortcut:s.config.shortcut,model:s.config.model,apiKey:'acceptance-only-not-a-real-key'}:s.config);ipc.sendSync('store',{type:'set',path:'图像编辑.默认属性.画笔粗细',value:5});},oldVersion==='0.1.1');
   if(oldVersion!=='0.1.1'){await panel.locator('#ac-invite-code').fill(invitation.inviteCode);await panel.locator('#ac-login').click();await panel.waitForFunction(()=>document.querySelector('#ac-login-status').textContent.includes('识别服务可用'));}
   const png=await app.evaluate(({nativeImage})=>nativeImage.createFromBitmap(Buffer.alloc(32*32*4,255),{width:32,height:32}).toDataURL());

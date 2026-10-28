@@ -1,6 +1,7 @@
 export type PixelRect = { x: number; y: number; width: number; height: number };
 export type CaptureMode = "region" | "full" | "ocr";
 export type FormulaFont = "stix2" | "newcm";
+export type LassoRule = "intersect" | "contain";
 export const outputFormats = [
     "auto",
     "text",
@@ -67,6 +68,7 @@ export type PublicConfig = {
     showMagnifier: boolean;
     outputFormat: OutputFormat;
     formulaFont: FormulaFont;
+    lassoRule: LassoRule;
     version: string;
 };
 export type LoginSession = { token: string; accountId: string; label: string };
@@ -87,6 +89,7 @@ export type ConfigInput = {
     showMagnifier?: boolean;
     outputFormat?: OutputFormat;
     formulaFont?: FormulaFont;
+    lassoRule?: LassoRule;
 };
 export type AppState = {
     update: UpdateState;

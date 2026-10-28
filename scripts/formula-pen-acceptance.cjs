@@ -22,7 +22,7 @@ async function finish(page){const before=records();const closing=page.waitForEve
 async function converted(page){await page.waitForFunction(()=>document.querySelector('#ac-ink-status').textContent.includes('公式已回填'),undefined,{timeout:20000});assert.equal(page.isClosed(),false);}
 (async()=>{
  app=await _electron.launch({executablePath:process.env.ANNOTATION_EXE||path.resolve('node_modules/electron/dist/electron.exe'),args:[...(process.env.ANNOTATION_EXE?[]:['.']),'--userData',data,'--testMode',...(process.env.ANNOTATION_SCALE?['--force-device-scale-factor='+process.env.ANNOTATION_SCALE]:[])],timeout:30000});
- panel=await app.firstWindow();await panel.waitForSelector('#ac-start');await isolateWindow(app,panel);
+ panel=await app.firstWindow();await panel.waitForSelector('#ac-save-settings');await isolateWindow(app,panel);
  await app.evaluate(({ipcMain,nativeImage,screen,clipboard})=>{
   globalThis.inkFixture={calls:0,cancelled:0,delay:20,latex:'x+1',fail:false,inputs:[]};
   ipcMain.removeHandler('annotation:inkRecognize');ipcMain.removeHandler('annotation:inkCancel');ipcMain.removeHandler('annotation:screenshots');

@@ -13,9 +13,9 @@ function captures(){const found=[];function walk(d){if(!fs.existsSync(d))return;
  app=await _electron.launch({executablePath:process.env.ANNOTATION_EXE||path.resolve('node_modules/electron/dist/electron.exe'),args:[...(process.env.ANNOTATION_EXE?[]:['.']),'--userData',data,'--archiveRoot',path.join(data,'Archive'),'--testMode'],env:{...process.env,DEEPSEEK_API_KEY:'legacy-key-must-not-be-used'},timeout:30000});
  app.process().stderr.on('data',chunk=>{errors.push(chunk.toString().slice(0,1500));});
  app.on('window',page=>page.on('pageerror',e=>errors.push(String(e))));
- const panel=await app.firstWindow();await panel.waitForSelector('#ac-start');await isolateWindow(app,panel);
+ const panel=await app.firstWindow();await panel.waitForSelector('#ac-save-settings');await isolateWindow(app,panel);
  for(const mode of ['region','full']){
-  const pending=app.waitForEvent('window');await panel.locator(mode==='full'?'#ac-start-full':'#ac-start').click();const page=await pending;currentPage=page;page.on('pageerror',e=>errors.push(String(e)));
+  const pending=app.waitForEvent('window');await panel.evaluate(mode => require('electron').ipcRenderer.invoke('annotation:capture', mode), mode);const page=await pending;currentPage=page;page.on('pageerror',e=>errors.push(String(e)));
   await page.waitForFunction(()=>document.querySelector('#ac-completion')&&document.body.style.opacity!=='0');
   await isolateWindow(app,page);
   const geometry=await page.locator('#main_photo').evaluate(c=>{const b=c.getBoundingClientRect();return {x:b.x,y:b.y,w:b.width,h:b.height,width:c.width,height:c.height};});

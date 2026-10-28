@@ -7,7 +7,7 @@ let app;const checks=[];
  for(const blocked of [false,true]){
   const data=path.join(root,`quit-${blocked}-${Date.now()}`);prepareProfile(data);
   app=await _electron.launch({executablePath:process.env.ANNOTATION_EXE||path.resolve('node_modules/electron/dist/electron.exe'),args:[...(process.env.ANNOTATION_EXE?[]:['.']),'--userData',data,'--testMode'],timeout:30000});
-  const panel=await app.firstWindow();await panel.waitForSelector('#ac-start');await isolateWindow(app,panel);let page=panel;
+  const panel=await app.firstWindow();await panel.waitForSelector('#ac-save-settings');await isolateWindow(app,panel);let page=panel;
   if(blocked){
    const file=path.join(data,'blocked-archive');fs.writeFileSync(file,'Not a writable directory');await panel.evaluate(async archiveRoot=>{const ipc=require('electron').ipcRenderer;const s=await ipc.invoke('annotation:state');await ipc.invoke('annotation:configure',{...s.config,archiveRoot});},file);
    const pending=app.waitForEvent('window');await panel.evaluate(()=>require('electron').ipcRenderer.invoke('annotation:capture','full'));page=await pending;await page.waitForFunction(()=>document.querySelector('#draw_free_pencil')?.classList.contains('select'));await isolateWindow(app,page);await page.mouse.move(350,300);await page.mouse.down();await page.mouse.move(500,350,{steps:8});await page.mouse.up();await page.keyboard.press('Escape');await page.waitForFunction(()=>document.querySelector('#ac-capture-status').textContent.includes('画布已保留'));assert.equal(page.isClosed(),false);

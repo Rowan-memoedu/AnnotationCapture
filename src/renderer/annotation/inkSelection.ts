@@ -1,21 +1,15 @@
-import { ActiveSelection, type Canvas, Path, Point, util } from "fabric";
+import {
+    ActiveSelection,
+    type Canvas,
+    type FabricObject,
+    Group,
+    Path,
+    Point,
+    util,
+} from "fabric";
+import type { LassoRule } from "../../../lib/annotation";
 import { t } from "../../../lib/translate/translate";
-
-type Position = { x: number; y: number };
-
-export function insideLasso(point: Position, polygon: Position[]) {
-    let inside = false;
-    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-        const a = polygon[i];
-        const b = polygon[j];
-        if (
-            a.y > point.y !== b.y > point.y &&
-            point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x
-        )
-            inside = !inside;
-    }
-    return inside;
-}
+import { type Position, polylineMatchesLasso } from "./lassoGeometry";
 
 export function installInkSelection(
     canvas: Canvas,
@@ -23,6 +17,7 @@ export function installInkSelection(
     select: () => void,
     pencil: () => void,
 ) {
+    let rule: LassoRule = "intersect";
     let mode: "off" | "select" | "erase" = "off";
     let pressedAt: number | undefined;
     let pressedFromSelection = false;
@@ -122,40 +117,80 @@ export function installInkSelection(
     function complete() {
         overlay.style.display = "none";
         if (polygon.length < 3) return;
-        const objects = canvas.getObjects().filter((object) => {
-            if (!object.selectable) return false;
-            if (object instanceof Path) {
-                const segments = util.getPathSegmentsInfo(object.path);
-                const length = segments.at(-1)?.length ?? 0;
-                const samples = Math.min(
-                    2000,
-                    Math.max(1, Math.ceil(length / 2)),
+        function matches(object: FabricObject): boolean {
+            if (!object.visible) return false;
+            if (object instanceof Group) {
+                const children = object
+                    .getObjects()
+                    .filter((child) => child.visible);
+                return (
+                    children.length > 0 &&
+                    (rule === "contain"
+                        ? children.every(matches)
+                        : children.some(matches))
                 );
-                const matrix = object.calcTransformMatrix();
-                for (let i = 0; i <= samples; i++) {
-                    const point = util.getPointOnPath(
-                        object.path,
-                        (length * i) / samples,
-                        segments,
-                    );
-                    if (
-                        point &&
-                        !insideLasso(
-                            new Point(
-                                point.x - object.pathOffset.x,
-                                point.y - object.pathOffset.y,
-                            ).transform(matrix),
-                            polygon,
-                        )
-                    )
-                        return false;
-                }
-                return true;
             }
-            return object
-                .getCoords()
-                .every((point) => insideLasso(point, polygon));
-        });
+            if (object instanceof Path) {
+                const matrix = object.calcTransformMatrix();
+                const scale = Math.max(
+                    Math.hypot(matrix[0], matrix[1]),
+                    Math.hypot(matrix[2], matrix[3]),
+                );
+                const paths: (typeof object.path)[] = [];
+                for (const command of object.path) {
+                    if (command[0] === "M" || !paths.length) paths.push([]);
+                    paths.at(-1)?.push(command);
+                }
+                const results = paths.map((path) => {
+                    const segments = util.getPathSegmentsInfo(path);
+                    const length = segments.at(-1)?.length ?? 0;
+                    const samples = Math.min(
+                        10000,
+                        Math.max(1, Math.ceil((length * scale) / 2)),
+                    );
+                    const points: Position[] = [];
+                    for (let i = 0; i <= samples; i++) {
+                        const p = util.getPointOnPath(
+                            path,
+                            (length * i) / samples,
+                            segments,
+                        );
+                        if (p)
+                            points.push(
+                                new Point(
+                                    p.x - object.pathOffset.x,
+                                    p.y - object.pathOffset.y,
+                                ).transform(matrix),
+                            );
+                    }
+                    return polylineMatchesLasso(
+                        points,
+                        polygon,
+                        rule,
+                        object.stroke
+                            ? (object.strokeWidth *
+                                  (object.strokeUniform ? 1 : scale)) /
+                                  2
+                            : 0,
+                    );
+                });
+                return (
+                    results.length > 0 &&
+                    (rule === "contain"
+                        ? results.every(Boolean)
+                        : results.some(Boolean))
+                );
+            }
+            const points = object.getCoords();
+            return (
+                polylineMatchesLasso([...points, points[0]], polygon, rule) ||
+                (rule === "intersect" &&
+                    polylineMatchesLasso(polygon, points, "intersect"))
+            );
+        }
+        const objects = canvas
+            .getObjects()
+            .filter((object) => object.selectable && matches(object));
         polygon = [];
         if (!objects.length) return;
         if (mode === "erase") {
@@ -243,5 +278,10 @@ export function installInkSelection(
     canvas.on("object:modified", () => {
         if (mode === "select") history();
     });
-    return { cancel };
+    return {
+        cancel,
+        setRule: (value: LassoRule) => {
+            rule = value;
+        },
+    };
 }

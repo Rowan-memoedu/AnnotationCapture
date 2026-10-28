@@ -77,6 +77,13 @@ const formulaFont = ele("select")
         ele("option").attr({ value: "stix2" }).add("STIX2"),
         ele("option").attr({ value: "newcm" }).add("New Computer Modern"),
     ]);
+const lassoRule = ele("select")
+    .class("ac-field")
+    .attr({ id: "ac-lasso-rule", ariaLabel: t("自由圈选规则") })
+    .add([
+        ele("option").attr({ value: "intersect" }).add(t("圈到部分笔迹即选中")),
+        ele("option").attr({ value: "contain" }).add(t("全部圈住笔迹才选中")),
+    ]);
 const inviteCode = input("password")
     .class("ac-field")
     .attr({
@@ -198,15 +205,6 @@ root.add([
             view("x")
                 .style({ gap: "12px", flexWrap: "wrap" })
                 .add([
-                    action("区域截图", "ac-start", () =>
-                        invoke("capture", "region"),
-                    ).class("ac-primary"),
-                    action("全屏批注", "ac-start-full", () =>
-                        invoke("capture", "full"),
-                    ),
-                    action("区域 OCR", "ac-start-ocr", () =>
-                        invoke("capture", "ocr"),
-                    ),
                     action("退出软件", "ac-quit", () => invoke("quit")),
                     action("打开归档目录", "ac-open-archive", () =>
                         invoke("openArchive"),
@@ -261,6 +259,9 @@ root.add([
             penColor,
             p(t("默认画笔粗细")),
             penWidth,
+            p(t("自由圈选规则")),
+            lassoRule,
+            p(t("同时用于 D 键圈选和按住 D 清除；选中或删除整条笔迹。")),
             p(t("公式字体")),
             formulaFont,
             ele("label")
@@ -285,6 +286,9 @@ root.add([
                             penColor: penColor.el.value,
                             penWidth: Number(penWidth.el.value),
                             formulaFont: formulaFont.el.value as FormulaFont,
+                            lassoRule: lassoRule.el.value as
+                                | "intersect"
+                                | "contain",
                             showMagnifier: showMagnifier.el.checked,
                             outputFormat: outputFormat.el.value as OutputFormat,
                         });
@@ -397,6 +401,7 @@ async function refresh(settings = false) {
         penColor.el.value = state.config.penColor;
         penWidth.el.value = String(state.config.penWidth);
         formulaFont.el.value = state.config.formulaFont;
+        lassoRule.el.value = state.config.lassoRule;
         showMagnifier.el.checked = state.config.showMagnifier;
         outputFormat.el.value = state.config.outputFormat;
         summary.el.textContent = `${state.config.fullShortcut || t("点击按钮开始")} ${t("全屏批注")} · ${state.config.shortcut || t("点击按钮开始")} ${t("区域截图")} · ${t("Esc / Ctrl+Enter 归档退出；Ctrl+Shift+Enter 选择公式")}`;

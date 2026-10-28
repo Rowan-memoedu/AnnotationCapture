@@ -5287,9 +5287,10 @@ inkSelection = installInkSelection(
     () => setEditType("select", "draw"),
     () => setEditType("draw", "free"),
 );
-void invoke("state").then(({ config }) =>
-    formulaInk?.setFont(config.formulaFont),
-);
+void invoke("state").then(({ config }) => {
+    formulaInk?.setFont(config.formulaFont);
+    inkSelection?.setRule(config.lassoRule);
+});
 renderOn("annotation_finish", () => {
     void completion.finish(false);
 });

@@ -44,7 +44,7 @@ async function finish(page,before) {
 }
 (async()=>{
     app=await _electron.launch({executablePath:process.env.ANNOTATION_EXE||path.resolve('node_modules/electron/dist/electron.exe'),args:[...(process.env.ANNOTATION_EXE?[]:['.']),'--userData',data,'--testMode'],timeout:30000});
-    panel=await app.firstWindow();await panel.waitForSelector('#ac-start');await isolateWindow(app,panel);
+    panel=await app.firstWindow();await panel.waitForSelector('#ac-save-settings');await isolateWindow(app,panel);
     const directions=[[[220,180],[1050,700]],[[1050,700],[220,180]],[[220,700],[1050,180]],[[1050,180],[220,700]]];
     for(const [i,[a,b]]of directions.entries()){
         const {page,cdp}=await open(),before=archives().length;

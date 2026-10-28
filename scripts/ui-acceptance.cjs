@@ -15,13 +15,13 @@ async function launch(extra = []) {
     app = await _electron.launch({ executablePath: process.env.ANNOTATION_EXE || path.resolve('node_modules/electron/dist/electron.exe'), cwd: process.env.ANNOTATION_EXE ? path.dirname(process.env.ANNOTATION_EXE) : process.cwd(), args: [...(process.env.ANNOTATION_EXE ? [] : ['.']), '--userData', data, '--archiveRoot', path.join(data, 'Archive'), '--testMode', ...extra], env: { ...process.env, ...(process.env.ANNOTATION_EXE ? { PATH: `${process.env.SystemRoot}/System32;${process.env.SystemRoot}`, NODE_PATH: '', NODE_OPTIONS: '' } : {}), DEEPSEEK_API_KEY: '', ANNOTATION_DEEPSEEK_API_KEY: '' }, timeout: 30000 });
     app.on('window', page => { page.on('pageerror', e => errors.push(e.message)); });
     const page = await app.firstWindow();
-    await page.waitForSelector('#ac-start');
+    await page.waitForSelector('#ac-save-settings');
     await isolateWindow(app, page);
     return page;
 }
 async function capture(panel) {
     const pending = app.waitForEvent('window');
-    await panel.locator('#ac-start-full').click();
+    await panel.evaluate(() => require('electron').ipcRenderer.invoke('annotation:capture', 'full'));
     const page = await pending;
     await page.waitForSelector('#ac-completion', { state: 'visible' });
     await page.waitForFunction(() => document.body.style.opacity !== '0');

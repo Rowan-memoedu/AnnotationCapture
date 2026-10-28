@@ -12,11 +12,13 @@
 
 0.4.2 新增 D 键自由圈选与按住清除；公式画笔移至左侧操作栏，公式操作按所选工具显示，完成操作栏采用紧凑分组布局。
 
+0.4.3 的自由圈选默认“圈到部分笔迹即选中”，可在设置中切换为“全部圈住笔迹才选中”。两种规则同时用于 D 键圈选和按住 D 清除，移动或删除以整条笔迹为单位。单击托盘打开设置；截图和区域 OCR 使用快捷键或托盘右键菜单。
+
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.4.2-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.4.3-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 1. 按 `Alt+W`，或点击“全屏批注”：截取鼠标所在显示器，直接进入画笔。按 `Ctrl+Alt+S`，或点击“区域截图”：框选后自动切换画笔，在选区上继续批注。
 2. 按 `Esc` 或 `Ctrl+Enter`：保存带批注的截图后退出。正在落笔时会等抬笔再保存。

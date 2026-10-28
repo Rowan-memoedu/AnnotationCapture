@@ -49,6 +49,7 @@ async function extract() {
     const tasks = [
         { script: 'portable-smoke' },
         { script: 'shortcuts-acceptance' },
+        { script: 'settings-acceptance' },
         { script: 'capture-modes-acceptance' },
         { script: 'continuous-writing-acceptance' },
         { script: 'quit-acceptance' },

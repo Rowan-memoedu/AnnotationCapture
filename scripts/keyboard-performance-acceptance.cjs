@@ -16,7 +16,7 @@ async function burst(page){return page.evaluate(async()=>{
 });}
 (async()=>{
  app=await _electron.launch({executablePath:process.env.ANNOTATION_EXE||path.resolve('node_modules/electron/dist/electron.exe'),args:[...(process.env.ANNOTATION_EXE?[]:['.']),'--userData',data,'--testMode'],timeout:30000});
- const panel=await app.firstWindow();await panel.waitForSelector('#ac-start');await isolateWindow(app,panel);
+ const panel=await app.firstWindow();await panel.waitForSelector('#ac-save-settings');await isolateWindow(app,panel);
  for(const mode of ['full','region']){
   const next=app.waitForEvent('window');await panel.evaluate(mode=>require('electron').ipcRenderer.invoke('annotation:capture',mode),mode);const page=await next;
   await page.waitForFunction(()=>document.querySelector('#ac-completion')&&document.body.style.opacity!=='0');await isolateWindow(app,page);
