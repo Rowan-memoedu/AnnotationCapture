@@ -948,5 +948,9 @@
     "立即检查更新": "20bfc2",
     "安装更新并重启": "c81360",
     "按住 D 圈选清除，松开恢复画笔": "06086e",
-    "圈选后拖动，Delete 删除；再按 D 恢复画笔": "a7b216"
+    "圈选后拖动，Delete 删除；再按 D 恢复画笔": "a7b216",
+    "Math Academy 公式": "74d2c7",
+    "复制到 Math Academy": "1750dc",
+    "基于 eSearch 15.6.1 · GPL-3.0。支持 LaTeX、Markdown 和 Math Academy 公式输出。": "976b62",
+    "点击 Math Academy 网页中的公式输入框，再按 Ctrl+V。粘贴后核对公式；软件不会提交答案。": "36a25b"
 }

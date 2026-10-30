@@ -203,7 +203,7 @@ root.add([
                 .add("AnnotationCapture"),
             summary,
             view("x")
-                .style({ gap: "12px", flexWrap: "wrap" })
+                .style({ gap: "12px" })
                 .add([
                     action("退出软件", "ac-quit", () => invoke("quit")),
                     action("打开归档目录", "ac-open-archive", () =>
@@ -275,7 +275,7 @@ root.add([
                 ),
             ),
             view("x")
-                .style({ gap: "12px" })
+                .style({ gap: "12px", flexWrap: "wrap" })
                 .add([
                     action("保存设置", "ac-save-settings", async () => {
                         await invoke("configure", {
@@ -317,7 +317,7 @@ root.add([
         ]),
     p(
         t(
-            "基于 eSearch 15.6.1 · GPL-3.0。公式以 LaTeX 文本复制；Math Academy 输入适配尚未加入。",
+            "基于 eSearch 15.6.1 · GPL-3.0。支持 LaTeX、Markdown 和 Math Academy 公式输出。",
         ),
     ),
 ]);
@@ -329,7 +329,9 @@ function resultCard(result: FormulaResult) {
             id: `result-${result.id}`,
             ariaLabel: t("识别结果"),
             rows: 3,
+            ariaInvalid: result.outputIssue ? "true" : "false",
         });
+    output.el.setAttribute("aria-describedby", `result-status-${result.id}`);
     output.el.value = result.latex;
     const preview = ele("img")
         .attr({
@@ -349,19 +351,32 @@ function resultCard(result: FormulaResult) {
         .add([
             preview,
             p(t(outputFormatLabels[result.outputFormat ?? "latex"])),
-            p(result.message).class(
-                result.status === "error"
-                    ? "ac-error"
-                    : result.status === "copied"
-                      ? "ac-success"
-                      : "ac-status",
-            ),
+            p(result.message)
+                .attr({ id: `result-status-${result.id}`, role: "status" })
+                .class(
+                    result.status === "error" || result.outputIssue
+                        ? "ac-error"
+                        : result.status === "copied"
+                          ? "ac-success"
+                          : "ac-status",
+                ),
             result.latex ? output : p(t("识别结果将在这里显示")),
+            result.outputFormat === "mathAcademy"
+                ? p(
+                      t(
+                          "点击 Math Academy 网页中的公式输入框，再按 Ctrl+V。粘贴后核对公式；软件不会提交答案。",
+                      ),
+                  ).class("ac-status")
+                : "",
             view("x")
-                .style({ gap: "12px" })
+                .style({ gap: "12px", flexWrap: "wrap" })
                 .add([
-                    action("复制公式", `copy-${result.id}`, () =>
-                        invoke("copy", result.id, output.el.value),
+                    action(
+                        result.outputFormat === "mathAcademy"
+                            ? "复制到 Math Academy"
+                            : "复制公式",
+                        `copy-${result.id}`,
+                        () => invoke("copy", result.id, output.el.value),
                     ).attr({
                         disabled:
                             !result.latex || result.status === "recognizing",

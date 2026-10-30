@@ -33,6 +33,11 @@ export function annotationStyles() {
         },
         ".ac-button:active": { transform: "translateY(1px)" },
         ".ac-button:disabled": { opacity: "0.5", cursor: "wait" },
+        ".ac-card .ac-button": {
+            minHeight: "44px",
+            height: "auto",
+            whiteSpace: "nowrap",
+        },
         ".ac-primary": {
             background: "var(--emphasis-color)",
             color: "var(--font-color-emphasis)",

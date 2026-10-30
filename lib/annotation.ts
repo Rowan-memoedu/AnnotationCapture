@@ -8,6 +8,7 @@ export const outputFormats = [
     "markdownText",
     "inlineMath",
     "latex",
+    "mathAcademy",
     "markdown",
     "mermaid",
 ] as const;
@@ -18,6 +19,7 @@ export const outputFormatLabels = {
     markdownText: "Markdown 文字",
     inlineMath: "公式（$…$）",
     latex: "原始 LaTeX",
+    mathAcademy: "Math Academy 公式",
     markdown: "Markdown 公式（RemNote / Obsidian）",
     mermaid: "Mermaid 图",
 };
@@ -52,6 +54,7 @@ export type FormulaResult = {
     status: FormulaState;
     latex: string;
     recognizedLatex?: string;
+    outputIssue?: string;
     outputFormat?: OutputFormat;
     detectedType?: "text" | "markdown" | "mermaid" | "formula";
     message: string;

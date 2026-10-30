@@ -50,6 +50,7 @@ async function extract() {
         { script: 'portable-smoke' },
         { script: 'shortcuts-acceptance' },
         { script: 'settings-acceptance' },
+        { script: 'math-academy-acceptance' },
         { script: 'capture-modes-acceptance' },
         { script: 'continuous-writing-acceptance' },
         { script: 'quit-acceptance' },
@@ -63,6 +64,7 @@ async function extract() {
         ...(process.env.ANNOTATION_INVITE_FILE ? [{script:'formula-pen-live'}] : []),
         ...(process.env.ANNOTATION_INVITE_FILE ? ['polynomial', 'fraction', 'root', 'mixedcase'].map(formulaCase => ({ script: 'live-ocr-acceptance', formulaCase })) : []),
         ...(process.env.ANNOTATION_INVITE_FILE ? ['fraction','root'].map(formulaCase=>({script:'live-ocr-acceptance',formulaCase,outputFormat:'markdown'})) : []),
+        ...(process.env.ANNOTATION_INVITE_FILE ? ['fraction','root'].map(formulaCase=>({script:'live-ocr-acceptance',formulaCase,outputFormat:'mathAcademy'})) : []),
         ...(process.env.ANNOTATION_INVITE_FILE ? [{script:'ocr-output-acceptance'}] : []),
     ];
     for (const task of tasks) {

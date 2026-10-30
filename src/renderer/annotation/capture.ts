@@ -192,11 +192,6 @@ export function installCompletion(
                     ),
                 );
             outputFormat.el.value = config.outputFormat;
-            outputFormat.add(
-                ele("option")
-                    .attr({ value: "ma", disabled: true })
-                    .add(t("Math Academy（后续接入）")),
-            );
             const display = ele("canvas")
                 .attr({
                     id: "ac-selection",

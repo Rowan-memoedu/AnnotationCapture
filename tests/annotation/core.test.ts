@@ -3,7 +3,11 @@ import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
-import { type CaptureInput, selectedRect } from "../../lib/annotation";
+import {
+    type CaptureInput,
+    type OutputFormat,
+    selectedRect,
+} from "../../lib/annotation";
 import { ArchiveStore } from "../../src/main/annotationArchive";
 import { type ClipboardPort, FormulaJobs } from "../../src/main/formulaJobs";
 import {
@@ -190,13 +194,18 @@ describe("formula task boundaries", () => {
             clipboard,
             () => {},
         );
-        const create = () =>
-            jobs.create(input.id, png(2, 2), {
-                x: 1,
-                y: 1,
-                width: 2,
-                height: 2,
-            });
+        const create = (format: OutputFormat = "latex") =>
+            jobs.create(
+                input.id,
+                png(2, 2),
+                {
+                    x: 1,
+                    y: 1,
+                    width: 2,
+                    height: 2,
+                },
+                format,
+            );
         return {
             jobs,
             create,
@@ -217,6 +226,48 @@ describe("formula task boundaries", () => {
                 await readFile(job.path.replace(".png", ".json"), "utf8"),
             ).status,
         ).toBe("unconfigured");
+    });
+    it("adapts Math Academy locally and preserves the gateway transcription", async () => {
+        const raw = "\\displaystyle \\dfrac{X+x}{2}";
+        const recognize = vi.fn<FormulaProvider["recognize"]>(async () => ({
+            latex: raw,
+            model: "test",
+        }));
+        const { jobs, create, writes } = await setup({ recognize });
+        const job = await create("mathAcademy");
+        await jobs.run(job.id);
+        expect(recognize.mock.calls[0][2]).toBe("latex");
+        expect(job.recognizedLatex).toBe(raw);
+        expect(job.outputFormat).toBe("mathAcademy");
+        expect(writes).toEqual(["\\frac{X+x}{2}"]);
+        await jobs.copy(job.id, "$$\\tfrac{a}{b}$$");
+        expect(writes[1]).toBe("\\frac{a}{b}");
+        expect(job.recognizedLatex).toBe(raw);
+        await jobs.run(job.id);
+        expect(recognize.mock.calls[1][2]).toBe("latex");
+        expect(job.outputFormat).toBe("mathAcademy");
+    });
+    it("retains unsupported Math Academy output without writing the clipboard", async () => {
+        const raw = "\\begin{aligned}x&=1\\\\y&=2\\end{aligned}";
+        const { jobs, create, writes } = await setup({
+            recognize: async () => ({ latex: raw, model: "test" }),
+        });
+        const job = await create("mathAcademy");
+        await jobs.run(job.id);
+        expect(job.status).toBe("review");
+        expect(job.latex).toBe(raw);
+        expect(job.outputIssue).toContain("Math Academy");
+        expect(writes).toEqual([]);
+        await expect(jobs.copy(job.id, raw)).rejects.toThrow("Math Academy");
+        expect(writes).toEqual([]);
+        expect(
+            JSON.parse(
+                await readFile(job.path.replace(".png", ".json"), "utf8"),
+            ).recognizedLatex,
+        ).toBe(raw);
+        await jobs.copy(job.id, "x=1");
+        expect(job.outputIssue).toBeUndefined();
+        expect(writes).toEqual(["x=1"]);
     });
     it("copies a successful result once despite repeated triggers", async () => {
         const provider = {

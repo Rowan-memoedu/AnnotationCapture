@@ -14,11 +14,13 @@
 
 0.4.3 的自由圈选默认“圈到部分笔迹即选中”，可在设置中切换为“全部圈住笔迹才选中”。两种规则同时用于 D 键圈选和按住 D 清除，移动或删除以整条笔迹为单位。单击托盘打开设置；截图和区域 OCR 使用快捷键或托盘右键菜单。
 
+0.5.0 加入 Math Academy 公式输出。按网页实际使用的 MathQuill 输入器适配分数、根号、上下标、函数、积分与求和；移除不兼容的纯排版标记，不改变数学表达式。不兼容的多行、矩阵或未知命令保留原始结果并提示，不自动复制。
+
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.4.3-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.5.0-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 1. 按 `Alt+W`，或点击“全屏批注”：截取鼠标所在显示器，直接进入画笔。按 `Ctrl+Alt+S`，或点击“区域截图”：框选后自动切换画笔，在选区上继续批注。
 2. 按 `Esc` 或 `Ctrl+Enter`：保存带批注的截图后退出。正在落笔时会等抬笔再保存。
@@ -31,7 +33,15 @@
 
 按 `Ctrl+Alt+O` 或点击“区域 OCR”，框选结束后直接识别选区画面并复制，不进入批注。默认自动判断普通文字、Markdown、Mermaid 图或数学公式，公式使用 `$…$`。该入口会发送选中的屏幕内容；只框选需要识别的区域。快捷键可在设置修改。
 
-批注后的 OCR 可选自动判断、普通文字、Markdown 文字、`$…$` 公式、原始 LaTeX、`$$…$$` Markdown 公式（RemNote / Obsidian）和 Mermaid 代码块。每个任务保留所选格式，重试不改变格式。这个选区识别入口输出到结果区和剪贴板，独立于公式画笔；Math Academy 专用输出后续接入。
+批注后的 OCR 可选自动判断、普通文字、Markdown 文字、`$…$` 公式、原始 LaTeX、Math Academy 公式、`$$…$$` Markdown 公式（RemNote / Obsidian）和 Mermaid 代码块。每个任务保留所选格式，重试不改变格式。这个选区识别入口输出到结果区和剪贴板，独立于公式画笔。
+
+## Math Academy 公式输出
+
+批注后按 `Ctrl+Shift+Enter`，在输出格式中选择“Math Academy 公式”，框选需要输入的一条公式并识别。也可在设置中将它设为默认输出格式。结果复制完成后，点击 Math Academy 网页里的公式输入框，再按 `Ctrl+V`，核对显示后自行提交。
+
+输出使用输入器直接接受的 LaTeX，不带 `$` 或代码围栏。适配会去掉 `\displaystyle` 和数学间距标记，将 `\dfrac`、`\tfrac` 统一为 `\frac`；保留字母大小写、上下标、分数层级和粗体等数学内容。格式转换在本机完成，不需要浏览器扩展，也不会自动填写或提交答案。
+
+遇到多行 `aligned`、矩阵、`\mathbb` 等未支持结构时，不改写为另一种数学含义，也不覆盖剪贴板。结果区保留原始 LaTeX 和具体提示，可编辑后点击“复制到 Math Academy”，或重新选择原始 LaTeX 输出。识别原文同时保存在归档结果中。网页输入器日后变化时需重新验证兼容性。
 
 ## 自动更新
 
@@ -96,7 +106,7 @@ Archive/YYYY-MM-DD/<截图编号>/
 
 ## 当前边界
 
-- 输出支持普通文字、Markdown、Mermaid 和公式；Math Academy 的专用格式和自动粘贴尚未适配。
+- 输出支持普通文字、Markdown、Mermaid 和公式；Math Academy 输出需手动粘贴到网页公式框，未提供自动粘贴和答案提交。
 - 公式画笔识别需要登录及联网；排版、修改字体与 LaTeX 使用随包资源。排版支持常见数学命令，不支持外部资源、自定义宏及系统字体任意切换。
 - 识别仅转写选定公式，不求解，不自动纠正数学表达式。结果可在复制前后人工检查、编辑。
 - Esc、归档按钮和批注窗口的常规关闭会先保存；保存失败时保留画布。托盘“退出”及设置页“退出软件”直接结束，不等待归档，本次尚未保存的批注会被放弃。
