@@ -30,6 +30,8 @@ async function converted(page){await page.waitForFunction(()=>document.querySele
   ipcMain.handle('annotation:inkCancel',()=>{globalThis.inkFixture.cancelled++;});
   ipcMain.handle('annotation:screenshots',()=>screen.getAllDisplays().map(d=>{const width=Math.round(d.size.width*d.scaleFactor),height=Math.round(d.size.height*d.scaleFactor);return {id:d.id,bounds:d.bounds,scaleFactor:d.scaleFactor,png:nativeImage.createFromBitmap(Buffer.alloc(width*height*4,255),{width,height}).toDataURL()};}));
   clipboard.writeText('formula-pen-must-not-copy');
+  globalThis.inkClipboardWrites=0;
+  for(const method of ['writeText','writeImage','write','clear']){const original=clipboard[method];clipboard[method]=function(...args){globalThis.inkClipboardWrites++;return original.apply(this,args);};}
  });
  const samples=[];
  for(const font of ['stix2','newcm']) {
@@ -77,6 +79,6 @@ async function converted(page){await page.waitForFunction(()=>document.querySele
  async function pen(type,x,y,clickCount=1){await cdp.send('Input.dispatchMouseEvent',{type,x,y,pointerType:'pen',button:type==='mouseMoved'?'none':'left',buttons:type==='mouseReleased'?0:1,clickCount:type==='mouseMoved'?0:clickCount,force:type==='mouseReleased'?0:0.6});}
  for(const points of [[[350,310],[390,370]],[[350,370],[390,310]],[[415,340],[455,340]],[[435,320],[435,360]],[[480,322],[495,310],[495,370]]]){await pen('mouseMoved',...points[0]);await pen('mousePressed',...points[0]);for(const point of points.slice(1))await pen('mouseMoved',...point);await pen('mouseReleased',...points.at(-1));}
  const blank=await page.locator('.upper-canvas').evaluate(c=>{const r=c.getBoundingClientRect();return {x:Math.min(r.right-20,innerWidth-40),y:Math.min(r.bottom-20,innerHeight-130)};});for(const clicks of [1,2]){await pen('mouseMoved',blank.x,blank.y);await pen('mousePressed',blank.x,blank.y,clicks);await pen('mouseReleased',blank.x,blank.y,clicks);}await converted(page);assert.equal(await page.evaluate(()=>window.penMouseMessages),0);const penSaved=await finish(page);assert.equal(penSaved.canvas.objects.find(o=>o.acFormula).acFormula.source.length,5);checks.push('pen-only formula ink and double tap without mouse compatibility events');
- assert.equal(await app.evaluate(({clipboard})=>clipboard.readText()),'formula-pen-must-not-copy');checks.push('canvas conversion does not change clipboard');
+ assert.equal(await app.evaluate(()=>globalThis.inkClipboardWrites),0);checks.push('canvas conversion never writes or clears the clipboard; external user copies are allowed');
  assert.deepEqual(errors,[]);fs.writeFileSync(path.join(root,'report.json'),JSON.stringify({passed:true,checks,errors},null,2));console.log('FORMULA_PEN_PASSED',checks);
 })().catch(e=>{fs.writeFileSync(path.join(root,'report.json'),JSON.stringify({passed:false,checks,error:String(e),errors},null,2));console.error(e,errors);process.exitCode=1;}).finally(async()=>{if(app)await app.evaluate(({app})=>app.exit());});

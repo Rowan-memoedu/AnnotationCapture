@@ -72,6 +72,7 @@ export type PublicConfig = {
     outputFormat: OutputFormat;
     formulaFont: FormulaFont;
     lassoRule: LassoRule;
+    archiveRetentionDays: number;
     version: string;
 };
 export type LoginSession = { token: string; accountId: string; label: string };
@@ -93,9 +94,11 @@ export type ConfigInput = {
     outputFormat?: OutputFormat;
     formulaFont?: FormulaFont;
     lassoRule?: LassoRule;
+    archiveRetentionDays?: number;
 };
 export type AppState = {
     update: UpdateState;
+    archiveCleanup: string;
     config: PublicConfig;
     login: LoginState;
     jobs: FormulaResult[];

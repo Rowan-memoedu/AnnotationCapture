@@ -32,6 +32,7 @@ async function trayClick() {
     let panel = await launch();
     assert.equal(await panel.locator('#ac-start, #ac-start-full, #ac-start-ocr').count(), 0);
     assert.equal(await panel.locator('#ac-lasso-rule').inputValue(), 'intersect');
+    assert.equal(await panel.locator('#ac-retention-days').inputValue(), '7');
     const state = await panel.evaluate(() => require('electron').ipcRenderer.invoke('annotation:state'));
     assert.equal(await app.evaluate(({ globalShortcut }, keys) => keys.every(k => globalShortcut.isRegistered(k)), [state.config.shortcut, state.config.fullShortcut, state.config.ocrShortcut]), true);
     checks.push('capture buttons removed; three shortcuts remain registered; legacy settings default to intersect');
@@ -40,12 +41,19 @@ async function trayClick() {
     assert.equal(windows.length, 1); assert.equal(windows[0].visible, true); assert.match(windows[0].url, /annotation\.html$/);
     await isolateWindow(app, panel);
     checks.push('actual tray click listener opens settings, creates no capture');
-    await panel.locator('#ac-lasso-rule').selectOption('contain'); await panel.locator('#ac-save-settings').click();
+    await panel.locator('#ac-lasso-rule').selectOption('contain');
+    await panel.locator('#ac-retention-days').fill('14');
+    await panel.locator('#ac-save-settings').click();
     await panel.waitForFunction(() => document.querySelector('#ac-panel-status').textContent.includes('设置已保存'));
     const saved = JSON.parse(fs.readFileSync(path.join(data, 'annotation-settings.json'), 'utf8'));
     assert.equal(saved.lassoRule, 'contain');
+    assert.equal(saved.archiveRetentionDays, 14);
     await app.evaluate(({ app }) => app.exit()); app = undefined;
     panel = await launch(); assert.equal(await panel.locator('#ac-lasso-rule').inputValue(), 'contain');
+    assert.equal(await panel.locator('#ac-retention-days').inputValue(), '14');
+    for (const days of [-1, 1.5, 3651]) await assert.rejects(panel.evaluate(async days => { const ipc = require('electron').ipcRenderer; const s = await ipc.invoke('annotation:state'); return ipc.invoke('annotation:configure', { ...s.config, archiveRetentionDays: days }); }, days));
+    assert.equal((await panel.evaluate(() => require('electron').ipcRenderer.invoke('annotation:state'))).config.archiveRetentionDays, 14);
+    checks.push('legacy retention defaults to 7 days; custom value survives restart; invalid days preserve settings');
     await assert.rejects(panel.evaluate(async () => { const ipc = require('electron').ipcRenderer; const s = await ipc.invoke('annotation:state'); return ipc.invoke('annotation:configure', { ...s.config, lassoRule: 'invalid' }); }));
     assert.equal((await panel.evaluate(() => require('electron').ipcRenderer.invoke('annotation:state'))).config.lassoRule, 'contain');
     checks.push('saved containment rule survives process restart; invalid values are rejected without overwriting');

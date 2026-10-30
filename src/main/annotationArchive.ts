@@ -36,6 +36,13 @@ export class ArchiveStore {
     readonly records = new Map<string, ArchiveRecord>();
     constructor(private root: () => string) {}
 
+    forget(ids: string[]) {
+        for (const id of ids) {
+            this.records.delete(id);
+            this.saves.delete(id);
+        }
+    }
+
     save(input: CaptureInput): Promise<ArchiveRecord> {
         if (!/^[a-f0-9-]{36}$/.test(input.id)) throw new Error("归档编号无效");
         const date = new Date(input.capturedAt);

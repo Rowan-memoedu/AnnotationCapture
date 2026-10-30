@@ -35,6 +35,20 @@ const resultList = view("y").style({ gap: "16px" }).attr({ id: "ac-results" });
 const archivePath = input()
     .class("ac-field")
     .attr({ id: "ac-archive-root", ariaLabel: t("归档位置") });
+const retentionDays = input("number")
+    .class("ac-field")
+    .attr({
+        id: "ac-retention-days",
+        ariaLabel: t("存档保留天数"),
+        min: "0",
+        max: "3650",
+        step: "1",
+    });
+const retentionStatus = p().class("ac-status").attr({
+    id: "ac-retention-status",
+    role: "status",
+    ariaLive: "polite",
+});
 const shortcut = input()
     .class("ac-field")
     .attr({ id: "ac-shortcut", ariaLabel: t("截图快捷键") });
@@ -244,6 +258,14 @@ root.add([
                 const path = await invoke("chooseArchive");
                 if (path) archivePath.el.value = path;
             }),
+            p(t("存档保留天数")),
+            retentionDays,
+            p(
+                t(
+                    "默认保留最近 7 天；0 表示永久保留。启动后及每小时检查，过期存档移至回收站，批注和识别期间延后。",
+                ),
+            ),
+            retentionStatus,
             p(t("区域截图快捷键")),
             shortcut,
             p(t("全屏批注快捷键")),
@@ -280,6 +302,8 @@ root.add([
                     action("保存设置", "ac-save-settings", async () => {
                         await invoke("configure", {
                             archiveRoot: archivePath.el.value,
+                            archiveRetentionDays:
+                                retentionDays.el.valueAsNumber,
                             shortcut: shortcut.el.value,
                             fullShortcut: fullShortcut.el.value,
                             ocrShortcut: ocrShortcut.el.value,
@@ -410,6 +434,7 @@ async function refresh(settings = false) {
         state.update.phase === "ready" ? "" : "none";
     if (settings) {
         archivePath.el.value = state.config.archiveRoot;
+        retentionDays.el.value = String(state.config.archiveRetentionDays);
         shortcut.el.value = state.config.shortcut;
         fullShortcut.el.value = state.config.fullShortcut;
         ocrShortcut.el.value = state.config.ocrShortcut;
@@ -423,6 +448,7 @@ async function refresh(settings = false) {
         if (state.shortcutError) notice.el.textContent = state.shortcutError;
     }
     loginStatus.el.textContent = state.login.message;
+    retentionStatus.el.textContent = state.archiveCleanup;
     accountLabel.el.textContent = state.login.loggedIn
         ? `${t("已登录：")}${state.login.label}`
         : t("未登录；仍可截图、批注和归档");

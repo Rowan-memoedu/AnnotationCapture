@@ -16,11 +16,13 @@
 
 0.5.0 加入 Math Academy 公式输出。按网页实际使用的 MathQuill 输入器适配分数、根号、上下标、函数、积分与求和；移除不兼容的纯排版标记，不改变数学表达式。不兼容的多行、矩阵或未知命令保留原始结果并提示，不自动复制。
 
+0.5.1 修复记住自由截图工具后，全屏批注的“选区识别”预览变成白页的问题；新增可配置的存档保留期限，默认保留最近 7 天。
+
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.5.0-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.5.1-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 1. 按 `Alt+W`，或点击“全屏批注”：截取鼠标所在显示器，直接进入画笔。按 `Ctrl+Alt+S`，或点击“区域截图”：框选后自动切换画笔，在选区上继续批注。
 2. 按 `Esc` 或 `Ctrl+Enter`：保存带批注的截图后退出。正在落笔时会等抬笔再保存。
@@ -42,6 +44,12 @@
 输出使用输入器直接接受的 LaTeX，不带 `$` 或代码围栏。适配会去掉 `\displaystyle` 和数学间距标记，将 `\dfrac`、`\tfrac` 统一为 `\frac`；保留字母大小写、上下标、分数层级和粗体等数学内容。格式转换在本机完成，不需要浏览器扩展，也不会自动填写或提交答案。
 
 遇到多行 `aligned`、矩阵、`\mathbb` 等未支持结构时，不改写为另一种数学含义，也不覆盖剪贴板。结果区保留原始 LaTeX 和具体提示，可编辑后点击“复制到 Math Academy”，或重新选择原始 LaTeX 输出。识别原文同时保存在归档结果中。网页输入器日后变化时需重新验证兼容性。
+
+## 存档自动清理
+
+设置中的“存档保留天数”默认为 7，可填写 1–3650 天；填写 0 则永久保留。软件启动后及运行期间每小时检查一次，按截图创建时间清理超过保留期限的存档；批注、识别和更新安装期间延后。保存新的保留期限后会重新检查。
+
+过期存档整份移至 Windows 回收站，包括截图、笔迹源数据与识别结果，可从回收站恢复。仅清理当前归档目录中结构完整的本软件存档，跳过链接目录、不明文件和未完成的归档；移动失败时保留原件并提示。清理不需要额外的后台任务，软件关闭时下次启动补查。
 
 ## 自动更新
 

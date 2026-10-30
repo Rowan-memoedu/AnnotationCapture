@@ -24,6 +24,7 @@ import Store from "../../lib/store/store";
 import { ArchiveStore, decodePng } from "./annotationArchive";
 import { AnnotationAuth } from "./annotationAuth";
 import { AnnotationConfig } from "./annotationConfig";
+import { ArchiveRetention } from "./annotationRetention";
 import { AnnotationUpdater, acknowledgeUpdate } from "./annotationUpdate";
 import { captureDefaults } from "./captureDefaults";
 import { FormulaJobs } from "./formulaJobs";
@@ -50,6 +51,7 @@ let auth: AnnotationAuth;
 let archive: ArchiveStore;
 let jobs: FormulaJobs;
 let updater: AnnotationUpdater;
+let retention: ArchiveRetention;
 let captureWindow: BrowserWindow | null = null;
 let panel: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -373,6 +375,7 @@ handle("inkRecognize", async (id, png) => {
 });
 handle("state", () => ({
     update: updater.public(),
+    archiveCleanup: retention?.public() ?? "",
     config: config.public(),
     login: auth.public(),
     jobs: [...jobs.jobs.values()].reverse(),
@@ -384,6 +387,7 @@ handle("configure", (input) => {
         const result = config.save(input);
         shortcutError = "";
         changed();
+        void retention.run(true);
         return result;
     } catch (error) {
         rollback();
@@ -435,6 +439,7 @@ else {
     });
     app.on("will-quit", () => {
         updater?.dispose();
+        retention?.dispose();
         globalShortcut.unregisterAll();
         tray?.destroy();
     });
@@ -478,6 +483,25 @@ else {
                 args.testMode && typeof args.updateTestFeed === "string"
                     ? args.updateTestFeed
                     : undefined,
+        });
+        retention = new ArchiveRetention({
+            config: () => ({
+                archiveRoot: config.public().archiveRoot,
+                archiveRetentionDays: config.public().archiveRetentionDays,
+            }),
+            busy: () =>
+                activeCapture ||
+                captureStarting ||
+                updater.installing ||
+                [...jobs.jobs.values()].some((j) => j.status === "recognizing"),
+            trash: (path) => shell.trashItem(path),
+            removed: (ids) => {
+                archive.forget(ids);
+                for (const [id, job] of jobs.jobs) {
+                    if (ids.includes(job.archiveId)) jobs.jobs.delete(id);
+                }
+            },
+            changed,
         });
         const shortcuts = config.public();
         const shortcutErrors: string[] = [];
@@ -527,6 +551,7 @@ else {
         else if (!args.updateReceipt && !args.background) showPanel();
         acknowledgeUpdate(args.updateReceipt, dataRoot);
         updater.start();
+        retention.start();
         void auth.refresh();
     });
 }

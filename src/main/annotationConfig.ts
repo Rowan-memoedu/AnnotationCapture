@@ -27,6 +27,7 @@ type StoredConfig = {
     outputFormat: OutputFormat;
     formulaFont: FormulaFont;
     lassoRule: LassoRule;
+    archiveRetentionDays: number;
     encryptedSession?: string;
 };
 
@@ -46,6 +47,7 @@ export class AnnotationConfig {
             outputFormat: "latex",
             formulaFont: "stix2",
             lassoRule: "intersect",
+            archiveRetentionDays: 7,
         };
         if (existsSync(this.file)) {
             this.config = {
@@ -85,10 +87,18 @@ export class AnnotationConfig {
             outputFormat: this.config.outputFormat,
             formulaFont: this.config.formulaFont,
             lassoRule: this.config.lassoRule,
+            archiveRetentionDays: this.config.archiveRetentionDays,
             version: app.getVersion(),
         };
     }
     save(input: ConfigInput): PublicConfig {
+        if (
+            input.archiveRetentionDays !== undefined &&
+            (!Number.isInteger(input.archiveRetentionDays) ||
+                input.archiveRetentionDays < 0 ||
+                input.archiveRetentionDays > 3650)
+        )
+            throw new Error("存档保留天数须为 0 到 3650；0 表示永久保留");
         if (
             input.lassoRule !== undefined &&
             !["intersect", "contain"].includes(input.lassoRule)
@@ -143,6 +153,8 @@ export class AnnotationConfig {
             outputFormat: input.outputFormat ?? this.config.outputFormat,
             formulaFont: input.formulaFont ?? this.config.formulaFont,
             lassoRule: input.lassoRule ?? this.config.lassoRule,
+            archiveRetentionDays:
+                input.archiveRetentionDays ?? this.config.archiveRetentionDays,
         };
         this.persist(next);
         return this.public();

@@ -1292,7 +1292,9 @@ function getClipPhoto() {
         0,
         0,
     );
-    if (!isRect) {
+    // A remembered free-selection tool is not an actual polygon. Full-screen
+    // annotation starts with the whole frame and no free-selection vertices.
+    if (!isRect && freeSelect.length >= 3) {
         const ctx = tmpctx;
 
         // 创建临时Canvas并保存原始内容
