@@ -145,7 +145,9 @@ export function selectedRect(
 }
 
 export type AnnotationMessages = {
-    detectWhitespace: (png: string) => { rects: PixelRect[] };
+    detectWhitespace: (
+        png: string,
+    ) => import("./whiteboard").WhiteboardDetection;
     captureVisibility: (visible: boolean) => void;
     checkUpdates: () => UpdateState;
     installUpdate: () => UpdateState;

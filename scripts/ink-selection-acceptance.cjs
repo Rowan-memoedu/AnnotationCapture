@@ -21,7 +21,7 @@ async function open(mode = 'full') {
     await panel.evaluate(mode => require('electron').ipcRenderer.invoke('annotation:capture', mode), mode);
     const page = await pending;
     page.on('pageerror', error => errors.push(String(error)));
-    await page.waitForFunction(() => document.querySelector('#ac-completion') && document.body.style.opacity !== '0');
+    await page.waitForFunction(() => document.body.dataset.acReady === 'true');
     await isolateWindow(app, page);
     if (mode === 'region') await stroke(page, [[200, 150], [1150, 750]]);
     await page.waitForFunction(() => document.querySelector('#draw_free_pencil')?.classList.contains('select'));

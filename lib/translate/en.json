@@ -836,6 +836,7 @@
     "d8f384": "Pressure sensitivity must be an integer from 1 to 100",
     "0ae2bd": "1–100. Higher values increase the width difference between light and heavy strokes. Mouse strokes stay uniform. Saved settings apply to the next capture.",
     "98d4fa": "Saving…",
+    "4b55f3": "Board",
     "3cd750": "Quick whiteboard",
     "5dc125": "Adjust whiteboard",
     "6a9240": "Hide whiteboard",

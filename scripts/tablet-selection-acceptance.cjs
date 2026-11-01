@@ -17,7 +17,7 @@ async function open(mode='region') {
     const pending=app.waitForEvent('window');
     await panel.evaluate(mode=>require('electron').ipcRenderer.invoke('annotation:capture',mode),mode);
     const page=await pending;
-    await page.waitForFunction(()=>document.querySelector('#ac-completion')&&document.body.style.opacity!=='0');
+    await page.waitForFunction(()=>document.body.dataset.acReady==='true');
     await isolateWindow(app,page);
     await page.evaluate(()=>{
         window.tabletEvents={pointer:0,mouse:0,id:0};

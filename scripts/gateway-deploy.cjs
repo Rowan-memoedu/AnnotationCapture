@@ -14,12 +14,14 @@ const {connection,remotePython}=require('./gateway-connection.cjs');
  fs.writeFileSync(path.join(staging,'manifest.json'),JSON.stringify(hashes));
  const archive=path.join(artifacts,'gateway.tar.gz');execFileSync('tar',['-czf',archive,'-C',staging,...names,'manifest.json'],{windowsHide:true});
  const stage=`/tmp/annotationcapture-${id}`;
+ console.log('GATEWAY_STAGE_CREATE');
  remotePython(`import json,os,pathlib,pwd,sys
 a=json.load(sys.stdin);p=pathlib.Path(a['stage'])
 if p.parent!=pathlib.Path('/tmp') or not p.name.startswith('annotationcapture-') or p.exists():raise ValueError('Invalid staging path')
 p.mkdir(mode=0o700);u=pwd.getpwnam('ubuntu');os.chown(p,u.pw_uid,u.pw_gid)
 print(json.dumps({'stageCreated':True}))`,{stage});
  const target=connection();
+ console.log('GATEWAY_UPLOAD');
  try{execFileSync('scp',[...target.args,archive,`${target.host}:${stage}/gateway.tar.gz`],{windowsHide:true,stdio:'pipe',timeout:120000});}
  catch{throw new Error('Gateway upload failed');}
  remotePython(`import hashlib,json,pathlib,sys,tarfile
@@ -32,6 +34,7 @@ for name,sha in a['hashes'].items():
  if hashlib.sha256((p/name).read_bytes()).hexdigest()!=sha:raise ValueError('Uploaded source hash mismatch')
 print(json.dumps({'sourceVerified':True}))`,{stage,names,hashes});
  let output;
+ console.log('GATEWAY_LINUX_TESTS_AND_INSTALL');
  try{output=execFileSync('ssh',[...target.args,target.host,`sudo -n /usr/bin/python3 /usr/local/lib/tencent-cloud-maintenance/host.py run-stage --path ${stage} -- /usr/bin/python3 ${stage}/gateway/install.py`],{encoding:'utf8',windowsHide:true,timeout:180000});}
  catch(error){fs.writeFileSync(path.join(artifacts,'private-deployment-error.log'),String(error.stderr || error.message));throw new Error('Gateway deployment failed; see private deployment log in '+artifacts);}
  const receipt=JSON.parse(output);fs.writeFileSync(path.join(artifacts,'receipt.json'),JSON.stringify(receipt,null,2));

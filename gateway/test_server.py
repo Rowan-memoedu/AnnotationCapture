@@ -9,7 +9,7 @@ import unittest
 import urllib.error
 import urllib.request
 
-from server import AccessStore, Gateway, Provider, PROMPTS, normalize_latex, normalize_output
+from server import AccessStore, Gateway, Provider, PROMPTS, normalize_latex, normalize_output, blank_rectangles
 
 
 def png():
@@ -102,34 +102,53 @@ class GatewayTests(unittest.TestCase):
     def test_whitespace_is_authenticated_and_preferences_reach_the_prompt(self):
         self.assertEqual(self.request("/whitespace", {"png": png()})[0], 401)
         self.gateway.provider.extra = {"thinking": {"type": "enabled"}, "reasoning_effort": "low"}
+        self.gateway.provider.model = "deepseek-flash"
         token = self.login()
-        rects = [{"x": .1, "y": .2, "width": .4, "height": .3}]
-        self.upstream.content = json.dumps({"rects": rects})
+        self.upstream.content = json.dumps({"panels": [[250, 200, 750, 800]], "blocked": [], "taskbar": [[0,950,1000,1000]], "chrome": [[0,0,1000,50]]})
         for allowed in (True, False):
             status, value = self.request("/whitespace", {"png": png(), "options": {
                 "maxRects": 3, "includeTaskbar": allowed, "includeWindowChrome": allowed}}, token)
             self.assertEqual(status, 200)
-            self.assertEqual(value, {"rects": rects})
+            self.assertTrue(0 < len(value["rects"]) <= 3)
+            for r in value["rects"]:
+                self.assertTrue(r["x"] + r["width"] <= .25 or r["x"] >= .75 or
+                                r["y"] + r["height"] <= .2 or r["y"] >= .8)
+                if not allowed:
+                    self.assertGreater(r["y"], .05)
+                    self.assertLess(r["y"] + r["height"], .95)
             prompt = self.upstream.requests[-1]["body"]["messages"][0]["content"]
-            self.assertIn("at most 3", prompt)
+            self.assertIn("at most 24", prompt)
             self.assertIn("may be covered" if allowed else "must not be covered", prompt)
             self.assertNotIn(token, prompt)
-            self.assertEqual(self.upstream.requests[-1]["body"]["thinking"], {"type": "enabled"})
-            self.assertEqual(self.upstream.requests[-1]["body"]["reasoning_effort"], "low")
-            self.assertEqual(self.upstream.requests[-1]["body"]["max_tokens"], 8192)
+            self.assertEqual(self.upstream.requests[-1]["body"]["thinking"], {"type": "disabled"})
+            self.assertNotIn("reasoning_effort", self.upstream.requests[-1]["body"])
+            self.assertEqual(self.upstream.requests[-1]["body"]["max_tokens"], 1200)
         self.assertEqual(self.gateway.provider.extra, {"thinking": {"type": "enabled"}, "reasoning_effort": "low"})
+
+    def test_blank_layout_keeps_content_and_returns_disjoint_regions_within_limit(self):
+        blocks = [[0, 0, 1000, 60], [180, 180, 550, 470], [650, 500, 950, 850]]
+        result = blank_rectangles(blocks, 5)
+        self.assertTrue(0 < len(result) <= 5)
+        self.assertGreater(sum(r["width"] * r["height"] for r in result), .35)
+        def overlap(a, b):
+            return max(0, min(a[2], b[2]) - max(a[0], b[0])) * max(0, min(a[3], b[3]) - max(a[1], b[1]))
+        areas = [[r["x"]*1000, r["y"]*1000, (r["x"]+r["width"])*1000, (r["y"]+r["height"])*1000] for r in result]
+        for i, area in enumerate(areas):
+            self.assertTrue(all(0 <= n <= 1000 for n in area))
+            self.assertTrue(all(overlap(area, other) == 0 for other in blocks + areas[:i]))
+        self.assertEqual(blank_rectangles([[0, 0, 1000, 1000]], 5), [])
+        self.assertEqual(blank_rectangles([], 1), [{"x": 0, "y": 0, "width": 1, "height": 1}])
 
     def test_whitespace_rejects_bad_options_and_model_coordinates(self):
         token = self.login()
         for options in ({"maxRects": 0}, {"maxRects": True}, {"maxRects": 21}, {"includeTaskbar": "yes"}):
             self.assertEqual(self.request("/whitespace", {"png": png(), "options": options}, token)[0], 400)
         self.assertEqual(len(self.upstream.requests), 0)
-        for rects in ([{"x": .9, "y": 0, "width": .2, "height": .5}],
-                      [{"x": 0, "y": 0, "width": float("nan"), "height": .5}],
-                      [{"x": 0, "y": 0, "width": .5, "height": .5}] * 6):
-            self.upstream.content = json.dumps({"rects": rects})
+        for boxes in ([[0, 0, 1001, 1000]], [[0, 0, float("nan"), 500]], [[0, 0, 500, 500]] * 33,
+                      [[500, 500, 300, 300]], [[False, 0, 500, 500]]):
+            self.upstream.content = json.dumps({"panels": [], "blocked": boxes, "taskbar": [], "chrome": []})
             self.assertEqual(self.request("/whitespace", {"png": png()}, token)[0], 400)
-        self.upstream.content = '{"rects": []}'
+        self.upstream.content = '{"panels": [], "blocked": [[0,0,1000,1000]], "taskbar": [], "chrome": []}'
         self.assertEqual(self.request("/whitespace", {"png": png()}, token), (200, {"rects": []}))
 
     def test_only_provider_receives_shared_key_and_only_formula_is_sent(self):

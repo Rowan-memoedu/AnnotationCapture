@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { LoginSession } from "../../lib/annotation";
+import { whiteboardDefaults } from "../../lib/whiteboard";
 import { AnnotationAuth } from "../../src/main/annotationAuth";
 
 const session: LoginSession = {
@@ -28,6 +29,78 @@ function fixture(initial: LoginSession | null, request: typeof fetch) {
 }
 
 describe("invitation sessions", () => {
+    it("reuses page detections, separating changed preferences and sessions", async () => {
+        const request = vi.fn(async () =>
+            Response.json({
+                rects: [{ x: 0.1, y: 0.1, width: 0.3, height: 0.3 }],
+            }),
+        );
+        const { auth, config } = fixture(session, request as typeof fetch);
+        const detect = (options = whiteboardDefaults) =>
+            auth.detectWhitespace(
+                "same-page",
+                options,
+                new AbortController().signal,
+            );
+        await detect();
+        await detect();
+        expect(request).toHaveBeenCalledTimes(1);
+        await detect({ ...whiteboardDefaults, includeTaskbar: false });
+        expect(request).toHaveBeenCalledTimes(2);
+        config.saveSession({ ...session, token: "B".repeat(43) });
+        await detect();
+        expect(request).toHaveBeenCalledTimes(3);
+    });
+    it("allows a cancelled capture to leave one bounded request for the next capture", async () => {
+        let respond!: (value: Response) => void;
+        const request = vi.fn(
+            () =>
+                new Promise<Response>((resolve) => {
+                    respond = resolve;
+                }),
+        );
+        const { auth } = fixture(session, request as typeof fetch);
+        const cancelled = new AbortController();
+        const first = auth.detectWhitespace(
+            "same-page",
+            whiteboardDefaults,
+            cancelled.signal,
+        );
+        const rejected = expect(first).rejects.toThrow();
+        cancelled.abort();
+        await rejected;
+        expect(request.mock.calls[0][1]!.signal!.aborted).toBe(false);
+        const second = auth.detectWhitespace(
+            "same-page",
+            whiteboardDefaults,
+            new AbortController().signal,
+        );
+        respond(Response.json({ rects: [] }));
+        await second;
+        expect(request).toHaveBeenCalledTimes(1);
+    });
+    it("expires page coordinates and retries failures instead of caching them", async () => {
+        const request = vi
+            .fn()
+            .mockRejectedValueOnce(new Error("offline"))
+            .mockImplementation(async () => Response.json({ rects: [] }));
+        const { auth } = fixture(session, request as typeof fetch);
+        const detect = () =>
+            auth.detectWhitespace(
+                "page",
+                whiteboardDefaults,
+                new AbortController().signal,
+            );
+        await expect(detect()).rejects.toThrow("offline");
+        await detect();
+        const time = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 61_000);
+        try {
+            await detect();
+            expect(request).toHaveBeenCalledTimes(3);
+        } finally {
+            time.mockRestore();
+        }
+    });
     it("persists a login but never exposes its bearer token in UI state", async () => {
         const request = vi.fn(async () =>
             Response.json({ ...session, providerReady: false }),

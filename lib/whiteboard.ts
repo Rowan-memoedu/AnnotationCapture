@@ -6,6 +6,123 @@ export type WhiteboardSettings = {
     includeTaskbar: boolean;
     includeWindowChrome: boolean;
 };
+export type WhiteboardDetection = {
+    rects: PixelRect[];
+    unprotected?: PixelRect[];
+};
+
+export function refineWhiteboardRects(
+    rects: PixelRect[],
+    image: Pick<ImageData, "width" | "height" | "data">,
+    width: number,
+    height: number,
+    unprotected: PixelRect[],
+    limit: number,
+): PixelRect[] {
+    const cell = 8,
+        cols = Math.ceil(image.width / cell),
+        rows = Math.ceil(image.height / cell);
+    const sx = width / image.width,
+        sy = height / image.height;
+    const edges = new Uint8Array(cols * rows),
+        mask = new Uint8Array(cols * rows);
+    for (let y = 0; y < rows; y++)
+        for (let x = 0; x < cols; x++) {
+            const low = [255, 255, 255],
+                high = [0, 0, 0];
+            for (
+                let py = Math.max(0, y * cell - 1);
+                py < Math.min(image.height, (y + 1) * cell);
+                py++
+            )
+                for (
+                    let px = Math.max(0, x * cell - 1);
+                    px < Math.min(image.width, (x + 1) * cell);
+                    px++
+                )
+                    for (let c = 0; c < 3; c++) {
+                        const v = image.data[(py * image.width + px) * 4 + c];
+                        low[c] = Math.min(low[c], v);
+                        high[c] = Math.max(high[c], v);
+                    }
+            edges[y * cols + x] = high.some((v, c) => v - low[c] > 24) ? 1 : 0;
+        }
+    for (let y = 0; y < rows; y++)
+        for (let x = 0; x < cols; x++) {
+            const left = x * cell * sx,
+                top = y * cell * sy;
+            const right = Math.min(image.width, (x + 1) * cell) * sx;
+            const bottom = Math.min(image.height, (y + 1) * cell) * sy;
+            const inside = rects.some(
+                (r) =>
+                    left >= r.x &&
+                    top >= r.y &&
+                    right <= r.x + r.width &&
+                    bottom <= r.y + r.height,
+            );
+            const exempt = unprotected.some(
+                (r) =>
+                    left >= r.x &&
+                    top >= r.y &&
+                    right <= r.x + r.width &&
+                    bottom <= r.y + r.height,
+            );
+            let edge = false;
+            for (let dy = -1; dy <= 1; dy++)
+                for (let dx = -1; dx <= 1; dx++)
+                    if (
+                        x + dx >= 0 &&
+                        x + dx < cols &&
+                        y + dy >= 0 &&
+                        y + dy < rows &&
+                        edges[(y + dy) * cols + x + dx]
+                    )
+                        edge = true;
+            mask[y * cols + x] = !inside || (!exempt && edge) ? 1 : 0;
+        }
+    const result: PixelRect[] = [];
+    for (let n = 0; n < limit; n++) {
+        const heights = new Uint16Array(cols);
+        let best: number[] | undefined,
+            bestArea = 0;
+        for (let y = 0; y < rows; y++) {
+            const stack: [number, number][] = [];
+            for (let x = 0; x <= cols; x++) {
+                const h = x === cols || mask[y * cols + x] ? 0 : heights[x] + 1;
+                if (x < cols) heights[x] = h;
+                let start = x;
+                while (stack.length && stack.at(-1)![1] > h) {
+                    const [left, tall] = stack.pop()!,
+                        wide = x - left;
+                    if (wide >= 4 && tall >= 4 && wide * tall > bestArea) {
+                        best = [left, y - tall + 1, wide, tall];
+                        bestArea = wide * tall;
+                    }
+                    start = left;
+                }
+                if (h && (!stack.length || stack.at(-1)![1] < h))
+                    stack.push([start, h]);
+            }
+        }
+        if (!best) break;
+        const [left, top, wide, tall] = best;
+        const x = Math.ceil(left * cell * sx),
+            y = Math.ceil(top * cell * sy);
+        result.push({
+            x,
+            y,
+            width:
+                Math.floor(Math.min(image.width, (left + wide) * cell) * sx) -
+                x,
+            height:
+                Math.floor(Math.min(image.height, (top + tall) * cell) * sy) -
+                y,
+        });
+        for (let row = top; row < top + tall; row++)
+            mask.fill(1, row * cols + left, row * cols + left + wide);
+    }
+    return result;
+}
 export const whiteboardDefaults: WhiteboardSettings = {
     enabled: true,
     maxRects: 5,

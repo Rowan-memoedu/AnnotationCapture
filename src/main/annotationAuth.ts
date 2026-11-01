@@ -1,5 +1,10 @@
+import { createHash } from "node:crypto";
 import type { LoginSession, LoginState } from "../../lib/annotation";
-import { type WhiteboardSettings, whiteboardRects } from "../../lib/whiteboard";
+import {
+    type WhiteboardDetection,
+    type WhiteboardSettings,
+    whiteboardRects,
+} from "../../lib/whiteboard";
 import type { AnnotationConfig } from "./annotationConfig";
 import { type FormulaProvider, normalizeOutput } from "./formulaProvider";
 
@@ -15,6 +20,10 @@ type SessionStore = Pick<
 export class AnnotationAuth {
     private state: LoginState;
     private loginRevision = 0;
+    private whitespaceCache = new Map<
+        string,
+        { expires: number; result: Promise<WhiteboardDetection> }
+    >();
     constructor(
         private config: SessionStore,
         private changed: () => void,
@@ -164,27 +173,67 @@ export class AnnotationAuth {
     ) {
         const session = this.config.session();
         if (!session) throw new Error("请先使用邀请码登录");
-        const response = await this.request(`${this.baseUrl}/whitespace`, {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${session.token}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ png, options }),
-            signal,
-            redirect: "error",
-        });
-        if (this.config.session()?.token !== session.token)
-            throw new Error("登录状态已变化");
-        if (!response.ok)
-            throw new Error(
-                `空白区域识别暂时不可用（HTTP ${response.status}），将使用中央白板`,
+        signal.throwIfAborted();
+        const key = createHash("sha256")
+            .update(session.token)
+            .update(JSON.stringify(options))
+            .update(png)
+            .digest("hex");
+        for (const [id, entry] of this.whitespaceCache) {
+            if (entry.expires <= Date.now()) this.whitespaceCache.delete(id);
+        }
+        let entry = this.whitespaceCache.get(key);
+        if (!entry) {
+            while (this.whitespaceCache.size >= 8)
+                this.whitespaceCache.delete(
+                    this.whitespaceCache.keys().next().value!,
+                );
+            const result = this.request(`${this.baseUrl}/whitespace`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${session.token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ png, options }),
+                signal: AbortSignal.timeout(12_000),
+                redirect: "error",
+            }).then(async (response) => {
+                if (!response.ok)
+                    throw new Error(
+                        `空白区域识别暂时不可用（HTTP ${response.status}），将使用中央白板`,
+                    );
+                const value = (await response.json()) as WhiteboardDetection;
+                if (this.config.session()?.token !== session.token)
+                    throw new Error("登录状态已变化");
+                whiteboardRects(value.rects, options.maxRects, 10000, 10000);
+                if (value.unprotected)
+                    whiteboardRects(value.unprotected, 20, 10000, 10000);
+                return value;
+            });
+            entry = { expires: Date.now() + 60_000, result };
+            this.whitespaceCache.set(key, entry);
+            void result.catch(() => {
+                this.whitespaceCache.delete(key);
+            });
+        }
+        // Leaving a capture cancels its listener, while the bounded request can
+        // finish once and serve an immediate return to the same page.
+        return new Promise<WhiteboardDetection>((resolve, reject) => {
+            const abort = () => reject(signal.reason);
+            signal.addEventListener("abort", abort, { once: true });
+            entry.result.then(
+                (value) => {
+                    signal.removeEventListener("abort", abort);
+                    if (this.config.session()?.token !== session.token)
+                        reject(new Error("登录状态已变化"));
+                    else resolve(value);
+                },
+                (error) => {
+                    signal.removeEventListener("abort", abort);
+                    reject(error);
+                },
             );
-        const value = (await response.json()) as { rects?: unknown };
-        whiteboardRects(value.rects, options.maxRects, 10000, 10000);
-        return {
-            rects: value.rects as import("../../lib/annotation").PixelRect[],
-        };
+        });
     }
     provider(): FormulaProvider | null {
         if (!this.config.session()) return null;

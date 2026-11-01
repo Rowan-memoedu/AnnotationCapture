@@ -79,7 +79,11 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
     assert.equal(JSON.parse(fs.readFileSync(path.join(data, 'annotation-settings.json'))).whiteboard.enabled, false);
     checks.push('default settings and disabled preference persist');
     let page = await open();
+    assert.equal(await page.locator('#draw_main > #ac-whiteboard').count(), 1);
+    assert.equal(await page.locator('#ac-completion #ac-whiteboard').count(), 0);
     await page.locator('#ac-whiteboard').click();
+    assert.equal(await page.locator('#ac-whiteboard-adjust').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('#ac-whiteboard-adjust').innerText(), '完成调整');
     let objects = await checkpoint(page), b = boards(objects)[0];
     assert.equal(b.acFixed, false); assert.equal(b.fill, 'white'); assert.equal(b.strokeWidth, 0);
     assert.equal(await app.evaluate(() => globalThis.boardFixture.calls), 0);
@@ -87,6 +91,7 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
     await page.waitForFunction(() => document.querySelector('#ac-capture-status').textContent.includes('白板上没有笔迹'));
     assert.equal(await app.evaluate(() => globalThis.boardFixture.inputs.length), 0);
     const center = await point(page, b.left + b.width / 2, b.top + b.height / 2);
+    await page.locator('#ac-whiteboard-adjust').click();
     await stroke(page, [center[0] - 50, center[1]], [center[0] + 50, center[1] + 20]);
     const ink = (await checkpoint(page)).filter(o => !o.acWhiteboard);
     await page.locator('#ac-whiteboard-adjust').click();
@@ -97,15 +102,15 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
     assert.ok(moved.left > b.left, 'board moves');
     assert.deepEqual(objects.filter(o => !o.acWhiteboard), ink, 'ink does not move with board');
     // Midpoint adjusts only width, corner adjusts both axes, using real Fabric controls.
-    for (const kind of ['edge', 'corner']) {
+    for (const kind of ['edge', 'border', 'corner']) {
         b = boards(await checkpoint(page))[0];
         await page.locator('#ac-whiteboard-adjust').click();
-        const handle = await point(page, b.left + b.width, b.top + (kind === 'edge' ? b.height / 2 : b.height));
+        const handle = await point(page, b.left + b.width, b.top + (kind === 'edge' ? b.height / 2 : kind === 'border' ? b.height * .3 : b.height));
         await stroke(page, [handle[0] + 5, handle[1]], [handle[0] - 50, handle[1] - (kind === 'corner' ? 35 : 0)]);
         await page.locator('#ac-whiteboard-adjust').click();
         moved = boards(await checkpoint(page))[0];
         assert.ok(moved.width < b.width, `${kind} control changes width with enlarged hit area`);
-        if (kind === 'edge') assert.equal(moved.height, b.height); else assert.ok(moved.height < b.height);
+        if (kind !== 'corner') assert.equal(moved.height, b.height); else assert.ok(moved.height < b.height);
     }
     checks.push('manual board moves and eight-point controls resize without transforming ink');
     await page.screenshot({ path: path.join(root, 'manual-whiteboard.png') });

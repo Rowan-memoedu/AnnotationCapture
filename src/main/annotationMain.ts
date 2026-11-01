@@ -346,7 +346,7 @@ handle("detectWhitespace", async (png) => {
     whitespaceRequest?.abort();
     const controller = new AbortController();
     whitespaceRequest = controller;
-    const timer = setTimeout(() => controller.abort(), 48_000);
+    const timer = setTimeout(() => controller.abort(), 13_000);
     try {
         return await auth.detectWhitespace(png, settings, controller.signal);
     } finally {

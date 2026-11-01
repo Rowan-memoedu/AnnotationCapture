@@ -1,9 +1,13 @@
 import { button, p, view } from "dkh-ui";
-import { type Canvas, FabricObject, Rect } from "fabric";
+import { type Canvas, Control, FabricObject, Point, Rect } from "fabric";
 import type { PixelRect, PublicConfig } from "../../../lib/annotation";
 import { invoke } from "../../../lib/annotationIpc";
 import { t } from "../../../lib/translate/translate";
-import { intersectRect, whiteboardRects } from "../../../lib/whiteboard";
+import {
+    intersectRect,
+    refineWhiteboardRects,
+    whiteboardRects,
+} from "../../../lib/whiteboard";
 
 type Board = Rect & { acWhiteboard: true; acFixed: boolean };
 FabricObject.customProperties = [
@@ -66,9 +70,13 @@ export function installWhiteboard(
         role: "status",
         ariaLive: "polite",
     });
-    const create = button(t("快速白板"))
-        .class("ac-button")
-        .attr({ id: "ac-whiteboard", title: t("在页面上创建白色书写区域") });
+    const create = button(t("白板"))
+        .class("ac-formula-tool", "ac-whiteboard-tool")
+        .attr({
+            id: "ac-whiteboard",
+            ariaLabel: t("快速白板"),
+            title: t("在页面上创建白色书写区域"),
+        });
     const adjust = button(t("调整白板"))
         .class("ac-button")
         .attr({ id: "ac-whiteboard-adjust", hidden: true });
@@ -82,12 +90,15 @@ export function installWhiteboard(
     const group = view("x")
         .class("ac-toolbar-group")
         .attr({ id: "ac-whiteboard-tools" })
-        .add([create, adjust, remove, ocr, hint]);
+        .add([adjust, remove, ocr, hint]);
+    document.querySelector("#ac-formula-pen")!.after(create.el);
     document.querySelector("#ac-completion")!.append(group.el);
 
     function sync() {
         const items = boards();
         create.el.disabled = items.length > 0;
+        create.el.dataset.state = items.length ? "success" : detection;
+        create.el.setAttribute("aria-pressed", String(items.length > 0));
         adjust.el.hidden = !items.some((b) => !b.acFixed);
         remove.el.hidden = ocr.el.hidden = items.length === 0;
         adjust.el.textContent = t(editing ? "完成调整" : "调整白板");
@@ -167,12 +178,9 @@ export function installWhiteboard(
         canvas.requestRenderAll();
         history();
         sync();
+        if (!fixed) startEditing();
     });
-    adjust.on("click", () => {
-        if (editing) {
-            pencil();
-            return;
-        }
+    function startEditing() {
         select();
         editing = true;
         uniformScaling = canvas.uniformScaling;
@@ -192,6 +200,33 @@ export function installWhiteboard(
             cornerStrokeColor: "#2b78e4",
             borderColor: "#2b78e4",
         });
+        b.controls = { ...b.controls };
+        for (const name of ["ml", "mr", "mt", "mb"]) {
+            const horizontal = name === "mt" || name === "mb";
+            const control = new Control({ ...b.controls[name] });
+            control.calcCornerCoords = (_angle, size, x, y, touch) => {
+                const hit = (touch ? 32 : 18) / scale;
+                const width = horizontal
+                    ? Math.max(
+                          hit,
+                          b.getScaledWidth() * canvas.getZoom() - 2 * size,
+                      )
+                    : hit;
+                const height = horizontal
+                    ? hit
+                    : Math.max(
+                          hit,
+                          b.getScaledHeight() * canvas.getZoom() - 2 * size,
+                      );
+                return {
+                    tl: new Point(x - width / 2, y - height / 2),
+                    tr: new Point(x + width / 2, y - height / 2),
+                    bl: new Point(x - width / 2, y + height / 2),
+                    br: new Point(x + width / 2, y + height / 2),
+                };
+            };
+            b.controls[name] = control;
+        }
         b.setCoords();
         canvas.setActiveObject(b);
         canvas.requestRenderAll();
@@ -199,6 +234,10 @@ export function installWhiteboard(
             "拖动白板移动；角点调整宽高，边点调整单轴。笔迹保持原位。",
         );
         sync();
+    }
+    adjust.on("click", () => {
+        if (editing) pencil();
+        else startEditing();
     });
     remove.on("click", () => {
         pencil();
@@ -250,7 +289,7 @@ export function installWhiteboard(
             const preview = document.createElement("canvas");
             const scale = Math.min(
                 1,
-                1600 / Math.max(source.width, source.height),
+                1024 / Math.max(source.width, source.height),
             );
             preview.width = Math.round(source.width * scale);
             preview.height = Math.round(source.height * scale);
@@ -267,6 +306,21 @@ export function installWhiteboard(
                 config.whiteboard.maxRects,
                 source.width,
                 source.height,
+            );
+            candidates = refineWhiteboardRects(
+                candidates,
+                preview
+                    .getContext("2d")!
+                    .getImageData(0, 0, preview.width, preview.height),
+                source.width,
+                source.height,
+                (result.unprotected || []).map((r) => ({
+                    x: r.x * source.width,
+                    y: r.y * source.height,
+                    width: r.width * source.width,
+                    height: r.height * source.height,
+                })),
+                config.whiteboard.maxRects,
             );
             detection = "ready";
             if (!boards().length)
