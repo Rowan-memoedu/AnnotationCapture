@@ -34,7 +34,7 @@ let app;const errors=[];
 (async () => {
     assert.ok(process.env.ANNOTATION_INVITE_FILE, 'Private invitation file is required');
     const invitation=JSON.parse(fs.readFileSync(process.env.ANNOTATION_INVITE_FILE,'utf8'));
-    prepareProfile(data);
+    prepareProfile(data, { whiteboard: { enabled: false } });
     app = await _electron.launch({ executablePath: process.env.ANNOTATION_EXE || path.resolve('node_modules/electron/dist/electron.exe'), cwd: process.env.ANNOTATION_EXE ? path.dirname(process.env.ANNOTATION_EXE) : process.cwd(), args: [...(process.env.ANNOTATION_EXE ? [] : ['.']), '--userData', data, '--archiveRoot', path.join(data, 'Archive'), '--testMode'], env: { ...process.env, ...(process.env.ANNOTATION_EXE ? { PATH: `${process.env.SystemRoot}/System32;${process.env.SystemRoot}`, NODE_PATH:'',NODE_OPTIONS:'' } : {}) }, timeout: 30000 });
     app.on('window',page=>page.on('pageerror',e=>errors.push(String(e))));
     const panel = await app.firstWindow(); await panel.waitForSelector('#ac-save-settings');

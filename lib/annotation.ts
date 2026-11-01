@@ -1,3 +1,4 @@
+import type { WhiteboardSettings } from "./whiteboard";
 export type PixelRect = { x: number; y: number; width: number; height: number };
 export type CaptureMode = "region" | "full" | "ocr";
 export type FormulaFont = "stix2" | "newcm";
@@ -62,6 +63,7 @@ export type FormulaResult = {
     durationMs?: number;
 };
 export type PublicConfig = {
+    whiteboard: WhiteboardSettings;
     archiveRoot: string;
     shortcut: string;
     fullShortcut: string;
@@ -86,6 +88,7 @@ export type LoginState = {
     message: string;
 };
 export type ConfigInput = {
+    whiteboard?: WhiteboardSettings;
     archiveRoot: string;
     shortcut: string;
     fullShortcut: string;
@@ -142,6 +145,8 @@ export function selectedRect(
 }
 
 export type AnnotationMessages = {
+    detectWhitespace: (png: string) => { rects: PixelRect[] };
+    captureVisibility: (visible: boolean) => void;
     checkUpdates: () => UpdateState;
     installUpdate: () => UpdateState;
     setAutoUpdate: (enabled: boolean) => UpdateState;

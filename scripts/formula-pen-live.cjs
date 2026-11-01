@@ -2,7 +2,7 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const {_electron}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const {prepareProfile,isolateWindow}=require('./acceptance-window.cjs');
 const root=process.env.ANNOTATION_EVIDENCE||'D:/Artifacts/AnnotationCapture/formula-phase/live';fs.mkdirSync(root,{recursive:true});
-const data=path.join(root,`profile-${Date.now()}`);prepareProfile(data);
+const data=path.join(root,`profile-${Date.now()}`);prepareProfile(data,{whiteboard:{enabled:false}});
 const cases=[
  {name:'polynomial',font:'stix2',expected:'x^2+1=0',strokes:[[[430,350],[475,405]],[[430,405],[475,350]],[[489,328],[494,320],[509,320],[517,328],[516,335],[489,351],[518,351]],[[550,378],[590,378]],[[570,358],[570,398]],[[620,365],[632,352],[632,404]],[[620,405],[646,405]],[[680,367],[724,367]],[[680,388],[724,388]],[[769,351],[751,356],[744,375],[747,395],[762,405],[778,400],[786,380],[782,360],[769,351]]]},
  {name:'root',font:'newcm',expected:'\\sqrt{x+1}',strokes:[[[430,371],[444,357],[458,405],[484,325],[680,325]],[[505,347],[545,397]],[[505,397],[545,347]],[[565,372],[605,372]],[[585,352],[585,392]],[[630,360],[643,347],[643,397]],[[630,398],[657,398]]]},

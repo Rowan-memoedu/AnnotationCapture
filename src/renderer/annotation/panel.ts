@@ -65,6 +65,60 @@ const showMagnifier = input("checkbox").attr({
     id: "ac-show-magnifier",
     ariaLabel: t("批注时显示放大框"),
 });
+const whiteboardEnabled = input("checkbox").attr({
+    id: "ac-whiteboard-enabled",
+});
+const whiteboardTaskbar = input("checkbox").attr({
+    id: "ac-whiteboard-taskbar",
+});
+const whiteboardChrome = input("checkbox").attr({ id: "ac-whiteboard-chrome" });
+const whiteboardLimit = input("number")
+    .class("ac-field")
+    .attr({
+        id: "ac-whiteboard-limit",
+        min: "1",
+        max: "20",
+        step: "1",
+        ariaLabel: t("白板矩形数量上限"),
+    });
+const whiteboardOptions = view("y")
+    .class("ac-pressure-settings")
+    .attr({ id: "ac-whiteboard-settings" })
+    .add([
+        ele("h3").add(t("快速白板")),
+        ele("label")
+            .class("ac-pressure-toggle")
+            .add([whiteboardEnabled, t("自动识别页面空白区域")]),
+        p(
+            t(
+                "开启后，全屏批注开始时会将当前页面截图发送至统一识别服务。关闭后仅使用中央白板。",
+            ),
+        ),
+        ele("label")
+            .class("ac-pressure-toggle")
+            .add([whiteboardTaskbar, t("允许覆盖电脑任务栏")]),
+        ele("label")
+            .class("ac-pressure-toggle")
+            .add([whiteboardChrome, t("允许覆盖窗口顶部信息和窗口按钮")]),
+        ele("label")
+            .attr({ htmlFor: "ac-whiteboard-limit" })
+            .add(t("白板矩形数量上限")),
+        whiteboardLimit,
+        p(
+            t(
+                "默认最多 5 块，可设为 1–20；检测未完成或不可用时立即使用中央白板。",
+            ),
+        ),
+    ]);
+function updateWhiteboardSettings() {
+    for (const control of [
+        whiteboardTaskbar.el,
+        whiteboardChrome.el,
+        whiteboardLimit.el,
+    ])
+        control.disabled = !whiteboardEnabled.el.checked;
+}
+whiteboardEnabled.on("change", updateWhiteboardSettings);
 const penWidth = input("number")
     .class("ac-field")
     .attr({
@@ -338,9 +392,10 @@ root.add([
                 .add([showMagnifier, t("批注时显示放大框")]),
             p(t("默认识别输出格式")),
             outputFormat,
+            whiteboardOptions,
             p(
                 t(
-                    "仅主动选择识别时发送公式笔迹图。完整截图保存在本机，登录凭据由 Windows 加密保存。",
+                    "公式识别仅发送选区或白板内的批注笔迹。自动空白识别开启时会另行发送页面截图；登录凭据由 Windows 加密保存。",
                 ),
             ),
             view("x")
@@ -369,6 +424,14 @@ root.add([
                         pressureHint.el.textContent = t("正在保存…");
                         try {
                             await invoke("configure", {
+                                whiteboard: {
+                                    enabled: whiteboardEnabled.el.checked,
+                                    maxRects: whiteboardLimit.el.valueAsNumber,
+                                    includeTaskbar:
+                                        whiteboardTaskbar.el.checked,
+                                    includeWindowChrome:
+                                        whiteboardChrome.el.checked,
+                                },
                                 archiveRoot: archivePath.el.value,
                                 archiveRetentionDays:
                                     retentionDays.el.valueAsNumber,
@@ -517,6 +580,12 @@ async function refresh(settings = false) {
     installUpdateButton.el.style.display =
         state.update.phase === "ready" ? "" : "none";
     if (settings) {
+        whiteboardEnabled.el.checked = state.config.whiteboard.enabled;
+        whiteboardTaskbar.el.checked = state.config.whiteboard.includeTaskbar;
+        whiteboardChrome.el.checked =
+            state.config.whiteboard.includeWindowChrome;
+        whiteboardLimit.el.value = String(state.config.whiteboard.maxRects);
+        updateWhiteboardSettings();
         archivePath.el.value = state.config.archiveRoot;
         retentionDays.el.value = String(state.config.archiveRetentionDays);
         shortcut.el.value = state.config.shortcut;

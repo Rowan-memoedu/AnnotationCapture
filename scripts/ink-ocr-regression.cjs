@@ -16,7 +16,7 @@ async function stroke(page,points){
 }
 (async()=>{
  for(const scenario of [{name:'normal-pen',mode:'full',formula:false},{name:'formula-pen',mode:'full',formula:true},{name:'free-capture',mode:'region',formula:true}].filter(s=>!process.env.ANNOTATION_INK_SCENARIO||s.name===process.env.ANNOTATION_INK_SCENARIO)){
-  const data=path.join(root,scenario.name+'-'+Date.now());prepareProfile(data,{penColor:'#ff0000',penWidth:7});
+  const data=path.join(root,scenario.name+'-'+Date.now());prepareProfile(data,{penColor:'#ff0000',penWidth:7,whiteboard:{enabled:false}});
   fs.writeFileSync(path.join(data,'config.json'),JSON.stringify({'图像编辑':{'记忆':{select:'free',draw:'free',shape:'arrow',filter:'pixelate'}}}));
   app=await _electron.launch({executablePath:process.env.ANNOTATION_EXE||path.resolve('node_modules/electron/dist/electron.exe'),args:[...(process.env.ANNOTATION_EXE?[]:['.']),'--userData',data,'--testMode'],timeout:30000});
   const panel=await app.firstWindow();await panel.waitForSelector('#ac-save-settings');await isolateWindow(app,panel);

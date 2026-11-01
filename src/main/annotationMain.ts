@@ -57,6 +57,9 @@ let panel: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let activeCapture = false;
 let captureStarting = false;
+let captureSaving = false;
+let captureReady: Promise<void> | null = null;
+let whitespaceRequest: AbortController | null = null;
 let closing = false;
 let quitting = false;
 let shortcutError = "";
@@ -102,10 +105,66 @@ function showPanel() {
     void load(panel, "annotation.html");
 }
 
+function prepareCaptureWindow() {
+    if (captureWindow && !captureWindow.isDestroyed() && captureReady)
+        return captureReady;
+    const win = new BrowserWindow({
+        ...screen.getPrimaryDisplay().bounds,
+        icon,
+        frame: false,
+        transparent: true,
+        show: false,
+        alwaysOnTop: !args.testMode,
+        skipTaskbar: !args.testMode,
+        fullscreenable: true,
+        resizable: false,
+        minimizable: false,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+            sandbox: false,
+            backgroundThrottling: false,
+        },
+    });
+    captureWindow = win;
+    win.on("close", (event) => {
+        if (activeCapture && !closing) {
+            event.preventDefault();
+            mainSend(win.webContents, "annotation_finish", []);
+        }
+    });
+    win.on("closed", () => {
+        cancelInk();
+        whitespaceRequest?.abort();
+        whitespaceRequest = null;
+        captureWindow = null;
+        captureReady = null;
+        activeCapture = false;
+        captureSaving = false;
+    });
+    win.webContents.on("render-process-gone", () => {
+        activeCapture = false;
+        win.destroy();
+        showPanel();
+        dialog.showErrorBox(
+            "批注窗口异常退出",
+            "本次尚未完成归档的批注可能丢失；已归档图片仍保留。",
+        );
+    });
+    captureReady = load(win, "capture.html");
+    return captureReady;
+}
+function prewarmCapture() {
+    if (quitting || (args.testMode && !args.warmCapture)) return;
+    void prepareCaptureWindow().catch(() => {
+        captureWindow?.destroy();
+        captureReady = null;
+    });
+}
 async function capture(imagePath?: string, mode: CaptureMode = "region") {
-    if (updater?.installing) return;
+    if (updater?.installing || captureSaving) return;
     if (activeCapture || captureStarting) {
-        showCaptureWindow();
+        if (activeCapture) showCaptureWindow();
         return;
     }
     captureStarting = true;
@@ -114,45 +173,9 @@ async function capture(imagePath?: string, mode: CaptureMode = "region") {
         const display = screen.getDisplayNearestPoint(
             screen.getCursorScreenPoint(),
         );
-        const win = new BrowserWindow({
-            ...display.bounds,
-            icon,
-            frame: false,
-            transparent: true,
-            show: false,
-            alwaysOnTop: !args.testMode,
-            skipTaskbar: !args.testMode,
-            fullscreenable: true,
-            resizable: false,
-            minimizable: false,
-            webPreferences: {
-                nodeIntegration: true,
-                contextIsolation: false,
-                sandbox: false,
-            },
-        });
-        captureWindow = win;
-        win.on("close", (event) => {
-            if (activeCapture && !closing) {
-                event.preventDefault();
-                mainSend(win.webContents, "annotation_finish", []);
-            }
-        });
-        win.on("closed", () => {
-            cancelInk();
-            captureWindow = null;
-            activeCapture = false;
-        });
-        win.webContents.on("render-process-gone", () => {
-            activeCapture = false;
-            win.destroy();
-            showPanel();
-            dialog.showErrorBox(
-                "批注窗口异常退出",
-                "本次尚未完成归档的批注可能丢失；已归档图片仍保留。",
-            );
-        });
-        await load(win, "capture.html");
+        await prepareCaptureWindow();
+        const win = captureWindow!;
+        win.setBounds(display.bounds);
         activeCapture = true;
         mainSend(win.webContents, "clip_init", [
             screen.getAllDisplays(),
@@ -162,6 +185,8 @@ async function capture(imagePath?: string, mode: CaptureMode = "region") {
             mode,
         ]);
     } catch (error) {
+        activeCapture = false;
+        captureWindow?.destroy();
         showPanel();
         dialog.showErrorBox("无法开始截图", String(error));
     } finally {
@@ -173,6 +198,9 @@ function finishCapture() {
     cancelInk();
     activeCapture = false;
     closing = true;
+    captureWindow?.once("closed", () => {
+        if (!quitting) prewarmCapture();
+    });
     captureWindow?.close();
     closing = false;
     if (quitting) app.quit();
@@ -262,6 +290,7 @@ mainOn("runPath", () => runPath);
 mainOn("userDataPath", () => dataRoot);
 mainOn("systemLan", () => "zh-HANS");
 function showCaptureWindow() {
+    if (captureSaving) return;
     const win = captureWindow;
     if (!win || win.isDestroyed()) return;
     if (win.isMinimized()) win.restore();
@@ -296,6 +325,35 @@ mainOn("save_file_path", ([ext]) =>
     join(config.public().archiveRoot, `capture-${Date.now()}.${ext}`),
 );
 mainOn("ok_save", () => {});
+handle("captureVisibility", (visible) => {
+    captureSaving = !visible;
+    if (visible) {
+        quitting = false;
+        showCaptureWindow();
+    } else {
+        whitespaceRequest?.abort();
+        captureWindow?.hide();
+    }
+});
+handle("detectWhitespace", async (png) => {
+    const settings = config.public().whiteboard;
+    if (!settings.enabled || !activeCapture || captureSaving)
+        return { rects: [] };
+    const image = nativeImage.createFromBuffer(decodePng(png));
+    const size = image.getSize();
+    if (image.isEmpty() || size.width > 1600 || size.height > 1600)
+        throw new Error("页面预览无效");
+    whitespaceRequest?.abort();
+    const controller = new AbortController();
+    whitespaceRequest = controller;
+    const timer = setTimeout(() => controller.abort(), 48_000);
+    try {
+        return await auth.detectWhitespace(png, settings, controller.signal);
+    } finally {
+        clearTimeout(timer);
+        if (whitespaceRequest === controller) whitespaceRequest = null;
+    }
+});
 
 handle("screenshots", async () => {
     const displays = screen.getAllDisplays();
@@ -553,5 +611,6 @@ else {
         updater.start();
         retention.start();
         void auth.refresh();
+        setTimeout(prewarmCapture, 0);
     });
 }

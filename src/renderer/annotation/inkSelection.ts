@@ -11,6 +11,7 @@ import type { LassoRule } from "../../../lib/annotation";
 import { t } from "../../../lib/translate/translate";
 import { type Position, polylineMatchesLasso } from "./lassoGeometry";
 import { isPressurePath } from "./pressureInk";
+import { isWhiteboard } from "./whiteboard";
 
 export function installInkSelection(
     canvas: Canvas,
@@ -196,7 +197,12 @@ export function installInkSelection(
         }
         const objects = canvas
             .getObjects()
-            .filter((object) => object.selectable && matches(object));
+            .filter(
+                (object) =>
+                    !isWhiteboard(object) &&
+                    object.selectable &&
+                    matches(object),
+            );
         polygon = [];
         if (!objects.length) return;
         if (mode === "erase") {

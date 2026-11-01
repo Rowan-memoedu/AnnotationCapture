@@ -87,6 +87,19 @@ export function annotationStyles() {
         },
         ".ac-error": { color: "var(--ac-error-color)" },
         ".ac-success": { color: "var(--ac-success-color)" },
+        "#ac-whiteboard-tools[data-state='loading'] #ac-whiteboard-status": {
+            color: "var(--ac-toolbar-muted)",
+        },
+        "#ac-whiteboard-tools[data-state='error'] #ac-whiteboard-status": {
+            color: "var(--ac-error-color)",
+        },
+        "#ac-whiteboard-tools[data-state='success'] #ac-whiteboard-status": {
+            color: "var(--ac-success-color)",
+        },
+        "#ac-whiteboard-adjust[aria-pressed='true']": {
+            outline: "2px solid var(--ac-focus-color)",
+        },
+        "#ac-whiteboard-status": { maxWidth: "360px", whiteSpace: "normal" },
         ".ac-overlay": {
             position: "fixed",
             inset: "0",

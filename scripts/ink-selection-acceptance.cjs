@@ -47,6 +47,17 @@ async function finish(page) {
 }
 const loop = [[320, 270], [480, 275], [470, 390], [310, 380], [320, 270]];
 const image = page => page.locator('#draw_photo').evaluate(c => c.toDataURL());
+async function discardSelectionForGeometry(page) {
+    // Export deselects the group. Compare the same render state at fractional DPI,
+    // without writing the user's clipboard during this geometry-only check.
+    await page.evaluate(() => { window.geometryCopyDone = false; window.geometryOriginalWrite = navigator.clipboard.write; navigator.clipboard.write = async () => { window.geometryCopyDone = true; }; });
+    try {
+        await page.locator('#tool_copy').click();
+        await page.waitForFunction(() => window.geometryCopyDone);
+    } finally {
+        await page.evaluate(() => { navigator.clipboard.write = window.geometryOriginalWrite; delete window.geometryOriginalWrite; delete window.geometryCopyDone; });
+    }
+}
 const inkPixels = page => page.locator('#draw_photo').evaluate(c => {
     const copy = document.createElement('canvas'); copy.width = c.width; copy.height = c.height;
     const ctx = copy.getContext('2d'); ctx.drawImage(c, 0, 0);
@@ -156,6 +167,7 @@ async function select(page) {
         await stroke(page, [[600, 320], [680, 380]]);
         await select(page);
         await stroke(page, [[380, 327], [480, 407]]);
+        await discardSelectionForGeometry(page);
         const moved = await inkPixels(page);
         await page.keyboard.press('Control+z'); await delay(150); assert.ok(await inkPixels(page) !== moved, 'Undo should restore original stroke positions');
         await page.keyboard.press('Control+y'); await delay(150);

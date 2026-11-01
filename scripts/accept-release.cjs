@@ -5,6 +5,7 @@ const { pipeline } = require('node:stream/promises');
 const { spawnSync } = require('node:child_process');
 const yauzl = require('yauzl');
 const { version } = require('../package.json');
+const { stopPackagedTest } = require('./acceptance-window.cjs');
 
 const artifacts = process.env.ANNOTATION_ARTIFACTS || 'D:/Artifacts/AnnotationCapture';
 const zipPath = path.join(artifacts, 'release', `AnnotationCapture-${version}-windows-x64.zip`);
@@ -50,6 +51,9 @@ async function extract() {
         { script: 'portable-smoke' },
         { script: 'shortcuts-acceptance' },
         { script: 'settings-acceptance' },
+        ...['1','1.5','2'].map(scale=>({script:'whiteboard-acceptance',scale})),
+        { script: 'capture-latency-acceptance' },
+        ...(process.env.ANNOTATION_INVITE_FILE ? [{script:'whiteboard-live'}] : []),
         ...['1','1.5','2'].map(scale=>({script:'pressure-acceptance',scale})),
         { script: 'retention-acceptance' },
         { script: 'ink-ocr-regression' },
@@ -74,11 +78,12 @@ async function extract() {
         console.log(`RUN ${task.script}${task.formulaCase ? ` ${task.formulaCase}` : ''}`);
         const result = spawnSync(process.execPath, [path.join(__dirname, `${task.script}.cjs`)], {
             cwd: path.resolve(__dirname, '..'),
-            env: { ...env, ANNOTATION_EVIDENCE:task.script.startsWith('formula-pen')||task.script==='ink-selection-acceptance'||task.script==='pressure-acceptance'?path.join(evidence,task.script+(task.scale?'-'+task.scale:'')):evidence, ANNOTATION_SCALE:task.scale||'', ANNOTATION_OCR_CASE: task.formulaCase || '', ANNOTATION_OCR_FORMAT:task.outputFormat||'latex', ANNOTATION_TEST_CORRECTION: task.formulaCase === 'polynomial' ? '1' : '' },
+            env: { ...env, ANNOTATION_EVIDENCE:task.script.startsWith('formula-pen')||task.script.startsWith('whiteboard')||task.script==='capture-latency-acceptance'||task.script==='ink-selection-acceptance'||task.script==='pressure-acceptance'?path.join(evidence,task.script+(task.scale?'-'+task.scale:'')):evidence, ANNOTATION_SCALE:task.scale||'', ANNOTATION_OCR_CASE: task.formulaCase || '', ANNOTATION_OCR_FORMAT:task.outputFormat||'latex', ANNOTATION_TEST_CORRECTION: task.formulaCase === 'polynomial' ? '1' : '' },
             encoding: 'utf8', timeout: ['ocr-output-acceptance','ink-ocr-regression'].includes(task.script)?360000:180000, windowsHide: true,
         });
         process.stdout.write(result.stdout || ''); process.stderr.write(result.stderr || '');
         checks.push({ ...task, exitCode: result.status, error: result.error?.message });
+        stopPackagedTest(executable);
     }
     const liveProviderTested=!!process.env.ANNOTATION_INVITE_FILE;
     const ocrAccuracy=tasks.filter(t=>t.script==='live-ocr-acceptance').map(t=>{const file=path.join(evidence,`shared-api-${t.outputFormat||'latex'}-${t.formulaCase}-report.json`);const r=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{};return {case:t.formulaCase,format:t.outputFormat||'latex',exactMatch:r.exactMatch,expected:r.expected,actual:r.actual};});

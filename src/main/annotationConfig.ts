@@ -15,8 +15,13 @@ import type {
     PublicConfig,
 } from "../../lib/annotation";
 import { type OutputFormat, outputFormats } from "../../lib/annotation";
+import {
+    type WhiteboardSettings,
+    whiteboardSettings,
+} from "../../lib/whiteboard";
 
 type StoredConfig = {
+    whiteboard: WhiteboardSettings;
     archiveRoot: string;
     shortcut: string;
     fullShortcut: string;
@@ -39,6 +44,7 @@ export class AnnotationConfig {
     constructor(dataRoot: string, archiveRoot: string) {
         this.file = join(dataRoot, "annotation-settings.json");
         this.config = {
+            whiteboard: whiteboardSettings(),
             archiveRoot,
             shortcut: "Control+Alt+S",
             fullShortcut: "Alt+W",
@@ -59,6 +65,7 @@ export class AnnotationConfig {
                 ...JSON.parse(readFileSync(this.file, "utf8")),
             };
         }
+        this.config.whiteboard = whiteboardSettings(this.config.whiteboard);
     }
     session(): LoginSession | null {
         if (!this.config.encryptedSession) return null;
@@ -81,6 +88,7 @@ export class AnnotationConfig {
     }
     public(): PublicConfig {
         return {
+            whiteboard: { ...this.config.whiteboard },
             archiveRoot: this.config.archiveRoot,
             shortcut: this.config.shortcut,
             fullShortcut: this.config.fullShortcut,
@@ -98,6 +106,9 @@ export class AnnotationConfig {
         };
     }
     save(input: ConfigInput): PublicConfig {
+        const whiteboard = whiteboardSettings(
+            input.whiteboard ?? this.config.whiteboard,
+        );
         if (
             input.pressureEnabled !== undefined &&
             typeof input.pressureEnabled !== "boolean"
@@ -161,6 +172,7 @@ export class AnnotationConfig {
             throw new Error("画笔粗细须为 1 到 50");
         const next: StoredConfig = {
             ...this.config,
+            whiteboard,
             archiveRoot: input.archiveRoot,
             shortcut: input.shortcut,
             fullShortcut: input.fullShortcut,

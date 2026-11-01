@@ -36,6 +36,7 @@ import { installInkSelection } from "../annotation/inkSelection";
 import { PressureBrush } from "../annotation/pressureBrush";
 import { isPressurePath, resizePressurePath } from "../annotation/pressureInk";
 import initScreenShots from "../annotation/screenshot";
+import { installWhiteboard, isWhiteboard } from "../annotation/whiteboard";
 import { writeImage, writeText } from "../lib/clipboard";
 import { Class, cssColor, getImgUrl, initStyle, setTitle } from "../root/root";
 
@@ -46,6 +47,7 @@ let showAnnotationMagnifier = false;
 let pressureOptions = { pressureEnabled: true, pressureSensitivity: 50 };
 let formulaInk: ReturnType<typeof installFormulaInk> | undefined;
 let inkSelection: ReturnType<typeof installInkSelection> | undefined;
+let whiteboard: ReturnType<typeof installWhiteboard> | undefined;
 
 import {
     button,
@@ -308,6 +310,7 @@ function toCanvas(canvas: HTMLCanvasElement, img: ImageData) {
 }
 
 async function setScreen(i: (typeof allScreens)[0]) {
+    whiteboard?.invalidate();
     let _img = screenShotCache.get(i.id);
     if (!_img) {
         try {
@@ -325,8 +328,9 @@ async function setScreen(i: (typeof allScreens)[0]) {
     if (!img) return;
     const w = img.width;
     const h = img.height;
-    mainCanvas.width = drawCanvas.width = w;
-    mainCanvas.height = drawCanvas.height = h;
+    mainCanvas.width = w;
+    mainCanvas.height = h;
+    fabricCanvas.setDimensions({ width: w, height: h });
     setClipSize(w, h);
     toCanvas(mainCanvas, img);
     finalRect = [0, 0, mainCanvas.width, mainCanvas.height];
@@ -2499,6 +2503,7 @@ function setEditType<T extends keyof EditType>(
     mainType: T,
     type: EditType[T],
 ): void {
+    whiteboard?.stopEditing();
     inkSelection?.cancel();
     formulaInk?.setActive(false);
     if (!(mainType === "select" && type === "draw")) {
@@ -2721,7 +2726,9 @@ function freeInit() {
 }
 
 function fabricDelete() {
-    const objects = fabricCanvas.getActiveObjects();
+    const objects = fabricCanvas
+        .getActiveObjects()
+        .filter((object) => !isWhiteboard(object));
     if (!objects.length) return;
     fabricCanvas.discardActiveObject();
     for (const o of objects) {
@@ -4215,7 +4222,6 @@ renderOn(
 
         document.body.style.opacity = "";
 
-        renderSend("clip_show", []);
         const screensEl = toolsX.screens.el;
         if (allScreens.length > 1) {
             let minX = 0;
@@ -4273,6 +4279,9 @@ renderOn(
         }, 0);
         rightKey = false;
         changeRightBar(false);
+        document.body.dataset.acReady = "true";
+        renderSend("clip_show", []);
+        void whiteboard?.initialize(config, entryMode === "full");
     },
 );
 
@@ -4908,7 +4917,11 @@ drawSide操作.删除.on("click", () => {
 
 const Filters = filters;
 
-const fabricCanvas = new Canvas("draw_photo", { enablePointerEvents: true });
+const fabricCanvas = new Canvas("draw_photo", {
+    enablePointerEvents: true,
+    // Screenshot coordinates already use physical pixels; avoid scaling them twice.
+    enableRetinaScaling: false,
+});
 
 function cancelPressureStroke() {
     const brush = fabricCanvas.freeDrawingBrush;
@@ -5269,6 +5282,7 @@ const completion = installCompletion(
             width: finalRect[2],
             height: finalRect[3],
             filter: (object) =>
+                !isWhiteboard(object) &&
                 !(object instanceof FabricImage) &&
                 object.type.toLowerCase() !== "mask",
         });
@@ -5282,6 +5296,11 @@ const completion = installCompletion(
                 height: finalRect[3],
             },
             screenId: nowScreenId,
+            whiteboards: whiteboard?.rectangles().map((r) => ({
+                ...r,
+                x: r.x - finalRect[0],
+                y: r.y - finalRect[1],
+            })),
             annotations: {
                 version: 1,
                 canvas: fabricCanvas.toJSON(),
@@ -5303,6 +5322,22 @@ const completion = installCompletion(
 );
 formulaInk = installFormulaInk(fabricCanvas, hisPush, () =>
     setEditType("draw", "free"),
+);
+whiteboard = installWhiteboard(
+    fabricCanvas,
+    mainCanvas,
+    () => ({
+        x: finalRect[0],
+        y: finalRect[1],
+        width: finalRect[2],
+        height: finalRect[3],
+    }),
+    hisPush,
+    () => setEditType("select", "draw"),
+    () => setEditType("draw", "free"),
+    () => {
+        void completion.finish(true);
+    },
 );
 inkSelection = installInkSelection(
     fabricCanvas,

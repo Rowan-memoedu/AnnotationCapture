@@ -10,6 +10,7 @@ import {
 import { invoke } from "../../../lib/annotationIpc";
 import { t } from "../../../lib/translate/translate";
 import { annotationStyles } from "./styles";
+import { maskWhiteboardInk } from "./whiteboard";
 
 export type CaptureSnapshot = {
     composite: HTMLCanvasElement;
@@ -17,6 +18,7 @@ export type CaptureSnapshot = {
     rect: PixelRect;
     screenId: number;
     annotations?: object;
+    whiteboards?: PixelRect[];
 };
 export function installCompletion(
     snapshot: () => Promise<CaptureSnapshot>,
@@ -140,7 +142,14 @@ export function installCompletion(
             .attr({ id: "ac-saving", role: "status" })
             .addInto();
         try {
+            if (!formula || directFormat)
+                await invoke("captureVisibility", false);
             const frozen = await snapshot();
+            const boardImage =
+                formula && frozen.whiteboards?.length
+                    ? maskWhiteboardInk(frozen.ink, frozen.whiteboards)
+                    : null;
+            if (boardImage) await invoke("captureVisibility", false);
             const input: CaptureInput = {
                 id,
                 capturedAt,
@@ -163,6 +172,19 @@ export function installCompletion(
                     },
                     outputFormat: directFormat,
                 });
+            } else if (boardImage) {
+                const { config } = await invoke("state");
+                await invoke("formula", {
+                    archiveId: id,
+                    png: boardImage.toDataURL(),
+                    rect: {
+                        x: 0,
+                        y: 0,
+                        width: boardImage.width,
+                        height: boardImage.height,
+                    },
+                    outputFormat: config.outputFormat,
+                });
             } else if (formula) {
                 selectionOpen = true;
                 await selectFormula(frozen);
@@ -170,6 +192,7 @@ export function installCompletion(
             }
             await rawClose();
         } catch (error) {
+            await invoke("captureVisibility", true);
             blocker.remove();
             status.class("ac-error");
             status.el.textContent = `${t("未能完成，画布已保留：")}${error instanceof Error ? error.message : String(error)}`;

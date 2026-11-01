@@ -99,6 +99,39 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.request("/recognize", {"png": png()})[0], 401)
         self.assertEqual(self.upstream.requests, [])
 
+    def test_whitespace_is_authenticated_and_preferences_reach_the_prompt(self):
+        self.assertEqual(self.request("/whitespace", {"png": png()})[0], 401)
+        self.gateway.provider.extra = {"thinking": {"type": "enabled"}, "reasoning_effort": "low"}
+        token = self.login()
+        rects = [{"x": .1, "y": .2, "width": .4, "height": .3}]
+        self.upstream.content = json.dumps({"rects": rects})
+        for allowed in (True, False):
+            status, value = self.request("/whitespace", {"png": png(), "options": {
+                "maxRects": 3, "includeTaskbar": allowed, "includeWindowChrome": allowed}}, token)
+            self.assertEqual(status, 200)
+            self.assertEqual(value, {"rects": rects})
+            prompt = self.upstream.requests[-1]["body"]["messages"][0]["content"]
+            self.assertIn("at most 3", prompt)
+            self.assertIn("may be covered" if allowed else "must not be covered", prompt)
+            self.assertNotIn(token, prompt)
+            self.assertEqual(self.upstream.requests[-1]["body"]["thinking"], {"type": "enabled"})
+            self.assertEqual(self.upstream.requests[-1]["body"]["reasoning_effort"], "low")
+            self.assertEqual(self.upstream.requests[-1]["body"]["max_tokens"], 8192)
+        self.assertEqual(self.gateway.provider.extra, {"thinking": {"type": "enabled"}, "reasoning_effort": "low"})
+
+    def test_whitespace_rejects_bad_options_and_model_coordinates(self):
+        token = self.login()
+        for options in ({"maxRects": 0}, {"maxRects": True}, {"maxRects": 21}, {"includeTaskbar": "yes"}):
+            self.assertEqual(self.request("/whitespace", {"png": png(), "options": options}, token)[0], 400)
+        self.assertEqual(len(self.upstream.requests), 0)
+        for rects in ([{"x": .9, "y": 0, "width": .2, "height": .5}],
+                      [{"x": 0, "y": 0, "width": float("nan"), "height": .5}],
+                      [{"x": 0, "y": 0, "width": .5, "height": .5}] * 6):
+            self.upstream.content = json.dumps({"rects": rects})
+            self.assertEqual(self.request("/whitespace", {"png": png()}, token)[0], 400)
+        self.upstream.content = '{"rects": []}'
+        self.assertEqual(self.request("/whitespace", {"png": png()}, token), (200, {"rects": []}))
+
     def test_only_provider_receives_shared_key_and_only_formula_is_sent(self):
         token = self.login()
         status, value = self.request("/recognize", {"png": png()}, token)

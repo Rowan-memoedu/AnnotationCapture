@@ -1,4 +1,5 @@
 import type { LoginSession, LoginState } from "../../lib/annotation";
+import { type WhiteboardSettings, whiteboardRects } from "../../lib/whiteboard";
 import type { AnnotationConfig } from "./annotationConfig";
 import { type FormulaProvider, normalizeOutput } from "./formulaProvider";
 
@@ -155,6 +156,35 @@ export class AnnotationAuth {
         }
         this.changed();
         return this.public();
+    }
+    async detectWhitespace(
+        png: string,
+        options: WhiteboardSettings,
+        signal: AbortSignal,
+    ) {
+        const session = this.config.session();
+        if (!session) throw new Error("请先使用邀请码登录");
+        const response = await this.request(`${this.baseUrl}/whitespace`, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${session.token}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ png, options }),
+            signal,
+            redirect: "error",
+        });
+        if (this.config.session()?.token !== session.token)
+            throw new Error("登录状态已变化");
+        if (!response.ok)
+            throw new Error(
+                `空白区域识别暂时不可用（HTTP ${response.status}），将使用中央白板`,
+            );
+        const value = (await response.json()) as { rects?: unknown };
+        whiteboardRects(value.rects, options.maxRects, 10000, 10000);
+        return {
+            rects: value.rects as import("../../lib/annotation").PixelRect[],
+        };
     }
     provider(): FormulaProvider | null {
         if (!this.config.session()) return null;

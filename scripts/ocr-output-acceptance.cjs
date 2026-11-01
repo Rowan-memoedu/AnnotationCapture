@@ -2,7 +2,7 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const {_electron}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const {prepareProfile,isolateWindow}=require('./acceptance-window.cjs');
 const root=process.env.ANNOTATION_EVIDENCE||'D:/Artifacts/AnnotationCapture/output-acceptance';
-const data=path.join(root,`output-profile-${Date.now()}`);prepareProfile(data);
+const data=path.join(root,`output-profile-${Date.now()}`);prepareProfile(data,{whiteboard:{enabled:false}});
 const exe=process.env.ANNOTATION_EXE||path.resolve('node_modules/electron/dist/electron.exe');
 const baseArgs=[...(process.env.ANNOTATION_EXE?[]:['.']),'--userData',data,'--testMode'];
 const prior=process.env.ANNOTATION_RESUME_OUTPUT==='1'&&fs.existsSync(path.join(root,'ocr-output-report.json'))?JSON.parse(fs.readFileSync(path.join(root,'ocr-output-report.json'),'utf8')):null;
