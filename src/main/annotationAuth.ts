@@ -208,6 +208,12 @@ export class AnnotationAuth {
                 whiteboardRects(value.rects, options.maxRects, 10000, 10000);
                 if (value.unprotected)
                     whiteboardRects(value.unprotected, 20, 10000, 10000);
+                if (value.protected !== undefined)
+                    whiteboardRects(value.protected, 32, 10000, 10000, 0);
+                if (value.contentRegions !== undefined)
+                    whiteboardRects(value.contentRegions, 64, 10000, 10000, 0);
+                if (value.solid !== undefined)
+                    whiteboardRects(value.solid, 32, 10000, 10000, 0);
                 return value;
             });
             entry = { expires: Date.now() + 60_000, result };

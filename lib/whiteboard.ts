@@ -9,7 +9,284 @@ export type WhiteboardSettings = {
 export type WhiteboardDetection = {
     rects: PixelRect[];
     unprotected?: PixelRect[];
+    protected?: PixelRect[];
+    contentRegions?: PixelRect[];
+    solid?: PixelRect[];
 };
+
+// All boards are planned on one mask. Overlap is intentional: a shared white
+// surface must not spend its rectangle budget on the gaps of a partition.
+export function planWhiteboardRects(
+    protectedRects: PixelRect[],
+    image: Pick<ImageData, "width" | "height" | "data">,
+    width: number,
+    height: number,
+    limit: number,
+    unprotected: PixelRect[] = [],
+    contentRegions?: PixelRect[],
+    solidRects?: PixelRect[],
+): PixelRect[] {
+    const cell = 4;
+    const cols = Math.ceil(image.width / cell),
+        rows = Math.ceil(image.height / cell);
+    const mask = new Uint8Array(cols * rows);
+    const sx = image.width / width,
+        sy = image.height / height;
+    for (const r of solidRects ?? protectedRects) {
+        // Pad content once, rather than shrinking each writing rectangle.
+        const margin = Math.max(4, Math.min(image.width, image.height) * 0.008);
+        let left = r.x * sx - margin,
+            top = r.y * sy - margin,
+            right = (r.x + r.width) * sx + margin,
+            bottom = (r.y + r.height) * sy + margin;
+        left = Math.max(0, Math.floor(left / cell));
+        top = Math.max(0, Math.floor(top / cell));
+        right = Math.min(cols, Math.ceil(right / cell));
+        bottom = Math.min(rows, Math.ceil(bottom / cell));
+        for (let y = top; y < bottom; y++)
+            mask.fill(1, y * cols + left, y * cols + right);
+    }
+    // Catch omitted glyphs across the entire image. Only semantic exemptions
+    // and long straight UI dividers are ignored; figure interiors stay protected.
+    const edges = new Uint8Array(image.width * image.height);
+    const dividers = new Uint8Array(edges.length);
+    for (let y = 1; y < image.height; y++)
+        for (let x = 1; x < image.width; x++) {
+            const p = (y * image.width + x) * 4;
+            for (let c = 0; c < 3; c++)
+                if (
+                    Math.abs(image.data[p + c] - image.data[p - 4 + c]) > 40 ||
+                    Math.abs(
+                        image.data[p + c] - image.data[p - image.width * 4 + c],
+                    ) > 40
+                ) {
+                    edges[y * image.width + x] = 1;
+                    break;
+                }
+        }
+    for (const vertical of [false, true]) {
+        const length = vertical ? image.height : image.width,
+            lines = vertical ? image.width : image.height;
+        for (let line = 0; line < lines; line++) {
+            let start = 0;
+            for (let pos = 0; pos <= length; pos++) {
+                const index = vertical
+                    ? pos * image.width + line
+                    : line * image.width + pos;
+                if (pos < length && edges[index]) continue;
+                if (pos - start >= Math.max(64, length * 0.12)) {
+                    let touchesContent = false;
+                    for (let i = start; i < pos; i++)
+                        if (
+                            mask[
+                                Math.floor((vertical ? i : line) / cell) *
+                                    cols +
+                                    Math.floor((vertical ? line : i) / cell)
+                            ]
+                        ) {
+                            touchesContent = true;
+                            break;
+                        }
+                    if (!touchesContent)
+                        for (let i = start; i < pos; i++)
+                            dividers[
+                                vertical
+                                    ? i * image.width + line
+                                    : line * image.width + i
+                            ] = 1;
+                }
+                start = pos + 1;
+            }
+        }
+    }
+    const ignored = new Uint8Array(edges.length).fill(
+        contentRegions?.length ? 1 : 0,
+    );
+    if (contentRegions)
+        for (const r of contentRegions) {
+            // Region estimates can miss a trailing paragraph or choice row.
+            // Search a generous halo; actual pixels, not this halo, are blocked.
+            const margin = Math.min(image.width, image.height) * 0.15;
+            const left = Math.max(0, Math.floor(r.x * sx - margin)),
+                right = Math.min(
+                    image.width,
+                    Math.ceil((r.x + r.width) * sx + margin),
+                );
+            for (
+                let y = Math.max(0, Math.floor(r.y * sy - margin));
+                y <
+                Math.min(
+                    image.height,
+                    Math.ceil((r.y + r.height) * sy + margin),
+                );
+                y++
+            )
+                ignored.fill(
+                    0,
+                    y * image.width + left,
+                    y * image.width + right,
+                );
+        }
+    for (const r of unprotected) {
+        const left = Math.max(0, Math.floor(r.x * sx)),
+            right = Math.min(image.width, Math.ceil((r.x + r.width) * sx));
+        for (
+            let y = Math.max(0, Math.floor(r.y * sy));
+            y < Math.min(image.height, Math.ceil((r.y + r.height) * sy));
+            y++
+        )
+            ignored.fill(1, y * image.width + left, y * image.width + right);
+    }
+    // Content wins when approximate UI exemptions overlap the first/last glyph.
+    for (const r of protectedRects) {
+        const left = Math.max(0, Math.floor(r.x * sx)),
+            right = Math.min(image.width, Math.ceil((r.x + r.width) * sx));
+        for (
+            let y = Math.max(0, Math.floor(r.y * sy));
+            y < Math.min(image.height, Math.ceil((r.y + r.height) * sy));
+            y++
+        )
+            ignored.fill(0, y * image.width + left, y * image.width + right);
+    }
+    for (let y = 0; y < image.height; y++)
+        for (let x = 0; x < image.width; x++) {
+            const index = y * image.width + x;
+            if (!edges[index] || dividers[index] || ignored[index]) continue;
+            const gx = Math.floor(x / cell),
+                gy = Math.floor(y / cell);
+            for (let dy = -1; dy <= 1; dy++)
+                for (let dx = -1; dx <= 1; dx++)
+                    if (
+                        gx + dx >= 0 &&
+                        gx + dx < cols &&
+                        gy + dy >= 0 &&
+                        gy + dy < rows
+                    )
+                        mask[(gy + dy) * cols + gx + dx] = 1;
+        }
+    const preferred = new Uint8Array(mask.length);
+    if (limit >= 4)
+        for (const r of unprotected) {
+            const left = Math.max(0, Math.floor((r.x * sx) / cell)),
+                right = Math.min(
+                    cols,
+                    Math.ceil(((r.x + r.width) * sx) / cell),
+                );
+            for (
+                let y = Math.max(0, Math.floor((r.y * sy) / cell));
+                y < Math.min(rows, Math.ceil(((r.y + r.height) * sy) / cell));
+                y++
+            )
+                preferred.fill(1, y * cols + left, y * cols + right);
+        }
+    return coverWhiteboardMask(mask, cols, rows, limit, preferred).map((r) => {
+        const x = Math.round(Math.min(image.width, r.x * cell) / sx),
+            y = Math.round(Math.min(image.height, r.y * cell) / sy);
+        return {
+            x,
+            y,
+            width:
+                Math.round(Math.min(image.width, (r.x + r.width) * cell) / sx) -
+                x,
+            height:
+                Math.round(
+                    Math.min(image.height, (r.y + r.height) * cell) / sy,
+                ) - y,
+        };
+    });
+}
+
+export function coverWhiteboardMask(
+    mask: Uint8Array,
+    cols: number,
+    rows: number,
+    limit: number,
+    preferred = new Uint8Array(cols * rows),
+): PixelRect[] {
+    const candidates: PixelRect[] = [],
+        heights = new Uint16Array(cols);
+    for (let y = 0; y < rows; y++) {
+        const stack: [number, number][] = [];
+        for (let x = 0; x <= cols; x++) {
+            const h = x === cols || mask[y * cols + x] ? 0 : heights[x] + 1;
+            if (x < cols) heights[x] = h;
+            let start = x;
+            while (stack.length && stack.at(-1)![1] > h) {
+                const [left, tall] = stack.pop()!;
+                if (x - left >= 4 && tall >= 4)
+                    candidates.push({
+                        x: left,
+                        y: y - tall + 1,
+                        width: x - left,
+                        height: tall,
+                    });
+                start = left;
+            }
+            if (h && (!stack.length || stack.at(-1)![1] < h))
+                stack.push([start, h]);
+        }
+    }
+    const result: PixelRect[] = [],
+        covered = new Uint8Array(cols * rows);
+    for (let n = 0; n < limit; n++) {
+        const stride = cols + 1,
+            prefix = new Uint32Array(stride * (rows + 1));
+        for (let y = 0; y < rows; y++) {
+            let row = 0;
+            for (let x = 0; x < cols; x++) {
+                // Join allowed chrome/tool areas into the surface before using
+                // the last rectangle on a small extra gap between paragraphs.
+                row += covered[y * cols + x]
+                    ? 0
+                    : preferred[y * cols + x]
+                      ? 12
+                      : 1;
+                prefix[(y + 1) * stride + x + 1] =
+                    prefix[y * stride + x + 1] + row;
+            }
+        }
+        let best: PixelRect | undefined,
+            bestGain = 0,
+            connectedBest = false;
+        for (const r of candidates) {
+            const right = r.x + r.width,
+                bottom = r.y + r.height;
+            const gain =
+                prefix[bottom * stride + right] -
+                prefix[r.y * stride + right] -
+                prefix[bottom * stride + r.x] +
+                prefix[r.y * stride + r.x];
+            const connected =
+                !result.length ||
+                result.some((b) => {
+                    const dx =
+                            Math.min(right, b.x + b.width) - Math.max(r.x, b.x),
+                        dy =
+                            Math.min(bottom, b.y + b.height) -
+                            Math.max(r.y, b.y);
+                    return dx >= 0 && dy >= 0 && (dx > 0 || dy > 0);
+                });
+            if (
+                gain > 0 &&
+                ((connected && !connectedBest) ||
+                    (connected === connectedBest &&
+                        (gain > bestGain ||
+                            (gain === bestGain &&
+                                r.width * r.height >
+                                    (best ? best.width * best.height : 0)))))
+            ) {
+                best = r;
+                bestGain = gain;
+                connectedBest = connected;
+            }
+        }
+        if (!best) break;
+        result.push(best);
+        for (let y = best.y; y < best.y + best.height; y++)
+            covered.fill(1, y * cols + best.x, y * cols + best.x + best.width);
+    }
+    return result;
+}
 
 export function refineWhiteboardRects(
     rects: PixelRect[],
@@ -154,8 +431,9 @@ export function whiteboardRects(
     limit: number,
     width: number,
     height: number,
+    minimumSize = 16,
 ): PixelRect[] {
-    if (!Array.isArray(value) || value.length > limit || value.length > 20)
+    if (!Array.isArray(value) || value.length > limit || value.length > 128)
         throw new Error("空白区域坐标无效");
     return value
         .map((r) => {
@@ -172,25 +450,16 @@ export function whiteboardRects(
                 r.y + r.height > 1.000001
             )
                 throw new Error("空白区域坐标越界");
-            // Vision coordinates are approximate; keep a resolution-independent margin.
-            const inset = Math.max(
-                3,
-                Math.ceil(Math.min(width, height) * 0.01),
-            );
-            const x = Math.ceil(r.x * width) + inset;
-            const y = Math.ceil(r.y * height) + inset;
+            const x = Math.round(r.x * width);
+            const y = Math.round(r.y * height);
             return {
                 x,
                 y,
-                width:
-                    Math.floor(Math.min(1, r.x + r.width) * width) - x - inset,
-                height:
-                    Math.floor(Math.min(1, r.y + r.height) * height) -
-                    y -
-                    inset,
+                width: Math.round(Math.min(1, r.x + r.width) * width) - x,
+                height: Math.round(Math.min(1, r.y + r.height) * height) - y,
             };
         })
-        .filter((r) => r.width >= 16 && r.height >= 16);
+        .filter((r) => r.width >= minimumSize && r.height >= minimumSize);
 }
 
 export function intersectRect(a: PixelRect, b: PixelRect): PixelRect | null {

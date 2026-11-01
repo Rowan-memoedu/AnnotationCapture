@@ -5,6 +5,7 @@ import { invoke } from "../../../lib/annotationIpc";
 import { t } from "../../../lib/translate/translate";
 import {
     intersectRect,
+    planWhiteboardRects,
     refineWhiteboardRects,
     whiteboardRects,
 } from "../../../lib/whiteboard";
@@ -307,21 +308,73 @@ export function installWhiteboard(
                 source.width,
                 source.height,
             );
-            candidates = refineWhiteboardRects(
-                candidates,
-                preview
-                    .getContext("2d")!
-                    .getImageData(0, 0, preview.width, preview.height),
-                source.width,
-                source.height,
-                (result.unprotected || []).map((r) => ({
-                    x: r.x * source.width,
-                    y: r.y * source.height,
-                    width: r.width * source.width,
-                    height: r.height * source.height,
-                })),
-                config.whiteboard.maxRects,
-            );
+            candidates =
+                result.protected !== undefined
+                    ? planWhiteboardRects(
+                          whiteboardRects(
+                              result.protected,
+                              32,
+                              source.width,
+                              source.height,
+                              0,
+                          ),
+                          preview
+                              .getContext("2d")!
+                              .getImageData(
+                                  0,
+                                  0,
+                                  preview.width,
+                                  preview.height,
+                              ),
+                          source.width,
+                          source.height,
+                          config.whiteboard.maxRects,
+                          whiteboardRects(
+                              result.unprotected || [],
+                              20,
+                              source.width,
+                              source.height,
+                              0,
+                          ),
+                          result.contentRegions === undefined
+                              ? undefined
+                              : whiteboardRects(
+                                    result.contentRegions,
+                                    64,
+                                    source.width,
+                                    source.height,
+                                    0,
+                                ),
+                          result.solid === undefined
+                              ? undefined
+                              : whiteboardRects(
+                                    result.solid,
+                                    32,
+                                    source.width,
+                                    source.height,
+                                    0,
+                                ),
+                      )
+                    : refineWhiteboardRects(
+                          candidates,
+                          preview
+                              .getContext("2d")!
+                              .getImageData(
+                                  0,
+                                  0,
+                                  preview.width,
+                                  preview.height,
+                              ),
+                          source.width,
+                          source.height,
+                          (result.unprotected || []).map((r) => ({
+                              x: r.x * source.width,
+                              y: r.y * source.height,
+                              width: r.width * source.width,
+                              height: r.height * source.height,
+                          })),
+                          config.whiteboard.maxRects,
+                      );
             detection = "ready";
             if (!boards().length)
                 hint.el.textContent = t(

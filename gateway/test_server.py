@@ -110,6 +110,7 @@ class GatewayTests(unittest.TestCase):
                 "maxRects": 3, "includeTaskbar": allowed, "includeWindowChrome": allowed}}, token)
             self.assertEqual(status, 200)
             self.assertTrue(0 < len(value["rects"]) <= 3)
+            self.assertIn({"x": .225, "y": .175, "width": .55, "height": .65}, value["protected"])
             for r in value["rects"]:
                 self.assertTrue(r["x"] + r["width"] <= .25 or r["x"] >= .75 or
                                 r["y"] + r["height"] <= .2 or r["y"] >= .8)
@@ -149,7 +150,21 @@ class GatewayTests(unittest.TestCase):
             self.upstream.content = json.dumps({"panels": [], "blocked": boxes, "taskbar": [], "chrome": []})
             self.assertEqual(self.request("/whitespace", {"png": png()}, token)[0], 400)
         self.upstream.content = '{"panels": [], "blocked": [[0,0,1000,1000]], "taskbar": [], "chrome": []}'
-        self.assertEqual(self.request("/whitespace", {"png": png()}, token), (200, {"rects": []}))
+        self.assertEqual(self.request("/whitespace", {"png": png()}, token), (200, {"rects": [], "protected": [{"x": 0, "y": 0, "width": 1, "height": 1}], "solid": [{"x": 0, "y": 0, "width": 1, "height": 1}]}))
+
+    def test_auxiliary_controls_do_not_protect_card_interiors(self):
+        token = self.login()
+        self.upstream.content = json.dumps({"regions": [[200, 100, 800, 900]], "panels": [], "blocked": [[250, 200, 700, 400], [250, 500, 350, 750]],
+            "controls": [[0, 0, 1000, 80]], "chrome": [], "taskbar": []})
+        status, value = self.request("/whitespace", {"png": png()}, token)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(value["protected"]), 2)
+        self.assertIn({"x": .2, "y": .1, "width": .6, "height": .8}, value["contentRegions"])
+        self.assertEqual(value["solid"], [])
+        self.assertTrue(value["unprotected"])
+        prompt = self.upstream.requests[-1]["body"]["messages"][0]["content"]
+        self.assertIn("Empty space INSIDE a card", prompt)
+        self.assertIn("answer choices", prompt)
 
     def test_only_provider_receives_shared_key_and_only_formula_is_sent(self):
         token = self.login()

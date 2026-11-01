@@ -168,13 +168,16 @@ class Provider:
         options = validate_whiteboard_options(options)
         prompt = (
             "Identify the meaningful CONTENT BLOCKS in this screenshot. "
-            'Return ONLY JSON {"panels":[[left,top,right,bottom],...],"blocked":[...],"taskbar":[...],"chrome":[...]}, using integer coordinates 0..1000 relative to the WHOLE screenshot width and height. '
-            "First locate structural containers in panels: each ENTIRE sidebar/navigation pane, content card, chart, diagram, photo and table. "
-            "A sidebar extends through its full background height, not just its labels. A table or chart includes its whole frame, not individual cells or labels. Empty interiors of these containers are still protected. "
-            "Then put remaining DOCUMENT text OUTSIDE panels, taskbar and chrome in blocked; never duplicate their labels in blocked. Group it into compact paragraphs, with separate boxes for columns and headings. Do not bridge empty column gutters or large gaps between independent blocks. "
+            'Return ONLY JSON {"regions":[[left,top,right,bottom],...],"panels":[...],"blocked":[...],"taskbar":[...],"chrome":[...],"controls":[...]}, using integer coordinates 0..1000 relative to the WHOLE screenshot width and height. '
+            "FIRST locate the entire DOCUMENT reading/work area in regions: the full lesson/question card, document page or meaningful content columns, including all answer choices. Exclude app navigation, toolbars and floating widgets. Regions are search bounds for local text detection, NOT protected rectangles: their empty interiors remain writable. "
+            "In panels put ONLY whole meaningful figures: charts, diagrams, photos and tables, including their interiors, captions and labels. "
+            "In blocked put DOCUMENT content: headings, paragraphs, formulas, answer choices and answer input fields. Use tight boxes around visible content, including every line and mathematical symbol. "
+            "Group adjacent text into compact paragraphs; keep answer choices as one tight column. Separate columns, independent blocks and large empty gaps. "
+            "Do NOT reserve content cards, panels, sidebar backgrounds, borders or shadows. Empty space INSIDE a card or alongside short answer choices is available for writing. "
+            "In controls put auxiliary app UI: navigation/progress bars, page toolbars, scrollbars, submit/help/menu buttons and ALL floating widgets on BOTH sides. Include partially clipped widgets and the entire sidebar containing only app tools. These are not document content and may be covered during annotation. Never classify question text, answer choices or diagrams as controls. "
             "Omit surrounding empty page margins. Use at most 24 boxes total; merge only touching or closely adjacent blocks if necessary. "
             "Separately locate the ENTIRE desktop taskbar in taskbar and window top chrome (title, tabs, address bar, window buttons) in chrome. "
-            "All four keys are required; use [] only when that category is absent. Return their coordinates regardless of coverage policy. "
+            "All six keys are required; use [] only when that category is absent. Return their coordinates regardless of coverage policy. "
             "Do not transcribe text or optimize blank areas. If the layout cannot be determined, reserve the whole screenshot in blocked. "
             "The desktop taskbar " + ("may be covered even if it contains icons." if options["includeTaskbar"] else "must not be covered.") + " "
             "Application/browser window top chrome (title/software information, tabs, address bar, minimize/maximize/close buttons) "
@@ -184,6 +187,7 @@ class Provider:
         )
         endpoint = self.base_url if self.base_url.endswith("/chat/completions") else self.base_url + "/chat/completions"
         extra = dict(self.extra)
+        extra["temperature"] = 0
         if self.model.startswith("deepseek"):
             extra.pop("reasoning_effort", None)
             extra["thinking"] = {"type": "disabled"}
@@ -207,15 +211,29 @@ class Provider:
         content = re.sub(r"\s*```$", "", content).strip()
         layout = json.loads(content)
         groups = [layout[key] for key in ("blocked", "taskbar", "chrome", "panels")]
+        controls = layout.get("controls", [])
+        validate_content_boxes(controls)
+        regions = layout.get("regions")
+        if regions is not None:
+            validate_content_boxes(regions)
         for group in groups:
             validate_content_boxes(group)
-        blocked = groups[0] + groups[3] + ([] if options["includeTaskbar"] else groups[1]) + ([] if options["includeWindowChrome"] else groups[2])
-        unprotected = ([] if not options["includeTaskbar"] else groups[1]) + ([] if not options["includeWindowChrome"] else groups[2])
+        reserved_ui = ([] if options["includeTaskbar"] else groups[1]) + ([] if options["includeWindowChrome"] else groups[2])
+        blocked = groups[0] + [[max(0,l-25), max(0,t-25), min(1000,r+25), min(1000,b+25)] for l,t,r,b in groups[3] + reserved_ui]
+        unprotected = controls + ([] if not options["includeTaskbar"] else groups[1]) + ([] if not options["includeWindowChrome"] else groups[2])
         exemptions = []
         for left, top, right, bottom in unprotected[:20]:
             x, y = max(0, left / 1000 - .015), max(0, top / 1000 - .015)
             exemptions.append(dict(x=x, y=y, width=min(1, right / 1000 + .015) - x, height=min(1, bottom / 1000 + .015) - y))
-        return {"rects": blank_rectangles(blocked, options["maxRects"]), **({"unprotected": exemptions} if exemptions else {})}
+        protected = [dict(x=l/1000, y=t/1000, width=(r-l)/1000, height=(b-t)/1000) for l, t, r, b in blocked]
+        solid_boxes = blocked[len(groups[0]):]
+        if groups[0] == [[0, 0, 1000, 1000]]:
+            solid_boxes = groups[0]
+        solid = [dict(x=l/1000, y=t/1000, width=(r-l)/1000, height=(b-t)/1000) for l, t, r, b in solid_boxes]
+        return {"rects": blank_rectangles(blocked, options["maxRects"]), "protected": protected,
+                "solid": solid,
+                **({"contentRegions": [dict(x=l/1000, y=t/1000, width=(r-l)/1000, height=(b-t)/1000) for l, t, r, b in regions + groups[0]]} if regions is not None else {}),
+                **({"unprotected": exemptions} if exemptions else {})}
 
     def recognize(self, png: str, output_format: str = "latex") -> dict:
         if output_format not in PROMPTS:
