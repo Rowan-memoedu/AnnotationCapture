@@ -23,6 +23,8 @@ type StoredConfig = {
     ocrShortcut: string;
     penColor: string;
     penWidth: number;
+    pressureEnabled: boolean;
+    pressureSensitivity: number;
     showMagnifier: boolean;
     outputFormat: OutputFormat;
     formulaFont: FormulaFont;
@@ -43,6 +45,8 @@ export class AnnotationConfig {
             ocrShortcut: "Control+Alt+O",
             penColor: "#ff0000",
             penWidth: 2,
+            pressureEnabled: true,
+            pressureSensitivity: 50,
             showMagnifier: false,
             outputFormat: "latex",
             formulaFont: "stix2",
@@ -83,6 +87,8 @@ export class AnnotationConfig {
             ocrShortcut: this.config.ocrShortcut,
             penColor: this.config.penColor,
             penWidth: this.config.penWidth,
+            pressureEnabled: this.config.pressureEnabled,
+            pressureSensitivity: this.config.pressureSensitivity,
             showMagnifier: this.config.showMagnifier,
             outputFormat: this.config.outputFormat,
             formulaFont: this.config.formulaFont,
@@ -92,6 +98,18 @@ export class AnnotationConfig {
         };
     }
     save(input: ConfigInput): PublicConfig {
+        if (
+            input.pressureEnabled !== undefined &&
+            typeof input.pressureEnabled !== "boolean"
+        )
+            throw new Error("压感开关无效");
+        if (
+            input.pressureSensitivity !== undefined &&
+            (!Number.isInteger(input.pressureSensitivity) ||
+                input.pressureSensitivity < 1 ||
+                input.pressureSensitivity > 100)
+        )
+            throw new Error("压感灵敏度须为 1 到 100");
         if (
             input.archiveRetentionDays !== undefined &&
             (!Number.isInteger(input.archiveRetentionDays) ||
@@ -149,6 +167,10 @@ export class AnnotationConfig {
             ocrShortcut: input.ocrShortcut ?? this.config.ocrShortcut,
             penColor: input.penColor ?? this.config.penColor,
             penWidth: input.penWidth ?? this.config.penWidth,
+            pressureEnabled:
+                input.pressureEnabled ?? this.config.pressureEnabled,
+            pressureSensitivity:
+                input.pressureSensitivity ?? this.config.pressureSensitivity,
             showMagnifier: input.showMagnifier ?? this.config.showMagnifier,
             outputFormat: input.outputFormat ?? this.config.outputFormat,
             formulaFont: input.formulaFont ?? this.config.formulaFont,

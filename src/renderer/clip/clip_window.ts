@@ -15,7 +15,6 @@ import {
     filters,
     IText,
     Line,
-    PencilBrush,
     type Point,
     Polygon,
     Polyline,
@@ -34,6 +33,8 @@ import { t } from "../../../lib/translate/translate";
 import { installCompletion } from "../annotation/capture";
 import { installFormulaInk } from "../annotation/formulaInk";
 import { installInkSelection } from "../annotation/inkSelection";
+import { PressureBrush } from "../annotation/pressureBrush";
+import { isPressurePath, resizePressurePath } from "../annotation/pressureInk";
 import initScreenShots from "../annotation/screenshot";
 import { writeImage, writeText } from "../lib/clipboard";
 import { Class, cssColor, getImgUrl, initStyle, setTitle } from "../root/root";
@@ -42,6 +43,7 @@ const screenShots = initScreenShots();
 let pendingCanvasWork = Promise.resolve();
 let entryMode: "region" | "full" | "ocr" = "region";
 let showAnnotationMagnifier = false;
+let pressureOptions = { pressureEnabled: true, pressureSensitivity: 50 };
 let formulaInk: ReturnType<typeof installFormulaInk> | undefined;
 let inkSelection: ReturnType<typeof installInkSelection> | undefined;
 
@@ -2647,7 +2649,10 @@ function showBars(b: boolean) {
     }
 }
 function pencilElClick() {
-    fabricCanvas.freeDrawingBrush = new PencilBrush(fabricCanvas);
+    fabricCanvas.freeDrawingBrush = new PressureBrush(
+        fabricCanvas,
+        () => pressureOptions,
+    );
     fabricCanvas.freeDrawingBrush.color = getShapePro("free").sc;
     fabricCanvas.freeDrawingBrush.width = getShapePro("free").sw;
 
@@ -3092,8 +3097,8 @@ function getFObjectV() {
     if (n) {
         // todo 当线与形一起选中，确保形不会透明
         pro.fc = n.fill?.toString();
-        pro.sc = n.stroke?.toString();
-        pro.sw = n.strokeWidth;
+        pro.sc = (isPressurePath(n) ? n.fill : n.stroke)?.toString();
+        pro.sw = isPressurePath(n) ? n.acPressure.width : n.strokeWidth;
         if ((n as FabricImage).filters) {
             pro.fc = fillColor;
             pro.sc = strokeColor;
@@ -3135,6 +3140,11 @@ function setFObjectV(
         /* 选中Object */
         const n = fabricCanvas.getActiveObjects();
         for (const i of n) {
+            if (isPressurePath(i)) {
+                if (stroke) i.set("fill", stroke);
+                if (sw) resizePressurePath(i, sw);
+                continue;
+            }
             if (fill) {
                 // 只改变形的颜色
                 if (i.canChangeFill) i.set("fill", fill);
@@ -4154,6 +4164,7 @@ renderOn(
     async ([_displays, imgBuffer, mainid, _act, captureMode]) => {
         entryMode = captureMode ?? "region";
         const { config } = await invoke("state");
+        pressureOptions = config;
         freeColor = config.penColor;
         shapePro.free = {
             ...shapePro.free,
@@ -4898,6 +4909,16 @@ drawSide操作.删除.on("click", () => {
 const Filters = filters;
 
 const fabricCanvas = new Canvas("draw_photo", { enablePointerEvents: true });
+
+function cancelPressureStroke() {
+    const brush = fabricCanvas.freeDrawingBrush;
+    if (brush instanceof PressureBrush) brush.cancel();
+}
+fabricCanvas.upperCanvasEl.addEventListener(
+    "pointercancel",
+    cancelPressureStroke,
+);
+window.addEventListener("blur", cancelPressureStroke);
 
 hisPush();
 

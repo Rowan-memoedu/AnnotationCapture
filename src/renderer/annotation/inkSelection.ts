@@ -10,6 +10,7 @@ import {
 import type { LassoRule } from "../../../lib/annotation";
 import { t } from "../../../lib/translate/translate";
 import { type Position, polylineMatchesLasso } from "./lassoGeometry";
+import { isPressurePath } from "./pressureInk";
 
 export function installInkSelection(
     canvas: Canvas,
@@ -163,15 +164,20 @@ export function installInkSelection(
                                 ).transform(matrix),
                             );
                     }
-                    return polylineMatchesLasso(
-                        points,
-                        polygon,
-                        rule,
-                        object.stroke
-                            ? (object.strokeWidth *
-                                  (object.strokeUniform ? 1 : scale)) /
-                                  2
-                            : 0,
+                    return (
+                        polylineMatchesLasso(
+                            points,
+                            polygon,
+                            rule,
+                            object.stroke
+                                ? (object.strokeWidth *
+                                      (object.strokeUniform ? 1 : scale)) /
+                                      2
+                                : 0,
+                        ) ||
+                        (isPressurePath(object) &&
+                            rule === "intersect" &&
+                            polylineMatchesLasso(polygon, points, "intersect"))
                     );
                 });
                 return (

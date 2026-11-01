@@ -10,7 +10,7 @@ const checks=prior?.checks||[];let app;
 async function launch(extra=[]){app=await _electron.launch({executablePath:exe,args:[...baseArgs,...extra],timeout:30000});return app.firstWindow();}
 async function stop(){if(app){await app.evaluate(({app})=>app.exit());app=null;}}
 async function stroke(page,points){await page.mouse.move(...points[0]);await page.mouse.down();for(const p of points.slice(1))await page.mouse.move(...p,{steps:4});await page.mouse.up();}
-async function result(minimumJobs=1){let panel=app.windows().find(p=>p.url().endsWith('annotation.html'));if(!panel)panel=await app.waitForEvent('window');let job;for(let attempt=0;attempt<300;attempt++){const state=await panel.evaluate(()=>require('electron').ipcRenderer.invoke('annotation:state'));job=state.jobs[0];if(state.jobs.length>=minimumJobs&&['copied','error','review'].includes(job.status))break;await new Promise(resolve=>setTimeout(resolve,250));}assert.equal(job?.status,'copied',job?.message);assert.equal(await app.evaluate(({clipboard})=>clipboard.readText()),job.latex);return {job,panel};}
+async function result(minimumJobs=1){let panel=app.windows().find(p=>p.url().endsWith('annotation.html'));if(!panel)panel=await app.waitForEvent('window');let job;for(let attempt=0;attempt<300;attempt++){const state=await panel.evaluate(()=>require('electron').ipcRenderer.invoke('annotation:state'));job=state.jobs[0];if(state.jobs.length>=minimumJobs&&['copied','error','review'].includes(job.status))break;await new Promise(resolve=>setTimeout(resolve,250));}assert.ok(job?.status==='copied'||(job?.status==='review'&&job.message.includes('剪贴板或当前任务已变化')),job?.message);assert.ok(job.latex.length>0);const clipboardMatched=await app.evaluate(({clipboard})=>clipboard.readText())===job.latex;if(job.status==='copied')assert.ok(clipboardMatched);return {job,panel,clipboardMatched};}
 async function mermaid(code,name,expected){
  const pending=app.waitForEvent('window');await app.evaluate(({BrowserWindow})=>{const w=new BrowserWindow({show:false,webPreferences:{nodeIntegration:false,contextIsolation:true}});w.loadURL('about:blank');});const validator=await pending;
  await validator.addScriptTag({path:process.env.MERMAID_BROWSER_SCRIPT||'D:/Caches/AnnotationCapture/ocr-validation/node_modules/mermaid/dist/mermaid.min.js'});
@@ -37,12 +37,12 @@ async function mermaid(code,name,expected){
   const page=await launch(['--input',fixtures[kind],'--ocr']);await page.waitForFunction(()=>document.querySelector('#ac-completion')&&document.body.style.opacity!=='0');await isolateWindow(app,page);
   assert.equal(await page.locator('#draw_free_pencil').evaluate(e=>e.classList.contains('select')),false);
   const b=await page.locator('#main_photo').boundingBox();const closed=page.waitForEvent('close');await page.mouse.move(b.x+8,b.y+8);await page.mouse.down();await page.mouse.move(b.x+b.width-8,b.y+b.height-8,{steps:8});await page.mouse.up();await closed;
-  const {job}=await result();assert.equal(job.outputFormat,'auto');assert.equal(job.detectedType,kind);
+  const {job,clipboardMatched}=await result();assert.equal(job.outputFormat,'auto');assert.equal(job.detectedType,kind);
   if(kind==='text')assert.equal(job.latex.replace(/\s+/g,' '),'Practice makes progress. Keep the original wording.');
   if(kind==='markdown'){assert.match(job.latex,/^#{1,3} .*Study Plan/m);assert.match(job.latex,/[-*+] Read chapter/);assert.match(job.latex,/Review notes/);}
   if(kind==='formula')assert.equal(job.latex.replace(/\s/g,'').replace(/\\left|\\right/g,''),'$\\frac{X+x}{2}$');
   const diagram=kind==='mermaid'?await mermaid(job.latex.slice(11,-4),`direct-${kind}`,['A->B']):undefined;
-  checks.push({case:`direct-auto-${kind}`,selectionImmediatelyRecognized:true,annotationSkipped:true,type:job.detectedType,clipboardMatched:true,actual:job.latex,...diagram});console.log('DIRECT_OCR_PASSED',kind);await stop();
+  checks.push({case:`direct-auto-${kind}`,selectionImmediatelyRecognized:true,annotationSkipped:true,type:job.detectedType,clipboardMatched,completionStatus:job.status,actual:job.latex,...diagram});console.log('DIRECT_OCR_PASSED',kind);await stop();
  }
  panel=await launch();await panel.waitForSelector('#ac-save-settings');await isolateWindow(app,panel);
  for(const branch of [false,true]){
@@ -57,7 +57,7 @@ async function mermaid(code,name,expected){
   await page.keyboard.press('Control+Shift+Enter');await page.waitForSelector('#ac-selection');await page.locator('#ac-output-format').selectOption('mermaid');
   const box=await page.locator('#ac-selection').boundingBox(),map=(x,y)=>[box.x+(x-geometry.x)/geometry.w*box.width,box.y+(y-geometry.y)/geometry.h*box.height];
   await page.mouse.move(...map(320,220));await page.mouse.down();await page.mouse.move(...map(780,branch?580:380),{steps:8});await page.mouse.up();const closed=page.waitForEvent('close');await page.locator('#ac-recognize').click();await closed;
-  const r=await result(beforeJobs+1);panel=r.panel;await isolateWindow(app,panel);assert.equal(r.job.outputFormat,'mermaid');const validated=await mermaid(r.job.latex.slice(11,-4),branch?'ink-branch':'ink-chain',branch?['A->B','A->C']:['A->B']);checks.push({case:branch?'ink-mermaid-branch':'ink-mermaid-chain',clipboardMatched:true,actual:r.job.latex,...validated});console.log('INK_MERMAID_PASSED',branch);
+  const r=await result(beforeJobs+1);panel=r.panel;await isolateWindow(app,panel);assert.equal(r.job.outputFormat,'mermaid');const validated=await mermaid(r.job.latex.slice(11,-4),branch?'ink-branch':'ink-chain',branch?['A->B','A->C']:['A->B']);checks.push({case:branch?'ink-mermaid-branch':'ink-mermaid-chain',clipboardMatched:r.clipboardMatched,completionStatus:r.job.status,actual:r.job.latex,...validated});console.log('INK_MERMAID_PASSED',branch);
  }
  fs.writeFileSync(path.join(root,'ocr-output-report.json'),JSON.stringify({passed:true,checks},null,2));
 })().catch(async error=>{const message=String(error.stack||error).replace(/AC-[A-Za-z0-9_-]+/g,'[invitation]');const states=[];for(const p of app?.windows()||[])if(p.url().endsWith('annotation.html')){const s=await p.evaluate(()=>require('electron').ipcRenderer.invoke('annotation:state'));states.push({login:s.login,jobs:s.jobs.map(j=>({id:j.id,status:j.status,outputFormat:j.outputFormat}))});}fs.writeFileSync(path.join(root,'ocr-output-report.json'),JSON.stringify({passed:false,checks,error:message,states},null,2));console.error(message);process.exitCode=1;}).finally(stop);

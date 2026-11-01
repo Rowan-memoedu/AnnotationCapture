@@ -50,6 +50,7 @@ async function extract() {
         { script: 'portable-smoke' },
         { script: 'shortcuts-acceptance' },
         { script: 'settings-acceptance' },
+        ...['1','1.5','2'].map(scale=>({script:'pressure-acceptance',scale})),
         { script: 'retention-acceptance' },
         { script: 'ink-ocr-regression' },
         { script: 'math-academy-acceptance' },
@@ -73,7 +74,7 @@ async function extract() {
         console.log(`RUN ${task.script}${task.formulaCase ? ` ${task.formulaCase}` : ''}`);
         const result = spawnSync(process.execPath, [path.join(__dirname, `${task.script}.cjs`)], {
             cwd: path.resolve(__dirname, '..'),
-            env: { ...env, ANNOTATION_EVIDENCE:task.script.startsWith('formula-pen')||task.script==='ink-selection-acceptance'?path.join(evidence,task.script+(task.scale?'-'+task.scale:'')):evidence, ANNOTATION_SCALE:task.scale||'', ANNOTATION_OCR_CASE: task.formulaCase || '', ANNOTATION_OCR_FORMAT:task.outputFormat||'latex', ANNOTATION_TEST_CORRECTION: task.formulaCase === 'polynomial' ? '1' : '' },
+            env: { ...env, ANNOTATION_EVIDENCE:task.script.startsWith('formula-pen')||task.script==='ink-selection-acceptance'||task.script==='pressure-acceptance'?path.join(evidence,task.script+(task.scale?'-'+task.scale:'')):evidence, ANNOTATION_SCALE:task.scale||'', ANNOTATION_OCR_CASE: task.formulaCase || '', ANNOTATION_OCR_FORMAT:task.outputFormat||'latex', ANNOTATION_TEST_CORRECTION: task.formulaCase === 'polynomial' ? '1' : '' },
             encoding: 'utf8', timeout: ['ocr-output-acceptance','ink-ocr-regression'].includes(task.script)?360000:180000, windowsHide: true,
         });
         process.stdout.write(result.stdout || ''); process.stderr.write(result.stderr || '');

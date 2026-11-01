@@ -68,6 +68,8 @@ export type PublicConfig = {
     ocrShortcut: string;
     penColor: string;
     penWidth: number;
+    pressureEnabled: boolean;
+    pressureSensitivity: number;
     showMagnifier: boolean;
     outputFormat: OutputFormat;
     formulaFont: FormulaFont;
@@ -90,6 +92,8 @@ export type ConfigInput = {
     ocrShortcut?: string;
     penColor?: string;
     penWidth?: number;
+    pressureEnabled?: boolean;
+    pressureSensitivity?: number;
     showMagnifier?: boolean;
     outputFormat?: OutputFormat;
     formulaFont?: FormulaFont;

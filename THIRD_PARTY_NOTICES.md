@@ -6,6 +6,10 @@ This modified application is distributed under GPL-3.0. Corresponding source, bu
 
 Electron is MIT licensed; Fabric.js is MIT licensed; erase2d is MIT licensed; dkh-ui is Apache-2.0 licensed. The application distribution retains Electron's LICENSE and LICENSES.chromium.html. Dependency licenses are retained in their packages.
 
+## Pressure-sensitive ink
+
+perfect-freehand 1.2.3, Copyright Steve Ruiz, is distributed under MIT. Its license is included in THIRD_PARTY_LICENSES.txt. Upstream: https://github.com/steveruizok/perfect-freehand. Pen input uses the device's actual pressure; mouse input does not simulate pressure.
+
 ## Formula typesetting
 
 MathJax 4.1.3 and the MathJax STIX2 / New Computer Modern SVG font packages 4.1.3 are distributed under Apache-2.0. MathJax's license is included in `out/renderer/mathjax/LICENSE-MathJax`. Font package metadata declares Apache-2.0; no operating-system fonts or remotely hosted font resources are used at runtime. Upstream: https://github.com/mathjax/MathJax and https://github.com/mathjax/MathJax-fonts.

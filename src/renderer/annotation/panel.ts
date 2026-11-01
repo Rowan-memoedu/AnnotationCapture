@@ -74,6 +74,52 @@ const penWidth = input("number")
         max: "50",
         step: "1",
     });
+const pressureEnabled = input("checkbox").attr({
+    id: "ac-pressure-enabled",
+    ariaLabel: t("启用笔压"),
+});
+const pressureSensitivity = input("number")
+    .class("ac-field")
+    .attr({
+        id: "ac-pressure-sensitivity",
+        ariaLabel: t("压感灵敏度"),
+        min: "1",
+        max: "100",
+        step: "1",
+    });
+const pressureHint = p().class("ac-status").attr({
+    id: "ac-pressure-hint",
+    role: "status",
+    ariaLive: "polite",
+});
+const pressureSettings = view("y")
+    .class("ac-pressure-settings")
+    .attr({ id: "ac-pressure-settings" })
+    .add([
+        ele("label")
+            .class("ac-pressure-toggle")
+            .add([pressureEnabled, t("启用笔压")]),
+        ele("label")
+            .attr({ htmlFor: "ac-pressure-sensitivity" })
+            .add(t("压感灵敏度")),
+        pressureSensitivity,
+        pressureHint,
+    ]);
+function updatePressureSettings() {
+    pressureSensitivity.el.disabled = !pressureEnabled.el.checked;
+    pressureSensitivity.el.setAttribute(
+        "aria-disabled",
+        String(!pressureEnabled.el.checked),
+    );
+    pressureSensitivity.el.setAttribute("aria-invalid", "false");
+    pressureSettings.el.dataset.state = "default";
+    pressureHint.el.textContent = t(
+        "1–100，数值越大，轻重笔画的粗细差越明显。鼠标始终等宽；保存后对下一次批注生效。",
+    );
+}
+pressureEnabled.on("change", updatePressureSettings);
+pressureSensitivity.el.setAttribute("aria-describedby", "ac-pressure-hint");
+pressureSensitivity.on("input", updatePressureSettings);
 const outputFormat = ele("select")
     .class("ac-field")
     .attr({ id: "ac-default-output-format", ariaLabel: t("默认识别输出格式") })
@@ -281,6 +327,7 @@ root.add([
             penColor,
             p(t("默认画笔粗细")),
             penWidth,
+            pressureSettings,
             p(t("自由圈选规则")),
             lassoRule,
             p(t("同时用于 D 键圈选和按住 D 清除；选中或删除整条笔迹。")),
@@ -300,24 +347,61 @@ root.add([
                 .style({ gap: "12px", flexWrap: "wrap" })
                 .add([
                     action("保存设置", "ac-save-settings", async () => {
-                        await invoke("configure", {
-                            archiveRoot: archivePath.el.value,
-                            archiveRetentionDays:
-                                retentionDays.el.valueAsNumber,
-                            shortcut: shortcut.el.value,
-                            fullShortcut: fullShortcut.el.value,
-                            ocrShortcut: ocrShortcut.el.value,
-                            penColor: penColor.el.value,
-                            penWidth: Number(penWidth.el.value),
-                            formulaFont: formulaFont.el.value as FormulaFont,
-                            lassoRule: lassoRule.el.value as
-                                | "intersect"
-                                | "contain",
-                            showMagnifier: showMagnifier.el.checked,
-                            outputFormat: outputFormat.el.value as OutputFormat,
-                        });
-                        await refresh(true);
-                        notice.el.textContent = t("设置已保存");
+                        const sensitivity =
+                            pressureSensitivity.el.valueAsNumber;
+                        if (
+                            !Number.isInteger(sensitivity) ||
+                            sensitivity < 1 ||
+                            sensitivity > 100
+                        ) {
+                            pressureSensitivity.el.setAttribute(
+                                "aria-invalid",
+                                "true",
+                            );
+                            pressureSettings.el.dataset.state = "error";
+                            pressureHint.el.textContent = t(
+                                "压感灵敏度须为 1 到 100",
+                            );
+                            throw new Error(t("压感灵敏度须为 1 到 100"));
+                        }
+                        pressureSettings.el.dataset.state = "loading";
+                        pressureSettings.el.setAttribute("aria-busy", "true");
+                        pressureHint.el.textContent = t("正在保存…");
+                        try {
+                            await invoke("configure", {
+                                archiveRoot: archivePath.el.value,
+                                archiveRetentionDays:
+                                    retentionDays.el.valueAsNumber,
+                                shortcut: shortcut.el.value,
+                                fullShortcut: fullShortcut.el.value,
+                                ocrShortcut: ocrShortcut.el.value,
+                                penColor: penColor.el.value,
+                                penWidth: Number(penWidth.el.value),
+                                pressureEnabled: pressureEnabled.el.checked,
+                                pressureSensitivity: sensitivity,
+                                formulaFont: formulaFont.el
+                                    .value as FormulaFont,
+                                lassoRule: lassoRule.el.value as
+                                    | "intersect"
+                                    | "contain",
+                                showMagnifier: showMagnifier.el.checked,
+                                outputFormat: outputFormat.el
+                                    .value as OutputFormat,
+                            });
+                            await refresh(true);
+                            pressureSettings.el.dataset.state = "success";
+                            pressureHint.el.textContent = t("设置已保存");
+                            notice.el.textContent = t("设置已保存");
+                        } catch (error) {
+                            pressureSettings.el.dataset.state = "error";
+                            pressureHint.el.textContent = String(error);
+                            throw error;
+                        } finally {
+                            pressureSettings.el.setAttribute(
+                                "aria-busy",
+                                "false",
+                            );
+                        }
                     }),
                 ]),
         ]),
@@ -440,6 +524,9 @@ async function refresh(settings = false) {
         ocrShortcut.el.value = state.config.ocrShortcut;
         penColor.el.value = state.config.penColor;
         penWidth.el.value = String(state.config.penWidth);
+        pressureEnabled.el.checked = state.config.pressureEnabled;
+        pressureSensitivity.el.value = String(state.config.pressureSensitivity);
+        updatePressureSettings();
         formulaFont.el.value = state.config.formulaFont;
         lassoRule.el.value = state.config.lassoRule;
         showMagnifier.el.checked = state.config.showMagnifier;

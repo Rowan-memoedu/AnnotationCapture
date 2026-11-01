@@ -9,6 +9,7 @@ import {
 import type { FormulaFont } from "../../../lib/annotation";
 import { invoke } from "../../../lib/annotationIpc";
 import { t } from "../../../lib/translate/translate";
+import { inkColor, isPressurePath, isPressureTap } from "./pressureInk";
 
 type Formula = {
     latex: string;
@@ -170,8 +171,10 @@ export function installFormulaInk(
         const bounds = path.getBoundingRect();
         const isTap =
             performance.now() - down.time < 350 &&
-            bounds.width <= path.strokeWidth + 3 &&
-            bounds.height <= path.strokeWidth + 3;
+            (isPressurePath(path)
+                ? isPressureTap(path)
+                : bounds.width <= path.strokeWidth + 3 &&
+                  bounds.height <= path.strokeWidth + 3);
         if (isTap) {
             taps.push({
                 path: ink,
@@ -271,8 +274,8 @@ export function installFormulaInk(
             Math.ceil(Math.max(...boxes.map((b) => b.top + b.height)) - top) +
             8;
         const chosenFont = font;
-        const color = /^#[\da-f]{6}$/i.test(String(first.stroke))
-            ? String(first.stroke)
+        const color = /^#[\da-f]{6}$/i.test(String(inkColor(first)))
+            ? String(inkColor(first))
             : "#ff0000";
         try {
             const ink = canvas.toCanvasElement(1, {

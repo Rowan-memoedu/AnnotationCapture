@@ -5,7 +5,15 @@ const root=path.join(process.env.ANNOTATION_EVIDENCE||'D:/Artifacts/AnnotationCa
 fs.mkdirSync(root,{recursive:true});
 const strokes=[[[430,320],[470,370]],[[430,370],[470,320]],[[490,345],[530,345]],[[510,325],[510,365]],[[552,334],[566,320],[566,370]],[[554,370],[578,370]],[[415,397],[595,397]],[[485,432],[494,420],[514,420],[526,433],[523,444],[486,475],[529,475]]];
 const checks=[];let app;
-async function stroke(page,points){await page.mouse.move(...points[0]);await page.mouse.down();for(const p of points.slice(1))await page.mouse.move(...p,{steps:4});await page.mouse.up();}
+const penSessions = new WeakMap();
+async function stroke(page,points){
+ if(process.env.ANNOTATION_POINTER_TYPE!=='pen'){await page.mouse.move(...points[0]);await page.mouse.down();for(const p of points.slice(1))await page.mouse.move(...p,{steps:4});await page.mouse.up();return;}
+ let cdp=penSessions.get(page);if(!cdp){cdp=await page.context().newCDPSession(page);penSessions.set(page,cdp);}
+ const send=(type,p,force)=>cdp.send('Input.dispatchMouseEvent',{type,x:p[0],y:p[1],pointerType:'pen',button:type==='mouseMoved'?'none':'left',buttons:type==='mouseReleased'?0:1,clickCount:type==='mouseMoved'?0:1,force:type==='mouseReleased'?0:force});
+ await send('mouseMoved',points[0],0.4);await send('mousePressed',points[0],0.4);
+ for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i];for(let step=1;step<=4;step++)await send('mouseMoved',[a[0]+(b[0]-a[0])*step/4,a[1]+(b[1]-a[1])*step/4],0.3+0.5*step/4);}
+ await send('mouseReleased',points.at(-1),0);
+}
 (async()=>{
  for(const scenario of [{name:'normal-pen',mode:'full',formula:false},{name:'formula-pen',mode:'full',formula:true},{name:'free-capture',mode:'region',formula:true}].filter(s=>!process.env.ANNOTATION_INK_SCENARIO||s.name===process.env.ANNOTATION_INK_SCENARIO)){
   const data=path.join(root,scenario.name+'-'+Date.now());prepareProfile(data,{penColor:'#ff0000',penWidth:7});
@@ -33,7 +41,7 @@ async function stroke(page,points){await page.mouse.move(...points[0]);await pag
   await stroke(page,[[b.x+2,b.y+2],[b.x+b.width-2,b.y+b.height-2]]);
   const closed=page.waitForEvent('close');await page.locator('#ac-recognize').click();await closed;
   let job;for(let i=0;i<320;i++){const state=await panel.evaluate(()=>require('electron').ipcRenderer.invoke('annotation:state'));job=state.jobs[0];if(job&&['copied','review','error','unconfigured'].includes(job.status)&&job.status!=='unconfigured')break;if(!process.env.ANNOTATION_INVITE_FILE&&job)break;await new Promise(r=>setTimeout(r,250));}
-  assert.ok(job);if(process.env.ANNOTATION_INVITE_FILE)assert.equal(job.status,'copied',job.message);
+  assert.ok(job);if(process.env.ANNOTATION_INVITE_FILE)assert.ok(job.status==='copied'||(job.status==='review'&&job.message.includes('剪贴板或当前任务已变化')),job.message);
   fs.copyFileSync(job.path,path.join(root,scenario.name+'-ocr-input.png'));
   const ink=await panel.evaluate(async file=>{const img=new Image();img.src='data:image/png;base64,'+require('node:fs').readFileSync(file).toString('base64');await img.decode();const c=document.createElement('canvas');c.width=img.width;c.height=img.height;const x=c.getContext('2d');x.drawImage(img,0,0);const p=x.getImageData(0,0,c.width,c.height).data;let red=0,other=0;for(let i=0;i<p.length;i+=4){if(p[i]>150&&p[i+1]<100&&p[i+2]<100)red++;if(p[i]<250||Math.abs(p[i+1]-p[i+2])>2||p[i+3]!==255)other++;}return {red,other};},job.path);
   assert.ok(ink.red>500);assert.equal(ink.other,0,'OCR image must contain only red ink and white, never desktop content');

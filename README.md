@@ -18,11 +18,13 @@
 
 0.5.1 修复记住自由截图工具后，全屏批注的“选区识别”预览变成白页的问题；新增可配置的存档保留期限，默认保留最近 7 天。
 
+0.6.0 使用 perfect-freehand 生成真实压感笔迹：压感笔随力度变粗细，鼠标保持等宽。设置中可关闭笔压并调整灵敏度；普通画笔与公式画笔共同生效。
+
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.5.1-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.6.0-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 1. 按 `Alt+W`，或点击“全屏批注”：截取鼠标所在显示器，直接进入画笔。按 `Ctrl+Alt+S`，或点击“区域截图”：框选后自动切换画笔，在选区上继续批注。
 2. 按 `Esc` 或 `Ctrl+Enter`：保存带批注的截图后退出。正在落笔时会等抬笔再保存。
@@ -36,6 +38,14 @@
 按 `Ctrl+Alt+O` 或点击“区域 OCR”，框选结束后直接识别选区画面并复制，不进入批注。默认自动判断普通文字、Markdown、Mermaid 图或数学公式，公式使用 `$…$`。该入口会发送选中的屏幕内容；只框选需要识别的区域。快捷键可在设置修改。
 
 批注后的 OCR 可选自动判断、普通文字、Markdown 文字、`$…$` 公式、原始 LaTeX、Math Academy 公式、`$$…$$` Markdown 公式（RemNote / Obsidian）和 Mermaid 代码块。每个任务保留所选格式，重试不改变格式。这个选区识别入口输出到结果区和剪贴板，独立于公式画笔。
+
+## 压感画笔
+
+设置中的“启用笔压”默认开启，“压感灵敏度”为 1–100，默认 50；数值越大，轻重笔画的粗细差越明显。压感笔的实际压力决定线宽，不根据移动速度模拟压力。鼠标始终使用原来的等宽画笔；关闭笔压后，笔也保持等宽。画笔基础粗细仍通过原有设置或滚轮调整。
+
+保存后对下一次全屏或区域批注生效，普通画笔和公式画笔共同使用。支持擦除、圈选、撤销重做、颜色与粗细调整，以及含原始压力点的笔迹归档。
+
+需要笔、数位板及驱动向 Electron 提供真实压力数据；仅返回固定压力值的设备无法呈现力度变化。自动化验收通过 Electron 的笔事件注入验证压力响应，不等同于所有型号硬件兼容性验证。
 
 ## Math Academy 公式输出
 

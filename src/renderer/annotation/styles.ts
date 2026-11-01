@@ -62,6 +62,29 @@ export function annotationStyles() {
             borderColor: "var(--ac-error-color)",
         },
         ".ac-field:disabled": { opacity: "0.5", cursor: "not-allowed" },
+        ".ac-pressure-settings": { gap: "8px", minWidth: "0" },
+        ".ac-pressure-toggle": {
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            minHeight: "44px",
+            cursor: "pointer",
+        },
+        ".ac-pressure-toggle:hover, .ac-pressure-toggle:active": {
+            background: "var(--bar-bg)",
+        },
+        ".ac-pressure-toggle input:focus-visible, #ac-pressure-sensitivity:focus-visible":
+            {
+                outline: "2px solid var(--ac-focus-color)",
+                outlineOffset: "2px",
+            },
+        ".ac-pressure-settings[data-state='loading']": { cursor: "progress" },
+        ".ac-pressure-settings[data-state='error'] #ac-pressure-hint": {
+            color: "var(--ac-error-color)",
+        },
+        ".ac-pressure-settings[data-state='success'] #ac-pressure-hint": {
+            color: "var(--ac-success-color)",
+        },
         ".ac-error": { color: "var(--ac-error-color)" },
         ".ac-success": { color: "var(--ac-success-color)" },
         ".ac-overlay": {
