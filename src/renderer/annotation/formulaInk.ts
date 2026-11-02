@@ -1,4 +1,4 @@
-import { button } from "dkh-ui";
+import { button, image } from "dkh-ui";
 import {
     type Canvas,
     config,
@@ -9,6 +9,7 @@ import {
 import type { FormulaFont } from "../../../lib/annotation";
 import { invoke } from "../../../lib/annotationIpc";
 import { t } from "../../../lib/translate/translate";
+import { getImgUrl } from "../root/root";
 import { inkColor, isPressurePath, isPressureTap } from "./pressureInk";
 
 type Formula = {
@@ -47,9 +48,11 @@ export function installFormulaInk(
     let tapTimer: ReturnType<typeof setTimeout> | undefined;
     let down = { x: 0, y: 0, time: 0, blank: false };
     const toolbar = document.querySelector("#ac-completion") as HTMLElement;
-    const tool = button("ƒx").el;
+    const tool = button("").add(
+        image(getImgUrl("formula.svg"), "").class("icon"),
+    ).el;
     tool.id = "ac-formula-pen";
-    tool.className = "ac-formula-tool";
+    tool.className = "ac-tool-icon";
     tool.setAttribute("aria-label", t("公式画笔"));
     tool.title = t(
         "写完公式后双击空白处，或按 Ctrl+Shift+T 转换；保留原笔迹供撤销",

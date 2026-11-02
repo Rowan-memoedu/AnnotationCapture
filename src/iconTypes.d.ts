@@ -1,4 +1,5 @@
 export type RawIconType =
+    | "formula.svg"
     | "add.svg"
     | "add_history.svg"
     | "ai_check.svg"

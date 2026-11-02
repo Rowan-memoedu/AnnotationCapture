@@ -176,37 +176,6 @@ export function annotationStyles() {
             color: "var(--font-color-emphasis)",
         },
         "#draw_bar": { height: "max-content" },
-        "#draw_main > .ac-formula-tool": {
-            width: "var(--bar-size)",
-            height: "var(--bar-size)",
-            padding: "0",
-            display: "grid",
-            placeItems: "center",
-            border: "0",
-            borderRadius: "var(--border-radius)",
-            fontSize: "24px",
-            fontWeight: "600",
-            fontFamily: "var(--main-font)",
-            background: "var(--bar-bg)",
-            color: "var(--font-color)",
-            cursor: "pointer",
-        },
-        "#draw_main > .ac-formula-tool:hover": {
-            background: "var(--hover-color)",
-            color: "var(--font-color-emphasis)",
-        },
-        "#draw_main > .ac-formula-tool:focus-visible, .ac-toolbar .ac-button:focus-visible":
-            {
-                outline: "2px solid var(--ac-focus-color)",
-                outlineOffset: "2px",
-            },
-        "#draw_main > .ac-formula-tool:active": {
-            transform: "translateY(1px)",
-        },
-        "#ac-formula-pen[aria-pressed='true']": {
-            background: "var(--emphasis-color)",
-            color: "var(--font-color-emphasis)",
-        },
         "#ac-whiteboard[data-state='loading']": {
             color: "var(--ac-toolbar-muted)",
         },
