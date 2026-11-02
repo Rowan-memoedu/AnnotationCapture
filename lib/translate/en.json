@@ -1,4 +1,12 @@
 {
+    "e1a8f1": "Smart whiteboard",
+    "e1a8f2": "Central whiteboard",
+    "e1a8f3": "Inverse rectangle whiteboard",
+    "e1a8f4": "Inverse freehand whiteboard",
+    "e1a8f5": "Waiting for the smart whiteboard. You can keep writing.",
+    "e1a8f6": "Select what to keep visible. The surrounding area becomes a whiteboard.",
+    "e1a8f7": "Selection preserved. Write anywhere outside it.",
+    "e1a8f8": "No smart whiteboard is available. Choose a central or inverse whiteboard.",
     "101321": "Add to history",
     "104959": "Right-click to delete",
     "105157": "New Model",
@@ -853,10 +861,10 @@
     "a78ec2": "Blank-area detection unavailable; click to use a central whiteboard",
     "2c6e04": "There is no ink on the whiteboard. Write something first.",
     "50512c": "Automatically detect blank areas",
-    "cb03be": "When enabled, starting full-screen annotation sends the current page screenshot to the recognition service. When disabled, only a central whiteboard is used.",
+    "cb03be": "Full-screen annotation sends a page preview to find blank areas when enabled. Central and inverse whiteboards remain available offline.",
     "df9b6c": "Allow covering the desktop taskbar",
     "1949b1": "Allow covering window top information and window buttons",
     "d8e667": "Maximum whiteboard rectangles",
-    "769560": "Defaults to 5, adjustable from 1 to 20. If detection is pending or unavailable, a central whiteboard appears immediately.",
+    "769560": "Defaults to 5, adjustable from 1 to 20. Click the main button to create a board immediately, or choose Smart whiteboard to wait for recognition.",
     "4274d0": "Formula recognition sends only ink in the selection or whiteboards. Automatic blank-area detection also sends a page screenshot. Windows encrypts stored login credentials."
 }

@@ -29,6 +29,7 @@ import { AnnotationUpdater, acknowledgeUpdate } from "./annotationUpdate";
 import { captureDefaults } from "./captureDefaults";
 import { FormulaJobs } from "./formulaJobs";
 import { FormulaTypesetter } from "./formulaTypeset";
+import { prepareFrameReader } from "./nativeFrames";
 import { screenshotSource } from "./screenshotSource";
 
 app.setName("AnnotationCapture");
@@ -59,6 +60,10 @@ let activeCapture = false;
 let captureStarting = false;
 let captureSaving = false;
 let captureReady: Promise<void> | null = null;
+const warmReaders: ReturnType<typeof prepareFrameReader>[] = [];
+const frameHelper = app.isPackaged
+    ? join(process.resourcesPath, "ScreenFrame.exe")
+    : join(runPath, "out/native/ScreenFrame.exe");
 let whitespaceRequest: AbortController | null = null;
 let closing = false;
 let quitting = false;
@@ -156,6 +161,11 @@ function prepareCaptureWindow() {
 }
 function prewarmCapture() {
     if (quitting || (args.testMode && !args.warmCapture)) return;
+    if (process.platform === "win32") {
+        const count = screen.getAllDisplays().length;
+        while (warmReaders.length < count)
+            warmReaders.push(prepareFrameReader(frameHelper));
+    }
     void prepareCaptureWindow().catch(() => {
         captureWindow?.destroy();
         captureReady = null;
@@ -357,6 +367,40 @@ handle("detectWhitespace", async (png) => {
 
 handle("screenshots", async () => {
     const displays = screen.getAllDisplays();
+    const pointer = screen.getCursorScreenPoint();
+    function frameInfo(d: Electron.Display) {
+        const x = pointer.x - d.bounds.x,
+            y = pointer.y - d.bounds.y;
+        return {
+            id: d.id,
+            bounds: d.bounds,
+            scaleFactor: d.scaleFactor,
+            pointer:
+                x >= 0 && y >= 0 && x < d.bounds.width && y < d.bounds.height
+                    ? { x: x / d.bounds.width, y: y / d.bounds.height }
+                    : undefined,
+        };
+    }
+    if (process.platform === "win32") {
+        try {
+            return await Promise.all(
+                displays.map(async (d) => {
+                    const rect = screen.dipToScreenRect(null, d.bounds);
+                    const reader =
+                        warmReaders.pop() ?? prepareFrameReader(frameHelper);
+                    const deflatedRgba = await reader.read(rect);
+                    return {
+                        ...frameInfo(d),
+                        width: rect.width,
+                        height: rect.height,
+                        deflatedRgba,
+                    };
+                }),
+            );
+        } catch {
+            // Remote sessions and secure desktops may not offer a readable GDI surface.
+        }
+    }
     const width = Math.max(
         ...displays.map((d) => Math.round(d.size.width * d.scaleFactor)),
     );
@@ -372,9 +416,7 @@ handle("screenshots", async () => {
         if (!source || source.thumbnail.isEmpty())
             throw new Error("无法获取屏幕图像");
         return {
-            id: d.id,
-            bounds: d.bounds,
-            scaleFactor: d.scaleFactor,
+            ...frameInfo(d),
             png: source.thumbnail.toDataURL(),
         };
     });
@@ -496,6 +538,7 @@ else {
         }
     });
     app.on("will-quit", () => {
+        for (const reader of warmReaders) reader.stop();
         updater?.dispose();
         retention?.dispose();
         globalShortcut.unregisterAll();

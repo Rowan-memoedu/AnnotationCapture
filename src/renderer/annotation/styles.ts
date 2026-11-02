@@ -207,8 +207,6 @@ export function annotationStyles() {
             background: "var(--emphasis-color)",
             color: "var(--font-color-emphasis)",
         },
-        "#draw_main > .ac-whiteboard-tool": { fontSize: "13px" },
-        "#ac-whiteboard:disabled": { opacity: "0.6", cursor: "default" },
         "#ac-whiteboard[data-state='loading']": {
             color: "var(--ac-toolbar-muted)",
         },

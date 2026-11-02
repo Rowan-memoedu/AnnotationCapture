@@ -10,7 +10,7 @@ import {
 import { invoke } from "../../../lib/annotationIpc";
 import { t } from "../../../lib/translate/translate";
 import { annotationStyles } from "./styles";
-import { maskWhiteboardInk } from "./whiteboard";
+import { maskWhiteboardInk, type WhiteboardRegion } from "./whiteboard";
 
 export type CaptureSnapshot = {
     composite: HTMLCanvasElement;
@@ -18,7 +18,7 @@ export type CaptureSnapshot = {
     rect: PixelRect;
     screenId: number;
     annotations?: object;
-    whiteboards?: PixelRect[];
+    whiteboards?: WhiteboardRegion[];
 };
 export function installCompletion(
     snapshot: () => Promise<CaptureSnapshot>,

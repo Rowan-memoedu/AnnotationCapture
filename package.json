@@ -1,7 +1,7 @@
 {
     "name": "annotation-capture",
     "productName": "AnnotationCapture",
-    "version": "0.7.2",
+    "version": "0.8.0",
     "description": "截图批注归档与选定公式识别",
     "main": "./out/main/main.js",
     "scripts": {
@@ -9,7 +9,7 @@
         "dist": "npm run release:win",
         "start": "electron-vite -c electron.annotation.config.ts preview",
         "dev": "npm run build && npm run start",
-        "build": "electron-vite -c electron.annotation.config.ts build && node scripts/mathjax-assets.cjs",
+        "build": "electron-vite -c electron.annotation.config.ts build && node scripts/mathjax-assets.cjs && node scripts/build-screen-frame.cjs",
         "test": "vitest run --config vitest.annotation.config.ts",
         "test:gateway": "python -m unittest discover -s gateway -p test_*.py -v",
         "release:win": "npm run build && node scripts/prepare-package.cjs && electron-builder --win zip --x64 -c annotation-builder.config.cjs --publish never",

@@ -87,6 +87,30 @@ function iconEl(src: IconType) {
     );
 }
 
+function whiteboardTool(name: IconType, label: string) {
+    return button("")
+        .class("ac-tool-icon")
+        .attr({ title: t(label), ariaLabel: t(label) })
+        .add(image(getImgUrl(`${name}.svg`), "").class("icon"));
+}
+
+function hideStationaryCursor() {
+    document.body.classList.add("ac-stationary-cursor");
+}
+window.addEventListener(
+    "pointermove",
+    (event) => {
+        if (event.movementX || event.movementY)
+            document.body.classList.remove("ac-stationary-cursor");
+    },
+    true,
+);
+window.addEventListener(
+    "pointerdown",
+    () => document.body.classList.remove("ac-stationary-cursor"),
+    true,
+);
+
 function selectEl<i extends string>(
     el: ElType<HTMLElement>,
     title: string,
@@ -333,6 +357,7 @@ async function setScreen(i: (typeof allScreens)[0]) {
     fabricCanvas.setDimensions({ width: w, height: h });
     setClipSize(w, h);
     toCanvas(mainCanvas, img);
+    whiteboard?.setPointer(i.pointer);
     finalRect = [0, 0, mainCanvas.width, mainCanvas.height];
     if (记忆框选)
         if (记忆框选值?.[i.id]?.[2]) {
@@ -3535,6 +3560,9 @@ const drawMainElsx = {
         title: "层叠高度",
     }),
     操作: iconEl("setting").attr({ id: "draw_操作", title: "操作" }),
+    whiteboard: whiteboardTool("rect", "快速白板").attr({
+        id: "ac-whiteboard",
+    }),
 } as const;
 
 const drawBarMainElList = Object.values(drawMainElsx);
@@ -3546,6 +3574,13 @@ const drawSideSelect = {
     rect: iconEl("rect_select").attr({ title: "矩形选择" }),
     free: iconEl("free_select").attr({ title: "自由选择" }),
     draw: iconEl("draw_select").attr({ title: "移动" }),
+} as const;
+
+const whiteboardModes = {
+    smart: whiteboardTool("scan", "智能白板"),
+    center: whiteboardTool("rect", "中央白板"),
+    rect: whiteboardTool("rect_select", "反选白板矩形"),
+    free: whiteboardTool("free_select", "反选白板自由"),
 } as const;
 
 const drawSideFree = {
@@ -3696,6 +3731,12 @@ const drawBarSideElChildren: { w: number; el: ElType<HTMLElement> }[] = [
         ),
     },
     { w: 1, el: drawSideGen2("操作").add(drawSideGen(drawSide操作, "操作")) },
+    {
+        w: 1,
+        el: drawSideGen2("whiteboard").add(
+            drawSideGen(whiteboardModes, "whiteboard"),
+        ),
+    },
 ];
 
 drawBarSideEl.add(drawBarSideElChildren.map((i) => i.el));
@@ -4170,7 +4211,10 @@ renderOn(
     "clip_init",
     async ([_displays, imgBuffer, mainid, _act, captureMode]) => {
         entryMode = captureMode ?? "region";
-        const { config } = await invoke("state");
+        const [{ config }, wx] = await Promise.all([
+            invoke("state"),
+            screenShots(_displays, imgBuffer),
+        ]);
         pressureOptions = config;
         freeColor = config.penColor;
         shapePro.free = {
@@ -4179,7 +4223,6 @@ renderOn(
             sw: config.penWidth,
         };
         showAnnotationMagnifier = config.showMagnifier;
-        const wx = await screenShots(_displays, imgBuffer); // 只是截屏 也可能是小图片
         allScreens = wx.screen;
         const mainId = mainid;
         const i = getNowScreen(mainId);
@@ -4188,7 +4231,6 @@ renderOn(
             w.rect.y -= i.bounds?.y ?? 0;
             return w;
         });
-        console.log(allScreens, windows);
         await setScreen(i);
         const nowScreen =
             _displays.find((i) => i.id === mainId) || _displays[0]; // 非截屏，是屏幕
@@ -4254,10 +4296,15 @@ renderOn(
                     div.el.classList.add("now_screen");
                 }
                 el.add(div);
-                div.on("click", () => {
+                div.on("click", async () => {
                     el.query(".now_screen")?.el.classList.remove("now_screen");
                     div.class("now_screen");
-                    setScreen(i);
+                    await setScreen(i);
+                    if (nowScreenId === i.id)
+                        void whiteboard?.initialize(
+                            config,
+                            entryMode === "full",
+                        );
                 });
             }
             screensEl.clear().add(el);
@@ -4280,6 +4327,7 @@ renderOn(
         rightKey = false;
         changeRightBar(false);
         document.body.dataset.acReady = "true";
+        if (entryMode === "full") hideStationaryCursor();
         renderSend("clip_show", []);
         void whiteboard?.initialize(config, entryMode === "full");
     },
@@ -4964,9 +5012,8 @@ for (const [index, e] of drawBarMainElList.entries()) {
             }
         }, 100);
     });
-    e.on("click", () => {
-        setEditType(Type[index], editType[Type[index]]);
-    });
+    const type = Type[index];
+    if (type) e.on("click", () => setEditType(type, editType[type]));
 }
 
 for (const el of drawBarSideElChildren) {
@@ -5266,6 +5313,7 @@ fabricCanvas.on("path:created", ({ path }) =>
 );
 const completion = installCompletion(
     async () => {
+        whiteboard?.cancelChoice();
         formulaInk?.cancel();
         await new Promise<void>((resolve) =>
             requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
@@ -5296,11 +5344,7 @@ const completion = installCompletion(
                 height: finalRect[3],
             },
             screenId: nowScreenId,
-            whiteboards: whiteboard?.rectangles().map((r) => ({
-                ...r,
-                x: r.x - finalRect[0],
-                y: r.y - finalRect[1],
-            })),
+            whiteboards: whiteboard?.regions(finalRect[0], finalRect[1]),
             annotations: {
                 version: 1,
                 canvas: fabricCanvas.toJSON(),
@@ -5326,6 +5370,7 @@ formulaInk = installFormulaInk(fabricCanvas, hisPush, () =>
 whiteboard = installWhiteboard(
     fabricCanvas,
     mainCanvas,
+    drawMainElsx.whiteboard.el,
     () => ({
         x: finalRect[0],
         y: finalRect[1],
@@ -5339,6 +5384,25 @@ whiteboard = installWhiteboard(
         void completion.finish(true);
     },
 );
+document.querySelector("#ac-formula-pen")!.after(drawMainElsx.whiteboard.el);
+drawMainElsx.whiteboard.el.setAttribute("aria-controls", "draw_whiteboard_i");
+for (const [mode, tool] of typedEntries(whiteboardModes)) {
+    tool.on("click", () => {
+        showSideBar(false);
+        whiteboard?.choose(mode);
+    });
+}
+drawMainElsx.whiteboard.on("click", () => {
+    showSideBar(false);
+    whiteboard?.choose("auto");
+});
+drawMainElsx.whiteboard.on("keydown", (event) => {
+    if (event.key === "ArrowRight") {
+        event.preventDefault();
+        showSideBarItem(drawBarMainElList.indexOf(drawMainElsx.whiteboard));
+        whiteboardModes.smart.el.focus();
+    }
+});
 inkSelection = installInkSelection(
     fabricCanvas,
     hisPush,

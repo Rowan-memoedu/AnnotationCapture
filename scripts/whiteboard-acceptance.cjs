@@ -37,6 +37,11 @@ async function checkpoint(page) {
     return result;
 }
 async function finish(page) { const closed = page.waitForEvent('close'); await page.keyboard.press('Escape'); await closed; }
+async function option(page, mode) {
+    await page.locator('#ac-whiteboard').hover();
+    await page.waitForFunction(() => !document.querySelector('#draw_side').classList.contains('draw_side_hide') && document.querySelector('#draw_whiteboard_i').style.display !== 'none');
+    await page.locator('#draw_whiteboard_' + mode).click();
+}
 function boards(objects) { return objects.filter(o => o.acWhiteboard); }
 async function point(page, x, y) { return page.locator('#main_photo').evaluate((c, p) => {
     const b = c.getBoundingClientRect(); return [b.x + p[0] / c.width * b.width, b.y + p[1] / c.height * b.height];
@@ -163,6 +168,60 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
     const hideMs = performance.now() - started; assert.ok(hideMs < 500, `exit hides before save: ${hideMs} ms`); assert.equal(page.isClosed(), false);
     await closed2; timings.push({ hideMs, delayedSaveMs: performance.now() - started });
     checks.push('invalid model data falls back; Esc hides before delayed save; failure restores editable canvas');
+    await fixture({saveDelay:0, detectionDelay:2200, rects:[{x:.08,y:.14,width:.3,height:.5}]});
+    page=await open();
+    assert.equal(await page.locator('#draw_whiteboard_i > button').count(),4);
+    await option(page,'smart');
+    assert.match(await page.locator('#ac-whiteboard-status').innerText(),/正在等待/);
+    assert.equal(await page.locator('#ac-whiteboard-remove').isVisible(),false);
+    const penSize=await page.locator('#main_photo').evaluate(c=>[c.width,c.height]);
+    const across=async fraction=>point(page,penSize[0]*fraction,penSize[1]*.4);
+    await page.mouse.move(...await across(.45)); await page.mouse.down();
+    await page.mouse.move(...await across(.50),{steps:5});
+    await page.waitForSelector('#ac-whiteboard-remove');
+    await page.mouse.move(...await across(.56),{steps:5}); await page.mouse.up();
+    const writing=(await checkpoint(page)).filter(o=>!o.acWhiteboard);
+    assert.ok(writing.some(o=>o.width>penSize[0]*.095),'stroke spans the arrival of the smart board');
+    assert.equal(await page.locator('#ac-whiteboard-adjust').isVisible(),false);
+    await option(page,'center');
+    assert.equal(await page.locator('#ac-whiteboard-adjust').getAttribute('aria-pressed'),'true');
+    await page.locator('#ac-whiteboard-remove').click(); await finish(page);
+    checks.push('explicit smart waits and creates a locked board; explicit center overrides ready AI');
+    page=await open(); await option(page,'smart'); await option(page,'center');
+    await page.waitForFunction(()=>document.querySelector('#ac-whiteboard').getAttribute('aria-busy')==='false');
+    await delay(2300);
+    assert.equal(boards(await checkpoint(page))[0].acFixed,false);
+    checks.push('switching away cancels the pending smart choice');
+    const dims=await page.locator('#main_photo').evaluate(c=>[c.width,c.height]);
+    const xy=async (x,y)=>point(page,x*dims[0],y*dims[1]);
+    const alpha=async (x,y)=>page.locator('#draw_photo').evaluate((c,p)=>c.getContext('2d').getImageData(Math.floor(p[0]*c.width),Math.floor(p[1]*c.height),1,1).data[3],[x,y]);
+    for (const kind of ['rect','free']) {
+        await option(page,kind);
+        const vertices=kind==='rect'?[[.28,.21],[.64,.58]]:[[.28,.21],[.66,.21],[.66,.37],[.46,.37],[.46,.58],[.28,.58]];
+        await page.mouse.move(...await xy(...vertices[0])); await page.mouse.down();
+        for (const v of vertices.slice(1)) await page.mouse.move(...await xy(...v),{steps:4});
+        await page.mouse.up(); await page.waitForSelector('#ac-whiteboard-lasso',{state:'detached'});
+        assert.equal(await page.locator('#ac-whiteboard-adjust').isVisible(),false);
+        assert.equal(await alpha(.32,.3),0); assert.equal(await alpha(.71,.5),255);
+        assert.equal(await alpha(.56,.49),kind==='rect'?0:255,'concave notch follows actual freehand path');
+        const objects=boards(await checkpoint(page));
+        assert.equal(objects.length,1); assert.ok(objects[0].acFixed && objects[0].acHole.length>=4);
+        await page.locator('#ac-whiteboard-remove').click(); await page.keyboard.press('Control+z');
+        await page.waitForSelector('#ac-whiteboard-remove');
+        assert.equal(await alpha(.32,.3),0); assert.equal(await alpha(.71,.5),255);
+    }
+    for(const [x,y] of [[.33,.3],[.55,.49],[.72,.52]]) await stroke(page,await xy(x,y),await xy(x+.022,y+.016));
+    const last=page.waitForEvent('close'); await page.locator('#ac-whiteboard-recognize').click(); await last;
+    const counts=await app.evaluate(({nativeImage})=>{
+        const im=nativeImage.createFromDataURL(globalThis.boardFixture.inputs.at(-1).png), buf=im.toBitmap(),{width,height}=im.getSize();
+        return [[.33,.3],[.55,.49],[.72,.52]].map(([x,y])=>{
+            let n=0; for(let j=Math.floor(y*height)-7;j<(y+.025)*height;j++) for(let k=Math.floor(x*width)-7;k<(x+.03)*width;k++){
+                const i=(j*width+k)*4; if(buf[i+2]>150 && buf[i+1]<125 && buf[i]<125)n++;
+            } return n;
+        });
+    });
+    assert.equal(counts[0],0); assert.ok(counts[1]>8 && counts[2]>8);
+    checks.push('inverse rectangle and concave freehand preserve holes, undo and exact OCR mask');
     assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(root, 'report.json'), JSON.stringify({ passed: true, checks, timings, errors }, null, 2));
     console.log('WHITEBOARD_ACCEPTANCE_PASSED', JSON.stringify({ checks, timings }));

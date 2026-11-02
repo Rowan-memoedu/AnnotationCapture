@@ -1,7 +1,26 @@
 import type { Display } from "electron";
+import type { ScreenFrame } from "../../../lib/annotation";
 import { invoke } from "../../../lib/annotationIpc";
 
 const { nativeImage } = require("electron") as typeof import("electron");
+const { inflateRawSync } = require("node:zlib") as typeof import("node:zlib");
+
+function framePixels(shot: Extract<ScreenFrame, { deflatedRgba: Uint8Array }>) {
+    const expected = shot.width * shot.height * 4;
+    const raw = inflateRawSync(shot.deflatedRgba, {
+        maxOutputLength: expected,
+    });
+    if (raw.length !== expected) throw new Error("Incomplete screen frame");
+    return new ImageData(
+        new Uint8ClampedArray(
+            raw.buffer as ArrayBuffer,
+            raw.byteOffset,
+            expected,
+        ),
+        shot.width,
+        shot.height,
+    );
+}
 
 function pixels(image: Electron.NativeImage) {
     const { width, height } = image.getSize();
@@ -18,15 +37,15 @@ function pixels(image: Electron.NativeImage) {
 
 export default function init() {
     return async (_displays?: Display[], buffer?: Buffer) => {
-        const shots = buffer
+        const file =
+            buffer && nativeImage.createFromBuffer(Buffer.from(buffer));
+        const shots: ScreenFrame[] = file
             ? [
                   {
                       id: -1,
-                      png: nativeImage
-                          .createFromBuffer(Buffer.from(buffer))
-                          .toDataURL(),
-                      bounds: { x: 0, y: 0, width: 0, height: 0 },
+                      bounds: { x: 0, y: 0, ...file.getSize() },
                       scaleFactor: 1,
+                      png: "",
                   },
               ]
             : await invoke("screenshots");
@@ -36,21 +55,25 @@ export default function init() {
                 rect: { x: number; y: number; w: number; h: number };
             }[],
             screen: shots.map((shot) => {
-                const image = nativeImage.createFromDataURL(shot.png);
-                const size = image.getSize();
                 return {
                     id: shot.id,
-                    bounds: buffer ? { x: 0, y: 0, ...size } : shot.bounds,
-                    size: buffer
-                        ? size
-                        : {
-                              width: shot.bounds.width,
-                              height: shot.bounds.height,
-                          },
+                    pointer: shot.pointer,
+                    bounds: shot.bounds,
+                    size: {
+                        width: shot.bounds.width,
+                        height: shot.bounds.height,
+                    },
                     scaleFactor: shot.scaleFactor,
                     capture: async () => ({
-                        toImageData: () => pixels(image),
-                        toNativeImage: () => image,
+                        toImageData: () =>
+                            "deflatedRgba" in shot
+                                ? framePixels(shot)
+                                : pixels(
+                                      file ||
+                                          nativeImage.createFromDataURL(
+                                              shot.png,
+                                          ),
+                                  ),
                     }),
                 };
             }),

@@ -218,8 +218,8 @@ body input {
     border-radius: calc(var(--bar-size) / 6);
     box-shadow: var(--shadow);
 }
-#draw_main > div,
-.draw_items > div {
+#draw_main > :is(div, .ac-tool-icon),
+.draw_items > :is(div, .ac-tool-icon) {
     width: var(--bar-size);
     height: var(--bar-size);
     border-radius: calc(var(--bar-size) / 6);
@@ -228,12 +228,12 @@ body input {
         transform: var(--button-active);
     }
 }
-#draw_main > div > .icon,
-.draw_items > div > .icon {
+#draw_main > :is(div, .ac-tool-icon) > .icon,
+.draw_items > :is(div, .ac-tool-icon) > .icon {
     width: calc(var(--bar-size) * var(--bar-icon));
 }
-#draw_main > div:not(:has(.range-b)):hover,
-.draw_items > div:not(:has(.range-b)):hover {
+#draw_main > :is(div, .ac-tool-icon):not(:has(.range-b)):hover,
+.draw_items > :is(div, .ac-tool-icon):not(:has(.range-b)):hover {
     background-color: var(--hover-color);
     transition: var(--transition);
 }
@@ -254,6 +254,22 @@ body input {
 }
 .draw_items > div {
     flex-shrink: 0;
+}
+.ac-tool-icon {
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+.ac-tool-icon:focus-visible {
+    outline: 2px solid var(--ac-focus-color);
+    outline-offset: -2px;
+}
+.ac-stationary-cursor, .ac-stationary-cursor * {
+    cursor: none !important;
 }
 
 #editor {

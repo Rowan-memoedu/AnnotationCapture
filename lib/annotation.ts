@@ -1,5 +1,14 @@
 import type { WhiteboardSettings } from "./whiteboard";
 export type PixelRect = { x: number; y: number; width: number; height: number };
+export type ScreenFrame = {
+    id: number;
+    bounds: PixelRect;
+    scaleFactor: number;
+    pointer?: { x: number; y: number };
+} & (
+    | { deflatedRgba: Uint8Array; width: number; height: number }
+    | { png: string }
+);
 export type CaptureMode = "region" | "full" | "ocr";
 export type FormulaFont = "stix2" | "newcm";
 export type LassoRule = "intersect" | "contain";
@@ -155,12 +164,7 @@ export type AnnotationMessages = {
     inkRecognize: (id: string, png: string) => { latex: string; model: string };
     inkCancel: (id: string) => void;
     typeset: (latex: string, font: FormulaFont, color: string) => string;
-    screenshots: () => {
-        id: number;
-        png: string;
-        bounds: PixelRect;
-        scaleFactor: number;
-    }[];
+    screenshots: () => ScreenFrame[];
     archive: (input: CaptureInput) => ArchiveRecord;
     formula: (input: {
         archiveId: string;

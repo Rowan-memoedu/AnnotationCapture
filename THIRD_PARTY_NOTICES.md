@@ -1,5 +1,31 @@
 # Third-party notices
 
+The Windows screen capture helper includes `CaptureScreenBitmap` from [FocusToolWin's ScreenshotService](https://github.com/YaRus02/FocusToolWin/blob/6ae324854e575704a29d049156dc9ae9958dc96f/Services/ScreenshotService.cs#L96-L111), adapted for the Windows .NET Framework compiler.
+
+MIT License
+
+Copyright (c) 2026 YaRus
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## eSearch
+
 AnnotationCapture reuses the eSearch 15.6.1 screenshot annotation editor and its settings, icons, and UI foundations. eSearch is Copyright xushengfeng and contributors, licensed under GNU GPL v3. See LICENSE and README.eSearch.md.
 
 This modified application is distributed under GPL-3.0. Corresponding source, build instructions, and the exact source tag accompany each release. No API credentials or user archives are included.

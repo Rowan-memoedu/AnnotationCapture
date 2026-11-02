@@ -1,5 +1,5 @@
 import { button, p, view } from "dkh-ui";
-import { type Canvas, Control, FabricObject, Point, Rect } from "fabric";
+import { type Canvas, Control, FabricObject, Path, Point, Rect } from "fabric";
 import type { PixelRect, PublicConfig } from "../../../lib/annotation";
 import { invoke } from "../../../lib/annotationIpc";
 import { t } from "../../../lib/translate/translate";
@@ -10,35 +10,48 @@ import {
     whiteboardRects,
 } from "../../../lib/whiteboard";
 
-type Board = Rect & { acWhiteboard: true; acFixed: boolean };
+import { pointerPatch } from "./cursorOverlay";
+import type { Position } from "./lassoGeometry";
+import { whiteboardLasso } from "./whiteboardLasso";
+
+export type WhiteboardRegion = PixelRect & { hole?: Position[] };
+type Board = (Rect | Path) & {
+    acWhiteboard: true;
+    acFixed: boolean;
+    acHole?: Position[];
+};
+type BoardMode = "auto" | "smart" | "center" | "rect" | "free";
 FabricObject.customProperties = [
     ...FabricObject.customProperties,
     "acWhiteboard",
     "acFixed",
+    "acHole",
 ];
 export function isWhiteboard(object: unknown): object is Board {
     return !!object && (object as Board).acWhiteboard === true;
 }
 
-export function maskWhiteboardInk(ink: HTMLCanvasElement, boards: PixelRect[]) {
+export function maskWhiteboardInk(
+    ink: HTMLCanvasElement,
+    boards: WhiteboardRegion[],
+) {
     const masked = document.createElement("canvas");
     masked.width = ink.width;
     masked.height = ink.height;
     const ctx = masked.getContext("2d")!;
-    ctx.save();
-    ctx.beginPath();
+    ctx.fillStyle = "white";
     for (const board of boards) {
-        const r = intersectRect(board, {
-            x: 0,
-            y: 0,
-            width: ink.width,
-            height: ink.height,
-        });
-        if (r) ctx.rect(r.x, r.y, r.width, r.height);
+        ctx.beginPath();
+        ctx.rect(board.x, board.y, board.width, board.height);
+        if (board.hole?.length) {
+            ctx.moveTo(board.hole[0].x, board.hole[0].y);
+            for (const p of board.hole.slice(1)) ctx.lineTo(p.x, p.y);
+            ctx.closePath();
+        }
+        ctx.fill("evenodd");
     }
-    ctx.clip();
+    ctx.globalCompositeOperation = "source-in";
     ctx.drawImage(ink, 0, 0);
-    ctx.restore();
     if (
         !ctx
             .getImageData(0, 0, masked.width, masked.height)
@@ -54,6 +67,7 @@ export function maskWhiteboardInk(ink: HTMLCanvasElement, boards: PixelRect[]) {
 export function installWhiteboard(
     canvas: Canvas,
     source: HTMLCanvasElement,
+    create: HTMLButtonElement,
     area: () => PixelRect,
     history: () => void,
     select: () => void,
@@ -61,7 +75,25 @@ export function installWhiteboard(
     recognize: () => void,
 ) {
     let candidates: PixelRect[] = [];
+    let patch: ReturnType<typeof pointerPatch>;
+    let pointer: Position | undefined,
+        checkedPointer = false,
+        covered = false;
+    function cursorTile() {
+        if (!checkedPointer && pointer) {
+            checkedPointer = true;
+            patch = pointerPatch(
+                source,
+                { x: pointer.x * source.width, y: pointer.y * source.height },
+                source.width /
+                    (source.getBoundingClientRect().width || source.width),
+            );
+        }
+        return patch;
+    }
     let generation = 0;
+    let waiting = false;
+    let endLasso: (() => void) | undefined;
     let editing = false;
     let uniformScaling = canvas.uniformScaling;
     let detection: "off" | "loading" | "ready" | "error" = "off";
@@ -71,13 +103,6 @@ export function installWhiteboard(
         role: "status",
         ariaLive: "polite",
     });
-    const create = button(t("白板"))
-        .class("ac-formula-tool", "ac-whiteboard-tool")
-        .attr({
-            id: "ac-whiteboard",
-            ariaLabel: t("快速白板"),
-            title: t("在页面上创建白色书写区域"),
-        });
     const adjust = button(t("调整白板"))
         .class("ac-button")
         .attr({ id: "ac-whiteboard-adjust", hidden: true });
@@ -92,20 +117,27 @@ export function installWhiteboard(
         .class("ac-toolbar-group")
         .attr({ id: "ac-whiteboard-tools" })
         .add([adjust, remove, ocr, hint]);
-    document.querySelector("#ac-formula-pen")!.after(create.el);
     document.querySelector("#ac-completion")!.append(group.el);
 
     function sync() {
         const items = boards();
-        create.el.disabled = items.length > 0;
-        create.el.dataset.state = items.length ? "success" : detection;
-        create.el.setAttribute("aria-pressed", String(items.length > 0));
+        if (!!items.length !== covered) {
+            covered = !!items.length;
+            const tile = cursorTile();
+            if (tile) {
+                const ctx = source.getContext("2d")!;
+                if (covered) ctx.drawImage(tile.tile, tile.x, tile.y);
+                else ctx.putImageData(tile.original, tile.x, tile.y);
+            }
+        }
+        create.dataset.state = items.length ? "success" : detection;
+        create.setAttribute("aria-pressed", String(items.length > 0));
         adjust.el.hidden = !items.some((b) => !b.acFixed);
         remove.el.hidden = ocr.el.hidden = items.length === 0;
         adjust.el.textContent = t(editing ? "完成调整" : "调整白板");
         adjust.el.setAttribute("aria-pressed", String(editing));
         group.el.dataset.state = items.length ? "success" : detection;
-        create.el.setAttribute(
+        create.setAttribute(
             "aria-busy",
             String(detection === "loading" && !items.length),
         );
@@ -125,6 +157,10 @@ export function installWhiteboard(
         object.setControlsVisibility({ mtr: false });
     }
     function stopEditing() {
+        if (waiting || endLasso) hint.el.textContent = "";
+        waiting = false;
+        endLasso?.();
+        endLasso = undefined;
         if (editing) {
             canvas.discardActiveObject();
             canvas.uniformScaling = uniformScaling;
@@ -134,16 +170,77 @@ export function installWhiteboard(
         sync();
         canvas.requestRenderAll();
     }
-    create.on("click", () => {
-        if (boards().length) return;
-        pencil();
+    function put(board: Rect | Path, fixed: boolean, hole?: Position[]) {
+        const object = Object.assign(board, {
+            acWhiteboard: true as const,
+            acFixed: fixed,
+            acHole: hole,
+        });
+        protect(object);
+        canvas.add(object);
+        canvas.sendObjectToBack(object);
+        document.body.classList.add("ac-stationary-cursor");
+    }
+    function choose(mode: BoardMode) {
+        if (mode === "auto" && boards().length) return;
+        const finishingWait =
+            mode === "smart" && waiting && detection !== "loading";
+        stopEditing();
+        if (mode === "smart" && detection === "loading") {
+            pencil();
+            waiting = true;
+            hint.el.textContent = t("正在等待智能白板，可继续书写");
+            return;
+        }
         const bounds = area();
+        if (mode === "rect" || mode === "free") {
+            select();
+            hint.el.textContent = t("圈出要保留的内容，其余区域将变成白板");
+            endLasso = whiteboardLasso(
+                canvas,
+                mode,
+                bounds,
+                (hole) => {
+                    pencil();
+                    const { x, y, width, height } = bounds;
+                    const outer = `M ${x} ${y} h ${width} v ${height} h ${-width} Z`;
+                    const inner = hole
+                        .map((p, i) => `${i ? "L" : "M"} ${p.x} ${p.y}`)
+                        .join(" ");
+                    const board = new Path(`${outer} ${inner} Z`, {
+                        originX: "left",
+                        originY: "top",
+                        left: x,
+                        top: y,
+                        strokeWidth: 0,
+                        fillRule: "evenodd",
+                    });
+                    canvas.remove(...boards());
+                    put(board, true, hole);
+                    hint.el.textContent = t("已保留选区，其余区域可书写");
+                    history();
+                    sync();
+                    canvas.requestRenderAll();
+                },
+                pencil,
+            );
+            return;
+        }
         const detected = candidates
             .map((r) => intersectRect(r, bounds))
             .filter(
                 (r): r is PixelRect => !!r && r.width >= 16 && r.height >= 16,
             );
-        const fixed = detected.length > 0;
+        const fixed = mode !== "center" && detected.length > 0;
+        if (mode === "smart" && !fixed) {
+            hint.el.textContent = t(
+                "当前没有可用的智能白板，可选择中央白板或反选",
+            );
+            return;
+        }
+        // Keep the current brush and its in-progress stroke when an awaited result arrives.
+        if (!finishingWait) pencil();
+        canvas.remove(...boards());
         const width = Math.min(bounds.width * 0.6, 960 * devicePixelRatio);
         const height = Math.min(bounds.height * 0.6, 600 * devicePixelRatio);
         const rects = fixed
@@ -157,19 +254,17 @@ export function installWhiteboard(
                   },
               ];
         for (const r of rects) {
-            const object = new Rect({
-                originX: "left",
-                originY: "top",
-                left: r.x,
-                top: r.y,
-                width: r.width,
-                height: r.height,
-            }) as Board;
-            object.acWhiteboard = true;
-            object.acFixed = fixed;
-            protect(object);
-            canvas.add(object);
-            canvas.sendObjectToBack(object);
+            put(
+                new Rect({
+                    originX: "left",
+                    originY: "top",
+                    left: r.x,
+                    top: r.y,
+                    width: r.width,
+                    height: r.height,
+                }),
+                fixed,
+            );
         }
         hint.el.textContent = t(
             fixed
@@ -180,7 +275,7 @@ export function installWhiteboard(
         history();
         sync();
         if (!fixed) startEditing();
-    });
+    }
     function startEditing() {
         select();
         editing = true;
@@ -253,7 +348,7 @@ export function installWhiteboard(
     });
     canvas.on("object:removed", sync);
     canvas.on("object:modified", ({ target }) => {
-        if (!isWhiteboard(target)) return;
+        if (!isWhiteboard(target) || target.acFixed) return;
         const a = area();
         const width = Math.max(
             32,
@@ -297,6 +392,17 @@ export function installWhiteboard(
             preview
                 .getContext("2d")!
                 .drawImage(source, 0, 0, preview.width, preview.height);
+            const tile = cursorTile();
+            if (tile)
+                preview
+                    .getContext("2d")!
+                    .drawImage(
+                        tile.tile,
+                        tile.x * scale,
+                        tile.y * scale,
+                        tile.tile.width * scale,
+                        tile.tile.height * scale,
+                    );
             const result = await invoke(
                 "detectWhitespace",
                 preview.toDataURL(),
@@ -376,7 +482,8 @@ export function installWhiteboard(
                           config.whiteboard.maxRects,
                       );
             detection = "ready";
-            if (!boards().length)
+            if (waiting) choose("smart");
+            else if (!boards().length && !endLasso)
                 hint.el.textContent = t(
                     candidates.length
                         ? "空白区域已就绪"
@@ -385,24 +492,38 @@ export function installWhiteboard(
         } catch {
             if (generation !== current) return;
             detection = "error";
-            if (!boards().length)
+            if (waiting) choose("smart");
+            else if (!boards().length && !endLasso)
                 hint.el.textContent = t("空白识别不可用，点击可使用中央白板");
         }
         sync();
     }
     return {
         initialize,
+        choose,
+        cancelChoice: () => {
+            if (waiting || endLasso) stopEditing();
+        },
+        setPointer: (value: Position | undefined) => {
+            pointer = value;
+            checkedPointer = false;
+            patch = undefined;
+            covered = false;
+        },
         stopEditing,
         invalidate: () => {
             generation++;
             candidates = [];
+            detection = "off";
+            stopEditing();
         },
-        rectangles: () =>
+        regions: (left: number, top: number): WhiteboardRegion[] =>
             boards().map((b) => ({
-                x: b.left,
-                y: b.top,
+                x: b.left - left,
+                y: b.top - top,
                 width: b.width * b.scaleX,
                 height: b.height * b.scaleY,
+                hole: b.acHole?.map((p) => ({ x: p.x - left, y: p.y - top })),
             })),
     };
 }
