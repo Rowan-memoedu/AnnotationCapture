@@ -37,12 +37,11 @@ const args = minimist(process.argv.slice(1));
 const runPath = resolve(__dirname, "../..");
 const portableRoot =
     process.env.PORTABLE_EXECUTABLE_DIR || dirname(app.getPath("exe"));
+const portableDataRoot = join(portableRoot, "AnnotationCapture-data");
 const dataRoot =
     args.userData ||
     process.env.ANNOTATION_DATA_DIR ||
-    (app.isPackaged
-        ? join(portableRoot, "AnnotationCapture-data")
-        : "D:\\AppData\\AnnotationCapture");
+    (app.isPackaged ? portableDataRoot : "D:\\AppData\\AnnotationCapture");
 mkdirSync(dataRoot, { recursive: true });
 app.setPath("userData", dataRoot);
 app.setPath("sessionData", join(dataRoot, "browser"));
@@ -75,6 +74,34 @@ function cancelInk() {
     inkRequests.clear();
 }
 const icon = join(runPath, "assets/logo/64x64.png");
+
+function registerLoginStartup() {
+    if (process.platform !== "win32" || !app.isPackaged || args.testMode)
+        return;
+
+    const name = "AnnotationCapture";
+    app.setAppUserModelId(name);
+    const launchArgs = ["--background"];
+    if (resolve(dataRoot) !== portableDataRoot)
+        launchArgs.push("--userData", resolve(dataRoot));
+    const archiveRoot = resolve(config.public().archiveRoot);
+    if (archiveRoot !== resolve(dataRoot, "Archive"))
+        launchArgs.push("--archiveRoot", archiveRoot);
+
+    const path = `"${process.execPath}"`;
+    const settings = app.getLoginItemSettings({ path, args: launchArgs });
+    if (settings.openAtLogin) return;
+    const entry = settings.launchItems.find(
+        (item) => item.scope === "user" && item.name === name,
+    );
+    app.setLoginItemSettings({
+        openAtLogin: true,
+        enabled: entry?.enabled ?? true,
+        name,
+        path,
+        args: launchArgs,
+    });
+}
 
 function load(win: BrowserWindow, file: string) {
     win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -528,7 +555,9 @@ handle("openArchive", async () => {
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-    app.on("second-instance", () => showPanel());
+    app.on("second-instance", (_event, argv) => {
+        if (!minimist(argv.slice(1)).background) showPanel();
+    });
     app.on("window-all-closed", () => {});
     app.on("before-quit", (event) => {
         if (activeCapture) {
@@ -646,6 +675,7 @@ else {
             ]),
         );
         tray.on("click", showPanel);
+        registerLoginStartup();
         if (args.input) void capture(args.input, args.ocr ? "ocr" : "region");
         else if (args.full) void capture(undefined, "full");
         else if (args.capture) void capture();
