@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-param([string]$Evidence = 'D:\Artifacts\AnnotationCapture\release-0.8.3\acceptance\startup')
+param([string]$Evidence = 'D:\Artifacts\AnnotationCapture\release-0.8.4\acceptance\startup')
 $ErrorActionPreference = 'Stop'
 $root = Join-Path 'D:\Quarantine\AnnotationCapture' ('startup-' + [guid]::NewGuid().ToString())
 $worker = Join-Path $PSScriptRoot '..\src\main\startup-worker.ps1'
@@ -13,6 +13,12 @@ New-Item -ItemType Directory -Path $root,$Evidence -Force | Out-Null
 function Case([string]$label) {
     $name = 'AnnotationCapture-Test-' + [guid]::NewGuid().ToString()
     $names.Add($name)
+    $base = 'HKCU:\Software\AnnotationCapture-Tests\' + $name
+    foreach ($key in @(($base+'\Run'),($base+'\StartupApproved\Run'),($base+'\StartupApproved\StartupFolder'))) {
+        New-Item -Path $key -Force | Out-Null
+    }
+    New-ItemProperty -LiteralPath ($base+'\Run') -Name OtherApplication -Value 'preserve me' -PropertyType String | Out-Null
+    New-ItemProperty -LiteralPath ($base+'\StartupApproved\Run') -Name OtherApplication -Value ([byte[]]@(3,0,0,0,1,2,3,4,5,6,7,8)) -PropertyType Binary | Out-Null
     $data = Join-Path $root ($label + ' User''s 数据')
     $appRoot = Join-Path $root ($label + ' App 数学 & 练习')
     New-Item -ItemType Directory -Path $data,$appRoot -Force | Out-Null
@@ -25,6 +31,9 @@ function Apply($request) {
     $request | ConvertTo-Json | Set-Content -LiteralPath $file -Encoding utf8
     $output = & $powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $worker -RequestPath $file
     if ($LASTEXITCODE -ne 0) { throw ('Worker failed: ' + ($output -join "`n")) }
+    $base = 'HKCU:\Software\AnnotationCapture-Tests\' + $request.name
+    if ((Get-ItemPropertyValue -LiteralPath ($base+'\Run') -Name OtherApplication) -ne 'preserve me') { throw 'Unrelated Run entry changed' }
+    if (((Get-ItemPropertyValue -LiteralPath ($base+'\StartupApproved\Run') -Name OtherApplication) -join ',') -ne '3,0,0,0,1,2,3,4,5,6,7,8') { throw 'Unrelated startup approval changed' }
     return ($output -join "`n") | ConvertFrom-Json
 }
 function Check([bool]$condition, [string]$label) {
@@ -62,9 +71,9 @@ try {
 
     foreach ($disabled in @($false,$true)) {
         $r = Case ('legacy-run-' + $disabled)
-        $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+        $runKey = 'HKCU:\Software\AnnotationCapture-Tests\'+$r.name+'\Run'
         New-ItemProperty -LiteralPath $runKey -Name $r.name -Value ('"' + $r.executable + '" ' + $r.arguments) -PropertyType String -Force | Out-Null
-        $approval = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+        $approval = 'HKCU:\Software\AnnotationCapture-Tests\'+$r.name+'\StartupApproved\Run'
         $bytes = [byte[]]@(2,0,0,0,0,0,0,0,0,0,0,0)
         if ($disabled) { $bytes[0] = 3 }
         New-ItemProperty -LiteralPath $approval -Name $r.name -Value $bytes -PropertyType Binary -Force | Out-Null
@@ -77,7 +86,7 @@ try {
     $link.TargetPath = $r.executable
     $link.Arguments = $r.arguments
     $link.Save()
-    $approval = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder'
+    $approval = 'HKCU:\Software\AnnotationCapture-Tests\'+$r.name+'\StartupApproved\StartupFolder'
     New-ItemProperty -LiteralPath $approval -Name ($r.name + '.lnk') -Value ([byte[]]@(3,0,0,0,0,0,0,0,0,0,0,0)) -PropertyType Binary -Force | Out-Null
     $state = Apply $r
     Check (!$state.enabled -and !(Test-Path -LiteralPath $shortcut) -and @(Get-ChildItem -LiteralPath (Join-Path $r.dataRoot 'Startup') -Filter '*.lnk').Count -eq 1) 'disabled-shortcut-migration-is-recoverable'
@@ -86,8 +95,8 @@ try {
     $action = New-ScheduledTaskAction -Execute $r.executable -Argument $r.arguments
     $principal = New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Limited
     Register-ScheduledTask -TaskName ($r.name + '-Logon') -Action $action -Principal $principal -Settings (New-ScheduledTaskSettingsSet) | Out-Null
-    New-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name $r.name -Value ('"' + $r.executable + '" ' + $r.arguments) -PropertyType String -Force | Out-Null
-    New-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run' -Name $r.name -Value ([byte[]]@(3,0,0,0,0,0,0,0,0,0,0,0)) -PropertyType Binary -Force | Out-Null
+    New-ItemProperty -LiteralPath ('HKCU:\Software\AnnotationCapture-Tests\'+$r.name+'\Run') -Name $r.name -Value ('"' + $r.executable + '" ' + $r.arguments) -PropertyType String -Force | Out-Null
+    New-ItemProperty -LiteralPath ('HKCU:\Software\AnnotationCapture-Tests\'+$r.name+'\StartupApproved\Run') -Name $r.name -Value ([byte[]]@(3,0,0,0,0,0,0,0,0,0,0,0)) -PropertyType Binary -Force | Out-Null
     $state = Apply $r
     Check ($state.enabled -and !(Get-ScheduledTask -TaskName ($r.name + '-Logon')).Settings.Enabled) 'adopts-owned-existing-repair-task'
 
@@ -100,6 +109,7 @@ try {
     Check ($state.method -eq 'run' -and $state.enabled) 'registration-failure-falls-back-to-run'
     $r.enabled = $false
     Check (!(Apply $r).enabled) 'fallback-respects-explicit-disable'
+    Check $true 'unrelated-run-values-and-disabled-approvals-preserved-on-every-apply'
     $report = @{ passed = $true; checks = @($checks); actualWindowsSignIn = $false; fixtureRoot = $root; namespaces = @($names) }
 } finally {
     foreach ($name in $names) {
@@ -107,8 +117,8 @@ try {
             $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
             if ($task -and $taskName.StartsWith('AnnotationCapture-Test-')) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false }
         }
-        foreach ($key in @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Run','HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run')) { Remove-ItemProperty -LiteralPath $key -Name $name -ErrorAction SilentlyContinue }
-        Remove-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder' -Name ($name + '.lnk') -ErrorAction SilentlyContinue
+        $testRoot='HKCU:\Software\AnnotationCapture-Tests\'+$name
+        if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse }
         $shortcut = Join-Path ([Environment]::GetFolderPath('Startup')) ($name + '.lnk')
         if (Test-Path -LiteralPath $shortcut) { Remove-Item -LiteralPath $shortcut }
     }

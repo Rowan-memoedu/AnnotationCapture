@@ -17,6 +17,13 @@ $legacyTaskName = "$name-Logon"
 $marker = 'AnnotationCapture managed login startup v1'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $approvedKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+$folderApprovedKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder'
+if ($r.name) {
+    $testRoot = 'HKCU:\Software\AnnotationCapture-Tests\' + $name
+    $runKey = $testRoot + '\Run'
+    $approvedKey = $testRoot + '\StartupApproved\Run'
+    $folderApprovedKey = $testRoot + '\StartupApproved\StartupFolder'
+}
 $stateRoot = Join-Path $data 'Startup'
 $statePath = Join-Path $stateRoot 'state.json'
 [IO.Directory]::CreateDirectory($stateRoot) | Out-Null
@@ -36,7 +43,7 @@ if (Test-Path -LiteralPath $shortcut) {
     $link = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcut)
     $ownedShortcut = $link.TargetPath -eq $exe -and (!$link.Arguments -or $link.Arguments.Contains($data))
     if ($ownedShortcut -and !$run) {
-        $folderApproval = Get-Item -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder' -ErrorAction SilentlyContinue
+        $folderApproval = Get-Item -LiteralPath $folderApprovedKey -ErrorAction SilentlyContinue
         if ($folderApproval) {
             $bytes = $folderApproval.GetValue(($name + '.lnk'), $null)
             if ($bytes -and $bytes[0] -in @(3,7)) { $legacyEnabled = $false }
@@ -45,7 +52,7 @@ if (Test-Path -LiteralPath $shortcut) {
 }
 $desired = if ($null -ne $r.enabled) { [bool]$r.enabled } elseif ($saved -and $null -ne $saved.enabled) { [bool]$saved.enabled } else { $legacyEnabled }
 function Approved([bool]$enabled) {
-    New-Item -Path $approvedKey -Force | Out-Null
+    if (!(Test-Path -LiteralPath $approvedKey)) { New-Item -Path $approvedKey -Force | Out-Null }
     $bytes = New-Object byte[] 12
     $bytes[0] = if ($enabled) { 2 } else { 3 }
     New-ItemProperty -LiteralPath $approvedKey -Name $name -PropertyType Binary -Value $bytes -Force | Out-Null
@@ -108,7 +115,7 @@ try {
     $partial = $null
     if (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue) { $partial = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue }
     if ($partial -and (Owned $partial)) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false }
-    New-Item -Path $runKey -Force | Out-Null
+    if (!(Test-Path -LiteralPath $runKey)) { New-Item -Path $runKey -Force | Out-Null }
     New-ItemProperty -LiteralPath $runKey -Name $name -PropertyType String -Value ('"' + $exe + '" ' + $r.arguments) -Force | Out-Null
     Approved $desired
     SaveState @{ enabled = $desired; method = 'run'; message = ('Scheduled startup unavailable; using Windows startup: ' + $failure) }

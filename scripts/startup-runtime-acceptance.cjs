@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const { _electron } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { prepareProfile } = require('./acceptance-window.cjs');
 const exe = path.resolve(process.env.ANNOTATION_EXE);
-const evidence = process.env.ANNOTATION_EVIDENCE || 'D:/Artifacts/AnnotationCapture/release-0.8.3/acceptance/runtime';
+const evidence = process.env.ANNOTATION_EVIDENCE || 'D:/Artifacts/AnnotationCapture/release-0.8.4/acceptance/runtime';
 const root = 'D:/Quarantine/AnnotationCapture/startup-runtime-' + crypto.randomUUID();
 const data = path.join(root, "User's 数据 & 学习");
 const name = 'AnnotationCapture-Test-' + crypto.randomUUID();
@@ -56,7 +56,7 @@ async function launch(extra = ['--startupTestName', name]) {
   checks.push('ordinary-test-mode-does-not-touch-startup');
   await application.close(); application = null;
   state = await launch();
-  assert.equal(state.config.version, '0.8.3');
+  assert.equal(state.config.version, '0.8.4');
   assert.equal(state.startup.method, 'task', state.startup.message);
   assert.equal(state.startup.enabled, true);
   checks.push('packaged-background-startup-and-three-shortcuts');
@@ -93,6 +93,7 @@ async function launch(extra = ['--startupTestName', name]) {
   assert.ok(path.resolve(data).startsWith(path.resolve(root) + path.sep));
   ps("Get-ScheduledTask -TaskName $env:ANNOTATION_TEST_TASK -ErrorAction SilentlyContinue | Stop-ScheduledTask -ErrorAction SilentlyContinue; Get-CimInstance Win32_Process -Filter \"Name = 'AnnotationCapture.exe'\" | Where-Object {$_.ExecutablePath -eq $env:ANNOTATION_TEST_EXE -and $_.CommandLine.Contains($env:ANNOTATION_TEST_DATA)} | ForEach-Object {Stop-Process -Id $_.ProcessId -ErrorAction SilentlyContinue}; Get-ScheduledTask -TaskName $env:ANNOTATION_TEST_TASK -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false; foreach($key in @('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run','HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run')) {if((Get-Item -LiteralPath $key).GetValue($env:ANNOTATION_TEST_NAME,$null)) {Remove-ItemProperty -LiteralPath $key -Name $env:ANNOTATION_TEST_NAME}}; if(Get-ScheduledTask -TaskName $env:ANNOTATION_TEST_TASK -ErrorAction SilentlyContinue){throw 'Fixture task remains'}; exit 0", taskEnv);
   if (report) {
+    ps("$testRoot='HKCU:\\Software\\AnnotationCapture-Tests\\'+$env:ANNOTATION_TEST_NAME;if(Test-Path -LiteralPath $testRoot){Remove-Item -LiteralPath $testRoot -Recurse};exit 0");
     report.cleanedUp = true;
     fs.writeFileSync(path.join(evidence, 'report.json'), JSON.stringify(report, null, 2));
     console.log('STARTUP_RUNTIME_PASSED', JSON.stringify(checks));
