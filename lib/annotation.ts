@@ -113,12 +113,20 @@ export type ConfigInput = {
     archiveRetentionDays?: number;
 };
 export type AppState = {
+    startup: StartupState;
     update: UpdateState;
     archiveCleanup: string;
     config: PublicConfig;
     login: LoginState;
     jobs: FormulaResult[];
     shortcutError: string;
+};
+export type StartupState = {
+    supported: boolean;
+    enabled: boolean;
+    busy: boolean;
+    method: "task" | "run" | "unavailable";
+    message: string;
 };
 export type UpdateState = {
     enabled: boolean;
@@ -154,6 +162,7 @@ export function selectedRect(
 }
 
 export type AnnotationMessages = {
+    setAutoStart: (enabled: boolean) => StartupState;
     detectWhitespace: (
         png: string,
     ) => import("./whiteboard").WhiteboardDetection;

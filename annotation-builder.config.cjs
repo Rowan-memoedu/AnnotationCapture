@@ -6,7 +6,7 @@ module.exports = {
     directories: { app: `${process.env.ANNOTATION_ARTIFACTS || "D:/Artifacts/AnnotationCapture"}/package`, output: `${process.env.ANNOTATION_ARTIFACTS || "D:/Artifacts/AnnotationCapture"}/release` },
     files: ["out/**/*", "!out/native/**/*", "assets/logo/**/*", "lib/translate/*.json", "package.json", "LICENSE", "README.md", "README.eSearch.md", "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_LICENSES.txt", "!node_modules/**/*"],
     asar: true,
-    extraResources: [{from: "src/main/update-worker.ps1", to: "update-worker.ps1"}, {from: "out/native/ScreenFrame.exe", to: "ScreenFrame.exe"}],
+    extraResources: [{from: "src/main/update-worker.ps1", to: "update-worker.ps1"}, {from: "src/main/startup-worker.ps1", to: "startup-worker.ps1"}, {from: "out/native/ScreenFrame.exe", to: "ScreenFrame.exe"}],
     afterPack: "./scripts/update-manifest.cjs",
     npmRebuild: false,
     electronVersion: "44.9.3",

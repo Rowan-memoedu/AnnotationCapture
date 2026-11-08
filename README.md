@@ -32,9 +32,11 @@
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.2-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.3-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
-从 0.8.2 起，运行新版后默认随当前 Windows 用户登录启动。登录启动时驻留系统托盘，截图快捷键可直接使用，单击托盘图标打开设置。可在 Windows「设置 → 应用 → 启动」关闭 AnnotationCapture 的自启动。
+从 0.8.3 起，运行新版后自动配置当前用户的 Windows 登录任务，在登录约 10 秒后后台启动，避免普通启动项队列造成的长时间等待。截图快捷键可直接使用，单击托盘图标打开设置；右键托盘的“开机自启动”可开启或关闭。
+
+升级会迁移旧注册表启动项和属于本程序的启动快捷方式，并保留用户已经关闭自启动的选择。在任务计划管理器中禁用任务后，程序不会自行重新启用。程序、数据与归档目录可包含空格、中文及特殊字符，不要求管理员权限或安装额外运行时。系统策略不允许创建登录任务时，保留普通 Windows 启动方式；Windows 完全禁止脚本执行时不改动已有启动配置。旧版 Windows「启动应用」中的条目会停用，新版以托盘开关为准。
 
 1. 按 `Alt+W`，或点击“全屏批注”：截取鼠标所在显示器，直接进入画笔。按 `Ctrl+Alt+S`，或点击“区域截图”：框选后自动切换画笔，在选区上继续批注。
 2. 按 `Esc` 或 `Ctrl+Enter`：立即隐藏批注界面，后台保存带批注的截图。正在落笔时会等抬笔；保存失败自动恢复画布。

@@ -25,6 +25,7 @@ import { ArchiveStore, decodePng } from "./annotationArchive";
 import { AnnotationAuth } from "./annotationAuth";
 import { AnnotationConfig } from "./annotationConfig";
 import { ArchiveRetention } from "./annotationRetention";
+import { AnnotationStartup } from "./annotationStartup";
 import { AnnotationUpdater, acknowledgeUpdate } from "./annotationUpdate";
 import { captureDefaults } from "./captureDefaults";
 import { FormulaJobs } from "./formulaJobs";
@@ -52,6 +53,7 @@ let archive: ArchiveStore;
 let jobs: FormulaJobs;
 let updater: AnnotationUpdater;
 let retention: ArchiveRetention;
+let startup: AnnotationStartup;
 let captureWindow: BrowserWindow | null = null;
 let panel: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -75,32 +77,44 @@ function cancelInk() {
 }
 const icon = join(runPath, "assets/logo/64x64.png");
 
-function registerLoginStartup() {
-    if (process.platform !== "win32" || !app.isPackaged || args.testMode)
-        return;
-
-    const name = "AnnotationCapture";
-    app.setAppUserModelId(name);
-    const launchArgs = ["--background"];
-    if (resolve(dataRoot) !== portableDataRoot)
-        launchArgs.push("--userData", resolve(dataRoot));
-    const archiveRoot = resolve(config.public().archiveRoot);
-    if (archiveRoot !== resolve(dataRoot, "Archive"))
-        launchArgs.push("--archiveRoot", archiveRoot);
-
-    const path = `"${process.execPath}"`;
-    const settings = app.getLoginItemSettings({ path, args: launchArgs });
-    if (settings.openAtLogin) return;
-    const entry = settings.launchItems.find(
-        (item) => item.scope === "user" && item.name === name,
+function refreshTray() {
+    if (!tray) return;
+    tray.setContextMenu(
+        Menu.buildFromTemplate([
+            { label: "区域截图并批注", click: () => void capture() },
+            {
+                label: "全屏截图并批注",
+                click: () => void capture(undefined, "full"),
+            },
+            { label: "识别结果与设置", click: showPanel },
+            {
+                label: "区域 OCR（框选后直接识别）",
+                click: () => void capture(undefined, "ocr"),
+            },
+            { type: "separator" },
+            ...(startup?.state.supported
+                ? [
+                      {
+                          label: "开机自启动",
+                          type: "checkbox" as const,
+                          checked: startup.state.enabled,
+                          enabled: !startup.state.busy,
+                          click: async (item: Electron.MenuItem) => {
+                              const state = await startup.setEnabled(
+                                  item.checked,
+                              );
+                              if (state.message)
+                                  dialog.showErrorBox(
+                                      "开机自启动",
+                                      state.message,
+                                  );
+                          },
+                      },
+                  ]
+                : []),
+            { label: "退出", click: quitImmediately },
+        ]),
     );
-    app.setLoginItemSettings({
-        openAtLogin: true,
-        enabled: entry?.enabled ?? true,
-        name,
-        path,
-        args: launchArgs,
-    });
 }
 
 function load(win: BrowserWindow, file: string) {
@@ -501,6 +515,7 @@ handle("inkRecognize", async (id, png) => {
     }
 });
 handle("state", () => ({
+    startup: { ...startup.state },
     update: updater.public(),
     archiveCleanup: retention?.public() ?? "",
     config: config.public(),
@@ -511,7 +526,9 @@ handle("state", () => ({
 handle("configure", (input) => {
     const rollback = registerShortcuts(input);
     try {
+        const previousArchive = config.public().archiveRoot;
         const result = config.save(input);
+        if (result.archiveRoot !== previousArchive) void startup.ensure();
         shortcutError = "";
         changed();
         void retention.run(true);
@@ -539,6 +556,7 @@ handle("openPanel", () => showPanel());
 handle("quit", quitImmediately);
 handle("checkUpdates", () => updater.check());
 handle("setAutoUpdate", (enabled) => updater.setEnabled(enabled));
+handle("setAutoStart", (enabled) => startup.setEnabled(enabled));
 handle("installUpdate", () => updater.install(true));
 handle("chooseArchive", async () => {
     const result = await dialog.showOpenDialog({
@@ -578,6 +596,30 @@ else {
             dataRoot,
             args.archiveRoot || join(dataRoot, "Archive"),
         );
+        app.setAppUserModelId("AnnotationCapture");
+        const startupTestName =
+            args.testMode &&
+            typeof args.startupTestName === "string" &&
+            /^AnnotationCapture-Test-[a-zA-Z0-9-]+$/.test(args.startupTestName)
+                ? args.startupTestName
+                : undefined;
+        startup = new AnnotationStartup({
+            dataRoot,
+            archiveRoot: () => config.public().archiveRoot,
+            executable: process.execPath,
+            testName: startupTestName,
+            worker: app.isPackaged
+                ? join(process.resourcesPath, "startup-worker.ps1")
+                : join(runPath, "src/main/startup-worker.ps1"),
+            disabled:
+                process.platform !== "win32" ||
+                !app.isPackaged ||
+                (!!args.testMode && !startupTestName),
+            changed: () => {
+                refreshTray();
+                changed();
+            },
+        });
         store.setDefaultData(
             captureDefaults(app.getVersion(), config.public().archiveRoot),
         );
@@ -649,33 +691,9 @@ else {
         shortcutError = shortcutErrors.join("；");
         tray = new Tray(icon);
         tray.setToolTip("AnnotationCapture");
-        tray.setContextMenu(
-            Menu.buildFromTemplate([
-                {
-                    label: "区域截图并批注",
-                    click: () => {
-                        void capture();
-                    },
-                },
-                {
-                    label: "全屏截图并批注",
-                    click: () => {
-                        void capture(undefined, "full");
-                    },
-                },
-                { label: "识别结果与设置", click: showPanel },
-                {
-                    label: "区域 OCR（框选后直接识别）",
-                    click: () => {
-                        void capture(undefined, "ocr");
-                    },
-                },
-                { type: "separator" },
-                { label: "退出", click: quitImmediately },
-            ]),
-        );
+        refreshTray();
         tray.on("click", showPanel);
-        registerLoginStartup();
+        void startup.ensure();
         if (args.input) void capture(args.input, args.ocr ? "ocr" : "region");
         else if (args.full) void capture(undefined, "full");
         else if (args.capture) void capture();
