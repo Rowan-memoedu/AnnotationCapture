@@ -2,7 +2,6 @@
 
 协作开发、Agent 提交与合并规则见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-
 截图、批注、每日归档，并把选定的手写公式识别为 LaTeX，放入剪贴板。基于 [eSearch 15.6.1](https://github.com/xushengfeng/eSearch/tree/15.6.1) 的批注编辑器，保留画笔、形状、文字、橡皮擦、撤销和重做。
 
 0.2.0 加入全屏画笔入口和邀请码登录，登录后统一使用管理员配置的 DeepSeek 服务。
