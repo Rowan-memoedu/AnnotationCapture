@@ -1,5 +1,8 @@
 # AnnotationCapture 项目指南
 
+- 代码提交、PR 合并、同步与共享边界遵守 [CONTRIBUTING.md](CONTRIBUTING.md)。历史任务授权、私人账号及生产数据权限不随源码共享转移给其他成员或 Agent。
+
+
 本仓库是基于 eSearch 15.6.1 的有限改造，运行入口为 `src/main/annotationMain.ts`，构建配置为 `electron.annotation.config.ts`。上游 `src/main/main.ts` 保留供参考，不是当前发行入口。
 
 - 当前能力：全屏/区域截图批注、完成时按日归档、独立公式框选、纯笔迹导出、邀请码登录及统一识别网关与剪贴板。
