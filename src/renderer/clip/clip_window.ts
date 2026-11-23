@@ -6,7 +6,6 @@ import chroma from "chroma-js";
 import { detectBorders } from "edge_det";
 import {
     ActiveSelection,
-    Canvas,
     Circle,
     type CircleProps,
     classRegistry,
@@ -33,12 +32,14 @@ import open_with from "../../../lib/open_with";
 import store from "../../../lib/store/renderStore";
 import { t } from "../../../lib/translate/translate";
 import { installCompletion } from "../annotation/capture";
+import { DrawingCanvas } from "../annotation/drawingCanvas";
 import { installFormulaInk } from "../annotation/formulaInk";
 import { installInkSelection } from "../annotation/inkSelection";
 import { PressureBrush } from "../annotation/pressureBrush";
 import { isPressurePath, resizePressurePath } from "../annotation/pressureInk";
 import initScreenShots from "../annotation/screenshot";
 import { createArrow } from "../annotation/shapeGeometry";
+import { installToolbarDock } from "../annotation/toolbarDock";
 import { installWhiteboard, isWhiteboard } from "../annotation/whiteboard";
 import { writeImage, writeText } from "../lib/clipboard";
 import { Class, cssColor, getImgUrl, initStyle, setTitle } from "../root/root";
@@ -2520,6 +2521,7 @@ function setEditType<T extends keyof EditType>(
     mainType: T,
     type: EditType[T],
 ): void {
+    fabricCanvas.finishStroke();
     whiteboard?.stopEditing();
     inkSelection?.cancel();
     formulaInk?.setActive(false);
@@ -2677,16 +2679,9 @@ function showSideBar(show: boolean) {
 }
 
 function showBars(b: boolean) {
-    const l = [toolBar, drawBar];
-    for (const i of l) {
-        if (b) {
-            i.style.pointerEvents = "";
-            i.style.opacity = "";
-        } else {
-            i.style.pointerEvents = "none";
-            i.style.opacity = "0";
-        }
-    }
+    isShowBars = b;
+    if (!b) showSideBar(false);
+    setToolbarExpanded(b);
 }
 function pencilElClick() {
     fabricCanvas.freeDrawingBrush = new PressureBrush(
@@ -4770,8 +4765,7 @@ document.onpointerup = (e) => {
             followBar({ x: e.clientX, y: e.clientY });
             selectedRegion =
                 entryMode !== "full" && finalRect[2] > 1 && finalRect[3] > 1;
-            isShowBars = true;
-            showBars(isShowBars);
+            showBars(true);
         }
         if (moving) {
             moving = false;
@@ -4813,7 +4807,7 @@ document.addEventListener("pointercancel", (e) => {
         whEl.el.style.pointerEvents =
             "auto";
     drawClip();
-    showBars(true);
+    showBars(isShowBars);
 });
 
 hotkeys("s", () => {
@@ -5035,21 +5029,11 @@ drawSide操作.删除.on("click", () => {
 
 const Filters = filters;
 
-const fabricCanvas = new Canvas("draw_photo", {
+const fabricCanvas = new DrawingCanvas("draw_photo", {
     enablePointerEvents: true,
     // Screenshot coordinates already use physical pixels; avoid scaling them twice.
     enableRetinaScaling: false,
 });
-
-function cancelPressureStroke() {
-    const brush = fabricCanvas.freeDrawingBrush;
-    if (brush instanceof PressureBrush) brush.cancel();
-}
-fabricCanvas.upperCanvasEl.addEventListener(
-    "pointercancel",
-    cancelPressureStroke,
-);
-window.addEventListener("blur", cancelPressureStroke);
 
 hisPush();
 
@@ -5100,11 +5084,8 @@ for (const el of drawBarSideElChildren) {
     });
 }
 
-showBars(isShowBars);
-
 hotkeys(store.get("其他快捷键.隐藏或显示栏"), () => {
-    isShowBars = !isShowBars;
-    showBars(isShowBars);
+    showBars(!isShowBars);
 });
 
 // 笔
@@ -5403,6 +5384,7 @@ const completion = installCompletion(
     },
     closeArchivedWindow,
     fabricCanvas.upperCanvasEl,
+    () => fabricCanvas.hasStroke,
     async () => {
         const pen = getShapePro(mode === "spray" ? "spray" : "free");
         const { config } = await invoke("state");
@@ -5413,6 +5395,12 @@ const completion = installCompletion(
         });
     },
 );
+const setToolbarExpanded = installToolbarDock(
+    completion.toolbar.el,
+    [toolBar, drawBar, whEl.el],
+    showBars,
+);
+showBars(isShowBars);
 formulaInk = installFormulaInk(fabricCanvas, hisPush, () =>
     setEditType("draw", "free"),
 );

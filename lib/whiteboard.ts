@@ -2,6 +2,7 @@ import type { PixelRect } from "./annotation";
 
 export type WhiteboardSettings = {
     enabled: boolean;
+    autoOpen: boolean;
     maxRects: number;
     includeTaskbar: boolean;
     includeWindowChrome: boolean;
@@ -402,6 +403,7 @@ export function refineWhiteboardRects(
 }
 export const whiteboardDefaults: WhiteboardSettings = {
     enabled: true,
+    autoOpen: true,
     maxRects: 5,
     includeTaskbar: true,
     includeWindowChrome: true,
@@ -414,6 +416,7 @@ export function whiteboardSettings(
     if (
         [
             result.enabled,
+            result.autoOpen,
             result.includeTaskbar,
             result.includeWindowChrome,
         ].some((v) => typeof v !== "boolean") ||

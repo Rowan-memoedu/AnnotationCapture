@@ -68,6 +68,9 @@ const showMagnifier = input("checkbox").attr({
 const whiteboardEnabled = input("checkbox").attr({
     id: "ac-whiteboard-enabled",
 });
+const whiteboardAutoOpen = input("checkbox").attr({
+    id: "ac-whiteboard-auto-open",
+});
 const whiteboardTaskbar = input("checkbox").attr({
     id: "ac-whiteboard-taskbar",
 });
@@ -89,6 +92,9 @@ const whiteboardOptions = view("y")
         ele("label")
             .class("ac-pressure-toggle")
             .add([whiteboardEnabled, t("自动识别页面空白区域")]),
+        ele("label")
+            .class("ac-pressure-toggle")
+            .add([whiteboardAutoOpen, t("全屏批注时自动开启智能白板")]),
         p(
             t(
                 "开启后，全屏批注会发送页面预览以识别空白。关闭后仍可使用中央白板和反选白板。",
@@ -112,6 +118,7 @@ const whiteboardOptions = view("y")
     ]);
 function updateWhiteboardSettings() {
     for (const control of [
+        whiteboardAutoOpen.el,
         whiteboardTaskbar.el,
         whiteboardChrome.el,
         whiteboardLimit.el,
@@ -426,6 +433,7 @@ root.add([
                             await invoke("configure", {
                                 whiteboard: {
                                     enabled: whiteboardEnabled.el.checked,
+                                    autoOpen: whiteboardAutoOpen.el.checked,
                                     maxRects: whiteboardLimit.el.valueAsNumber,
                                     includeTaskbar:
                                         whiteboardTaskbar.el.checked,
@@ -581,6 +589,7 @@ async function refresh(settings = false) {
         state.update.phase === "ready" ? "" : "none";
     if (settings) {
         whiteboardEnabled.el.checked = state.config.whiteboard.enabled;
+        whiteboardAutoOpen.el.checked = state.config.whiteboard.autoOpen;
         whiteboardTaskbar.el.checked = state.config.whiteboard.includeTaskbar;
         whiteboardChrome.el.checked =
             state.config.whiteboard.includeWindowChrome;

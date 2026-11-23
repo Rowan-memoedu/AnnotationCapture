@@ -106,9 +106,10 @@ export class AnnotationConfig {
         };
     }
     save(input: ConfigInput): PublicConfig {
-        const whiteboard = whiteboardSettings(
-            input.whiteboard ?? this.config.whiteboard,
-        );
+        const whiteboard = whiteboardSettings({
+            ...this.config.whiteboard,
+            ...input.whiteboard,
+        });
         if (
             input.pressureEnabled !== undefined &&
             typeof input.pressureEnabled !== "boolean"

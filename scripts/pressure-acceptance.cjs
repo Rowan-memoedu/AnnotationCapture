@@ -28,16 +28,16 @@ async function open(mode = 'full') {
 }
 async function input(page) {
     const cdp = await page.context().newCDPSession(page);
-    return async (type, x, y, force = 0.5, pointerType = 'pen') => cdp.send('Input.dispatchMouseEvent', {
+    return async (type, x, y, force = 0.5, pointerType = 'pen', buttons = type === 'mouseReleased' ? 0 : 1) => cdp.send('Input.dispatchMouseEvent', {
         type, x, y, pointerType, button: type === 'mouseMoved' ? 'none' : 'left',
-        buttons: type === 'mouseReleased' ? 0 : 1,
+        buttons,
         clickCount: type === 'mouseMoved' ? 0 : 1, force: type === 'mouseReleased' ? 0 : force,
     });
 }
 async function line(page, y, force, pointerType = 'pen') {
     const send = await input(page);
     const initial = typeof force === 'number' ? force : 0.05;
-    await send('mouseMoved', 340, y, initial, pointerType);
+    await send('mouseMoved', 340, y, 0, pointerType, 0);
     await send('mousePressed', 340, y, initial, pointerType);
     const box = await page.locator('.upper-canvas').boundingBox();
     assert.ok(box && 340 >= box.x && 640 < box.x + box.width && y >= box.y && y < box.y + box.height, 'Test stroke must stay inside the canvas: '+JSON.stringify({box,y}));
@@ -153,6 +153,32 @@ async function lasso(page, points) {
     await line(page,420,0.8); assert.ok(await thickness(page,420)>10);
     assert.equal((await finish(page)).canvas.objects.length,1);
     checks.push({name:'cancel discards incomplete ink and next pen stroke works'});
+
+    page = await open();
+    await page.locator('.upper-canvas').evaluate(canvas => {
+        const emit = (type, x, y, pointerId, pointerType, buttons = 1) => canvas.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, isPrimary: true, pointerId, pointerType, clientX: x, clientY: y,
+            button: type === 'pointermove' ? -1 : 0, buttons, pressure: buttons ? 0.7 : 0,
+        }));
+        // The first received event can be a move if the pen was pressed while the window was opening.
+        emit('pointermove', 350, 210, 7, 'pen');
+        emit('pointermove', 440, 210, 7, 'pen');
+        // A valid primary release from another device must not detach the pen's move/up listeners.
+        emit('pointerup', 440, 210, 8, 'mouse', 0);
+        emit('pointermove', 550, 210, 7, 'pen');
+        emit('pointerup', 550, 210, 7, 'pen', 0);
+        emit('pointerdown', 350, 300, 7, 'pen');
+        emit('pointermove', 550, 300, 7, 'pen');
+        emit('lostpointercapture', 0, 0, 7, 'pen', 0);
+        emit('pointerdown', 350, 390, 8, 'mouse');
+        emit('pointermove', 550, 390, 8, 'mouse');
+        emit('pointermove', 570, 390, 8, 'mouse', 0);
+    });
+    const recovered = (await finish(page)).canvas.objects;
+    assert.equal(recovered.length, 3);
+    assert.ok(recovered.every(path => path.width >= 195), 'Each recovered stroke keeps its full recorded span');
+    assert.deepEqual(recovered.map(path => !!path.acPressure), [true, true, false]);
+    checks.push({ name: 'recovers a missed down, mixed-device release, lost capture, and missed up' });
 
     page=await open();
     await page.locator('.upper-canvas').evaluate(canvas=>{

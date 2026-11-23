@@ -93,6 +93,7 @@ export function installWhiteboard(
     }
     let generation = 0;
     let waiting = false;
+    let autoOpenPending = false;
     let endLasso: (() => void) | undefined;
     let editing = false;
     let uniformScaling = canvas.uniformScaling;
@@ -179,10 +180,10 @@ export function installWhiteboard(
         protect(object);
         canvas.add(object);
         canvas.sendObjectToBack(object);
-        document.body.classList.add("ac-stationary-cursor");
     }
     function choose(mode: BoardMode) {
         if (mode === "auto" && boards().length) return;
+        autoOpenPending = false;
         const finishingWait =
             mode === "smart" && waiting && detection !== "loading";
         stopEditing();
@@ -217,6 +218,7 @@ export function installWhiteboard(
                     });
                     canvas.remove(...boards());
                     put(board, true, hole);
+                    document.body.classList.add("ac-stationary-cursor");
                     hint.el.textContent = t("已保留选区，其余区域可书写");
                     history();
                     sync();
@@ -226,11 +228,7 @@ export function installWhiteboard(
             );
             return;
         }
-        const detected = candidates
-            .map((r) => intersectRect(r, bounds))
-            .filter(
-                (r): r is PixelRect => !!r && r.width >= 16 && r.height >= 16,
-            );
+        const detected = detectedRects(bounds);
         const fixed = mode !== "center" && detected.length > 0;
         if (mode === "smart" && !fixed) {
             hint.el.textContent = t(
@@ -253,6 +251,18 @@ export function installWhiteboard(
                       height,
                   },
               ];
+        if (!finishingWait) document.body.classList.add("ac-stationary-cursor");
+        addRects(rects, fixed);
+        if (!fixed) startEditing();
+    }
+    function detectedRects(bounds: PixelRect) {
+        return candidates
+            .map((r) => intersectRect(r, bounds))
+            .filter(
+                (r): r is PixelRect => !!r && r.width >= 16 && r.height >= 16,
+            );
+    }
+    function addRects(rects: PixelRect[], fixed: boolean) {
         for (const r of rects) {
             put(
                 new Rect({
@@ -274,7 +284,6 @@ export function installWhiteboard(
         canvas.requestRenderAll();
         history();
         sync();
-        if (!fixed) startEditing();
     }
     function startEditing() {
         select();
@@ -336,6 +345,7 @@ export function installWhiteboard(
         else startEditing();
     });
     remove.on("click", () => {
+        autoOpenPending = false;
         pencil();
         canvas.remove(...boards());
         history();
@@ -373,9 +383,14 @@ export function installWhiteboard(
         const current = ++generation;
         candidates = [];
         detection = full && config.whiteboard.enabled ? "loading" : "off";
+        autoOpenPending = detection === "loading" && config.whiteboard.autoOpen;
         hint.el.textContent =
             detection === "loading"
-                ? t("正在查找空白区域；现在点击将使用中央白板")
+                ? t(
+                      autoOpenPending
+                          ? "正在查找空白区域，可继续书写"
+                          : "正在查找空白区域；现在点击将使用中央白板",
+                  )
                 : "";
         sync();
         if (detection !== "loading") return;
@@ -482,7 +497,11 @@ export function installWhiteboard(
                           config.whiteboard.maxRects,
                       );
             detection = "ready";
+            const autoRects = autoOpenPending ? detectedRects(area()) : [];
+            autoOpenPending = false;
             if (waiting) choose("smart");
+            else if (autoRects.length && !boards().length && !endLasso)
+                addRects(autoRects, true);
             else if (!boards().length && !endLasso)
                 hint.el.textContent = t(
                     candidates.length
@@ -492,6 +511,7 @@ export function installWhiteboard(
         } catch {
             if (generation !== current) return;
             detection = "error";
+            autoOpenPending = false;
             if (waiting) choose("smart");
             else if (!boards().length && !endLasso)
                 hint.el.textContent = t("空白识别不可用，点击可使用中央白板");
@@ -502,6 +522,7 @@ export function installWhiteboard(
         initialize,
         choose,
         cancelChoice: () => {
+            autoOpenPending = false;
             if (waiting || endLasso) stopEditing();
         },
         setPointer: (value: Position | undefined) => {
@@ -513,6 +534,7 @@ export function installWhiteboard(
         stopEditing,
         invalidate: () => {
             generation++;
+            autoOpenPending = false;
             candidates = [];
             detection = "off";
             stopEditing();

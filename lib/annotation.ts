@@ -94,7 +94,7 @@ export type LoginState = {
     message: string;
 };
 export type ConfigInput = {
-    whiteboard?: WhiteboardSettings;
+    whiteboard?: Partial<WhiteboardSettings>;
     archiveRoot: string;
     shortcut: string;
     fullShortcut: string;
