@@ -1,0 +1,5 @@
+AnnotationCapture shared whiteboard v1. Licensed under GNU GPL version 3.
+Corresponding source: https://github.com/Rowan-memoedu/AnnotationCapture/tree/56684fa80547d9213d60a6d8a05d6924f38420a6
+Source archive: https://github.com/Rowan-memoedu/AnnotationCapture/archive/56684fa80547d9213d60a6d8a05d6924f38420a6.tar.gz
+Build: pnpm install --frozen-lockfile --ignore-scripts, then pnpm run build:whiteboard.
+Dependency licenses and the GPL text accompany this distribution.
