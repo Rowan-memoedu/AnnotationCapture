@@ -19,6 +19,7 @@ export default defineConfig({
             rollupOptions: {
                 input: {
                     capture: resolve(__dirname, "src/renderer/capture.html"),
+                    whiteboard: resolve(__dirname, "src/renderer/whiteboard.html"),
                     annotation: resolve(
                         __dirname,
                         "src/renderer/annotation.html",
