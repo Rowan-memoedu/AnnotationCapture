@@ -24,13 +24,14 @@ export function installCompletion(
     snapshot: (formula: boolean) => Promise<CaptureSnapshot>,
     rawClose: () => void,
     drawingElement: HTMLElement,
+    hasStroke: () => boolean,
     saveDefaults: () => Promise<void>,
 ) {
     annotationStyles();
     const id = crypto.randomUUID();
     const capturedAt = new Date().toISOString();
     let busy = false;
-    let pointerDown = false;
+    let pointerDown: number | undefined;
     let queued: boolean | null = null;
     let selectionOpen = false;
     const status = p()
@@ -85,32 +86,31 @@ export function installCompletion(
     document.addEventListener(
         "pointerdown",
         (event) => {
-            if (event.button === 0 && event.target === drawingElement)
-                pointerDown = true;
+            if (
+                event.isPrimary &&
+                event.button === 0 &&
+                event.target === drawingElement
+            )
+                pointerDown ??= event.pointerId;
         },
         true,
     );
-    document.addEventListener(
-        "pointerup",
-        () => {
-            pointerDown = false;
-            if (queued !== null) {
-                const formula = queued;
-                queued = null;
-                setTimeout(() => {
-                    void finish(formula);
-                }, 0);
-            }
-        },
-        true,
-    );
-    document.addEventListener(
-        "pointercancel",
-        () => {
-            pointerDown = false;
-        },
-        true,
-    );
+    function released() {
+        pointerDown = undefined;
+        if (queued === null) return;
+        const formula = queued;
+        queued = null;
+        // The canvas commits the final segment in the same pointer event.
+        setTimeout(() => void finish(formula), 0);
+    }
+    function releasePointer(event: PointerEvent) {
+        if (event.pointerId === pointerDown && !(event.buttons & 1)) released();
+    }
+    document.addEventListener("pointerup", releasePointer, true);
+    document.addEventListener("pointercancel", releasePointer, true);
+    drawingElement.addEventListener("lostpointercapture", releasePointer);
+    drawingElement.addEventListener("ac-stroke-end", released);
+    window.addEventListener("blur", released);
     document.addEventListener(
         "keydown",
         (event) => {
@@ -129,7 +129,7 @@ export function installCompletion(
 
     async function finish(formula: boolean, directFormat?: OutputFormat) {
         if (busy) return;
-        if (pointerDown) {
+        if (pointerDown !== undefined || hasStroke()) {
             queued = formula;
             status.el.textContent = t("抬笔后完成归档");
             return;

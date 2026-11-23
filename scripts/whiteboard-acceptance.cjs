@@ -77,11 +77,15 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
     });
     // Defaults and persistence through the real settings controls.
     assert.equal(await panel.locator('#ac-whiteboard-enabled').isChecked(), true);
+    assert.equal(await panel.locator('#ac-whiteboard-auto-open').isChecked(), true);
+    await panel.locator('#ac-whiteboard-auto-open').uncheck();
     assert.equal(await panel.locator('#ac-whiteboard-limit').inputValue(), '5');
     await panel.locator('#ac-whiteboard-enabled').uncheck();
+    assert.equal(await panel.locator('#ac-whiteboard-auto-open').isDisabled(), true);
     await panel.locator('#ac-save-settings').click();
     await panel.waitForFunction(() => document.querySelector('#ac-panel-status').textContent.includes('设置已保存'));
     assert.equal(JSON.parse(fs.readFileSync(path.join(data, 'annotation-settings.json'))).whiteboard.enabled, false);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(data, 'annotation-settings.json'))).whiteboard.autoOpen, false);
     checks.push('default settings and disabled preference persist');
     let page = await open();
     assert.equal(await page.locator('#draw_main > #ac-whiteboard').count(), 1);
@@ -134,11 +138,12 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
     checks.push('D and Delete preserve whiteboards; explicit hide and undo preserve protected identity');
     await finish(page);
     // Pending detection uses a central board immediately and never replaces it.
-    await configure({ enabled: true });
+    await configure({ enabled: true, autoOpen: true });
     await fixture({ detectionDelay: 1800, rects: [{ x: .1, y: .12, width: .25, height: .4 }] });
     page = await open(); await page.locator('#ac-whiteboard').click();
     await delay(2000); objects = await checkpoint(page); assert.equal(boards(objects).length, 1); assert.equal(boards(objects)[0].acFixed, false);
     checks.push('pending model response never replaces a manual fallback'); await finish(page);
+    await configure({ autoOpen: false });
     await fixture({ detectionDelay: 0, rects: [{ x: .1, y: .15, width: .25, height: .4 }, { x: .65, y: .15, width: .25, height: .4 }] });
     page = await open(); await page.waitForFunction(() => document.querySelector('#ac-whiteboard-status').textContent === '空白区域已就绪');
     await page.locator('#ac-whiteboard').click(); objects = await checkpoint(page);
@@ -222,6 +227,52 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
     });
     assert.equal(counts[0],0); assert.ok(counts[1]>8 && counts[2]>8);
     checks.push('inverse rectangle and concave freehand preserve holes, undo and exact OCR mask');
+
+    await configure({ autoOpen: true });
+    await fixture({ detectionDelay: 2200, rects: [{ x: .22, y: .23, width: .56, height: .46 }] });
+    page = await open();
+    const backdrop = await page.locator('#main_photo').evaluate(c => ({ w: c.width, h: c.height }));
+    const pixel = (x, y) => point(page, backdrop.w * x, backdrop.h * y);
+    assert.equal(await page.locator('#ac-whiteboard-remove').isVisible(), false);
+    await stroke(page, await pixel(.32, .35), await pixel(.43, .35));
+    await page.mouse.move(...await pixel(.35, .44));
+    await page.mouse.down();
+    await page.mouse.move(...await pixel(.42, .44), { steps: 5 });
+    await page.waitForSelector('#ac-whiteboard-remove');
+    await page.mouse.move(...await pixel(.56, .44), { steps: 5 });
+    await page.mouse.up();
+    const auto = await checkpoint(page);
+    assert.equal(auto.length, 3);
+    assert.ok(auto[0].acWhiteboard && auto[0].acFixed, 'Smart board lies below saved ink');
+    assert.ok(auto[1].width > backdrop.w * .095 && auto[2].width > backdrop.w * .19, 'Both strokes are intact');
+    assert.equal(await page.locator('#ac-whiteboard-adjust').isVisible(), false);
+    await page.screenshot({ path: path.join(root, 'automatic-whiteboard.png') });
+    checks.push('auto-open adds fixed board beneath completed ink and preserves a stroke in progress');
+
+    await page.locator('#ac-collapse-tools').click();
+    const ball = page.locator('#ac-toolbar-ball');
+    const viewport = await page.evaluate(() => ({ w: innerWidth, h: innerHeight }));
+    const centerOfBall = async () => {
+        const b = await ball.boundingBox();
+        assert.ok(b && b.x >= 0 && b.y >= 0 && b.x + b.width <= viewport.w && b.y + b.height <= viewport.h);
+        return [b.x + b.width / 2, b.y + b.height / 2];
+    };
+    for (const bar of ['#tool_bar', '#draw_bar', '#ac-completion', '#clip_wh']) assert.equal(await page.locator(bar).isHidden(), true);
+    const edges = [[0, viewport.h / 2], [viewport.w / 2, 0], [viewport.w - 1, viewport.h / 2], [viewport.w / 2, viewport.h - 1]];
+    for (const [x, y] of edges) {
+        await stroke(page, await centerOfBall(), [x, y]);
+        const [cx, cy] = await centerOfBall();
+        assert.ok(x === 0 ? cx < 50 : x === viewport.w - 1 ? viewport.w - cx < 50 : y === 0 ? cy < 50 : viewport.h - cy < 50,
+            `Ball at ${cx},${cy} did not dock after dragging to ${x},${y}`);
+    }
+    await stroke(page, await pixel(.35, .51), await pixel(.55, .51));
+    await page.screenshot({ path: path.join(root, 'collapsed-toolbar.png') });
+    await ball.click();
+    for (const bar of ['#tool_bar', '#draw_bar', '#ac-completion']) assert.equal(await page.locator(bar).isVisible(), true);
+    const afterDrag = await checkpoint(page);
+    assert.equal(afterDrag.length, 4, 'Only the intentional canvas stroke is added while collapsed');
+    await finish(page);
+    checks.push('toolbar ball stays inside the viewport, snaps to four edges and click restores toolbars');
     assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(root, 'report.json'), JSON.stringify({ passed: true, checks, timings, errors }, null, 2));
     console.log('WHITEBOARD_ACCEPTANCE_PASSED', JSON.stringify({ checks, timings }));
