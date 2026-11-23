@@ -10,6 +10,7 @@
         "start": "electron-vite -c electron.annotation.config.ts preview",
         "dev": "npm run build && npm run start",
         "build": "electron-vite -c electron.annotation.config.ts build && node scripts/mathjax-assets.cjs && node scripts/build-screen-frame.cjs",
+        "build:whiteboard": "vite build --config whiteboard.vite.config.ts",
         "test": "vitest run --config vitest.annotation.config.ts",
         "test:gateway": "python -m unittest discover -s gateway -p test_*.py -v",
         "release:win": "npm run build && node scripts/prepare-package.cjs && electron-builder --win zip --x64 -c annotation-builder.config.cjs --publish never",

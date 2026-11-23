@@ -88,6 +88,7 @@ function refreshTray() {
                 click: () => void capture(undefined, "full"),
             },
             { label: "识别结果与设置", click: showPanel },
+            { label: "打开独立白板", click: showWhiteboard },
             {
                 label: "区域 OCR（框选后直接识别）",
                 click: () => void capture(undefined, "ocr"),
@@ -125,6 +126,25 @@ function load(win: BrowserWindow, file: string) {
 }
 function changed() {
     panel?.webContents.send("annotation:changed");
+}
+let whiteboardWindow: BrowserWindow | null = null;
+
+function showWhiteboard() {
+    if (whiteboardWindow) {
+        whiteboardWindow.focus();
+        return;
+    }
+    const window = new BrowserWindow({
+        title: "AnnotationCapture · 白板",
+        width: 1050,
+        height: 850,
+        icon,
+        autoHideMenuBar: true,
+        webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
+    });
+    whiteboardWindow = window;
+    window.on("closed", () => { whiteboardWindow = null; });
+    void load(window, "whiteboard.html");
 }
 function showPanel() {
     if (panel && !panel.isDestroyed()) {
