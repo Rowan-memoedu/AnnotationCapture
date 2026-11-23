@@ -5,6 +5,7 @@
 本仓库是基于 eSearch 15.6.1 的有限改造，运行入口为 `src/main/annotationMain.ts`，构建配置为 `electron.annotation.config.ts`。上游 `src/main/main.ts` 保留供参考，不是当前发行入口。
 
 - 当前能力：全屏/区域截图批注、完成时按日归档、独立公式框选、纯笔迹导出、邀请码登录及统一识别网关与剪贴板。
+- 修改画笔、笔迹编辑、选择、删除或撤销等画布功能时，先核对[截图批注（含快速白板）](src/renderer/clip/clip_window.ts)和[独立共享白板](src/renderer/annotation/whiteboardEditor.ts)的实际入口。可共享的能力须在同一任务内覆盖两种画布，优先复用共同逻辑，并验证两边的一致行为。涉及独立共享白板编辑器时，同时核验桌面入口和网站嵌入构建。确属单一画布的功能，或有明确依赖阻塞时，在任务或 PR 中说明原因及尚未覆盖的入口。
 - `pnpm run typecheck`、`pnpm test`、`pnpm run lint` 验证当前应用；`pnpm run typecheck:upstream` 仅审计完整上游源码。后者存在上游 xtimelog 类型错误，不能冒充已通过。
 - `pnpm run build` 后可 `pnpm start`；`pnpm run release:win` 生成含运行时的独立 Windows x64 ZIP。构建、使用和验收以 README 为准。
 - 上游 API Key 只在网关环境中配置；客户端只保存由 Windows 加密的个人会话。发行包、源码与公开验收记录不得含真实密钥、邀请码、用户截图或用户运行配置。旧 DeepSeek 配置不作为新版回退。
