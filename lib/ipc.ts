@@ -43,6 +43,7 @@ export type RecordRect = {
 
 type Message = {
     annotation_finish: () => void;
+    annotation_capture_failed: (message: string) => void;
     clip_show: () => void;
     clip_close: () => void;
     clip_ocr: (img: string, type: string) => void;

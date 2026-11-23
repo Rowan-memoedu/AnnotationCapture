@@ -61,12 +61,13 @@ let activeCapture = false;
 let captureStarting = false;
 let captureSaving = false;
 let captureReady: Promise<void> | null = null;
-const warmReaders: ReturnType<typeof prepareFrameReader>[] = [];
+let captureStartTimer: NodeJS.Timeout | undefined;
+let queuedCapture: { imagePath?: string; mode: CaptureMode } | undefined;
+const frameReaders = new Map<number, ReturnType<typeof prepareFrameReader>>();
 const frameHelper = app.isPackaged
     ? join(process.resourcesPath, "ScreenFrame.exe")
     : join(runPath, "out/native/ScreenFrame.exe");
 let whitespaceRequest: AbortController | null = null;
-let closing = false;
 let quitting = false;
 let shortcutError = "";
 const typesetter = new FormulaTypesetter();
@@ -174,12 +175,14 @@ function prepareCaptureWindow() {
     });
     captureWindow = win;
     win.on("close", (event) => {
-        if (activeCapture && !closing) {
+        if (activeCapture) {
             event.preventDefault();
             mainSend(win.webContents, "annotation_finish", []);
         }
     });
     win.on("closed", () => {
+        clearTimeout(captureStartTimer);
+        captureStarting = false;
         cancelInk();
         whitespaceRequest?.abort();
         whitespaceRequest = null;
@@ -189,45 +192,78 @@ function prepareCaptureWindow() {
         captureSaving = false;
     });
     win.webContents.on("render-process-gone", () => {
-        activeCapture = false;
-        win.destroy();
-        showPanel();
-        dialog.showErrorBox(
-            "批注窗口异常退出",
-            "本次尚未完成归档的批注可能丢失；已归档图片仍保留。",
-        );
+        if (activeCapture || captureStarting)
+            failCapture(
+                win,
+                "批注窗口异常退出",
+                "本次尚未完成归档的批注可能丢失；已归档图片仍保留。",
+            );
+        else win.destroy();
     });
     captureReady = load(win, "capture.html");
     return captureReady;
 }
+function frameReader(id: number) {
+    const existing = frameReaders.get(id);
+    if (existing?.available) return existing;
+    const reader = prepareFrameReader(frameHelper);
+    frameReaders.set(id, reader);
+    return reader;
+}
 function prewarmCapture() {
     if (quitting || (args.testMode && !args.warmCapture)) return;
-    if (process.platform === "win32") {
-        const count = screen.getAllDisplays().length;
-        while (warmReaders.length < count)
-            warmReaders.push(prepareFrameReader(frameHelper));
-    }
-    void prepareCaptureWindow().catch(() => {
-        captureWindow?.destroy();
-        captureReady = null;
+    if (process.platform === "win32")
+        for (const display of screen.getAllDisplays()) frameReader(display.id);
+    const ready = prepareCaptureWindow();
+    const win = captureWindow;
+    void ready.catch(() => {
+        if (win === captureWindow && !captureStarting) win?.destroy();
     });
 }
+function failCapture(win: BrowserWindow, title: string, message: string) {
+    if (win !== captureWindow) return;
+    queuedCapture = undefined;
+    win.destroy();
+    showPanel();
+    void dialog.showMessageBox({ type: "error", title, message });
+}
 async function capture(imagePath?: string, mode: CaptureMode = "region") {
-    if (updater?.installing || captureSaving) return;
+    if (updater?.installing || quitting) return;
+    if (captureSaving) {
+        queuedCapture = { imagePath, mode };
+        return;
+    }
     if (activeCapture || captureStarting) {
         if (activeCapture) showCaptureWindow();
         return;
     }
     captureStarting = true;
     panel?.hide();
+    let win = captureWindow;
     try {
+        const ready = prepareCaptureWindow();
+        win = captureWindow!;
+        const startingWindow = win;
+        captureStartTimer = setTimeout(() => {
+            failCapture(
+                startingWindow,
+                "无法开始截图",
+                "截图等待超时，请重试。",
+            );
+        }, 4000);
         const display = screen.getDisplayNearestPoint(
             screen.getCursorScreenPoint(),
         );
-        await prepareCaptureWindow();
-        const win = captureWindow!;
-        win.setBounds(display.bounds);
-        activeCapture = true;
+        await ready;
+        if (win !== captureWindow) return;
+        const bounds = win.getBounds();
+        if (
+            bounds.x !== display.bounds.x ||
+            bounds.y !== display.bounds.y ||
+            bounds.width !== display.bounds.width ||
+            bounds.height !== display.bounds.height
+        )
+            win.setBounds(display.bounds);
         mainSend(win.webContents, "clip_init", [
             screen.getAllDisplays(),
             imagePath ? readFileSync(imagePath) : undefined,
@@ -236,25 +272,26 @@ async function capture(imagePath?: string, mode: CaptureMode = "region") {
             mode,
         ]);
     } catch (error) {
-        activeCapture = false;
-        captureWindow?.destroy();
-        showPanel();
-        dialog.showErrorBox("无法开始截图", String(error));
-    } finally {
-        captureStarting = false;
+        if (win) failCapture(win, "无法开始截图", String(error));
+        else {
+            captureStarting = false;
+            void dialog.showMessageBox({
+                type: "error",
+                title: "无法开始截图",
+                message: String(error),
+            });
+        }
     }
 }
 
 function finishCapture() {
-    cancelInk();
+    const next = queuedCapture;
+    queuedCapture = undefined;
     activeCapture = false;
-    closing = true;
-    captureWindow?.once("closed", () => {
-        if (!quitting) prewarmCapture();
-    });
-    captureWindow?.close();
-    closing = false;
+    captureWindow?.destroy();
     if (quitting) app.quit();
+    else if (next) void capture(next.imagePath, next.mode);
+    else setImmediate(prewarmCapture);
 }
 
 function quitImmediately() {
@@ -351,8 +388,20 @@ function showCaptureWindow() {
     win.focus();
     win.webContents.focus();
 }
-mainOn("clip_show", showCaptureWindow);
-mainOn("clip_close", finishCapture);
+mainOn("clip_show", (_, event) => {
+    if (event.sender !== captureWindow?.webContents) return;
+    clearTimeout(captureStartTimer);
+    captureStarting = false;
+    activeCapture = true;
+    showCaptureWindow();
+});
+mainOn("annotation_capture_failed", ([message], event) => {
+    if (captureStarting && event.sender === captureWindow?.webContents)
+        failCapture(captureWindow, "无法开始截图", message);
+});
+mainOn("clip_close", (_, event) => {
+    if (event.sender === captureWindow?.webContents) finishCapture();
+});
 mainOn("clip_hide", () => captureWindow?.hide());
 mainOn("windowIgnoreMouse", ([ignore]) =>
     captureWindow?.setIgnoreMouseEvents(ignore),
@@ -380,6 +429,7 @@ handle("captureVisibility", (visible) => {
     captureSaving = !visible;
     if (visible) {
         quitting = false;
+        queuedCapture = undefined;
         showCaptureWindow();
     } else {
         whitespaceRequest?.abort();
@@ -423,24 +473,21 @@ handle("screenshots", async () => {
         };
     }
     if (process.platform === "win32") {
-        try {
-            return await Promise.all(
-                displays.map(async (d) => {
-                    const rect = screen.dipToScreenRect(null, d.bounds);
-                    const reader =
-                        warmReaders.pop() ?? prepareFrameReader(frameHelper);
-                    const deflatedRgba = await reader.read(rect);
-                    return {
-                        ...frameInfo(d),
-                        width: rect.width,
-                        height: rect.height,
-                        deflatedRgba,
-                    };
-                }),
-            );
-        } catch {
-            // Remote sessions and secure desktops may not offer a readable GDI surface.
-        }
+        const frames = await Promise.allSettled(
+            displays.map(async (d) => {
+                const rect = screen.dipToScreenRect(null, d.bounds);
+                const rgba = await frameReader(d.id).read(rect);
+                return {
+                    ...frameInfo(d),
+                    width: rect.width,
+                    height: rect.height,
+                    rgba,
+                };
+            }),
+        );
+        if (frames.every((frame) => frame.status === "fulfilled"))
+            return frames.map((frame) => frame.value);
+        // Remote sessions and secure desktops may not offer a readable GDI surface.
     }
     const width = Math.max(
         ...displays.map((d) => Math.round(d.size.width * d.scaleFactor)),
@@ -523,6 +570,7 @@ handle("state", () => ({
     jobs: [...jobs.jobs.values()].reverse(),
     shortcutError,
 }));
+handle("captureConfig", () => config.public());
 handle("configure", (input) => {
     const rollback = registerShortcuts(input);
     try {
@@ -585,7 +633,7 @@ else {
         }
     });
     app.on("will-quit", () => {
-        for (const reader of warmReaders) reader.stop();
+        for (const reader of frameReaders.values()) reader.stop();
         updater?.dispose();
         retention?.dispose();
         globalShortcut.unregisterAll();
@@ -693,6 +741,10 @@ else {
         tray.setToolTip("AnnotationCapture");
         refreshTray();
         tray.on("click", showPanel);
+        screen.on("display-removed", (_, display) => {
+            frameReaders.get(display.id)?.stop();
+            frameReaders.delete(display.id);
+        });
         void startup.ensure();
         if (args.input) void capture(args.input, args.ocr ? "ocr" : "region");
         else if (args.full) void capture(undefined, "full");

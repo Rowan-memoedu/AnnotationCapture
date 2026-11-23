@@ -1,6 +1,6 @@
 # Third-party notices
 
-The Windows screen capture helper includes `CaptureScreenBitmap` from [FocusToolWin's ScreenshotService](https://github.com/YaRus02/FocusToolWin/blob/6ae324854e575704a29d049156dc9ae9958dc96f/Services/ScreenshotService.cs#L96-L111), adapted for the Windows .NET Framework compiler.
+The original Windows screen capture helper adapted `CaptureScreenBitmap` from [FocusToolWin's ScreenshotService](https://github.com/YaRus02/FocusToolWin/blob/6ae324854e575704a29d049156dc9ae9958dc96f/Services/ScreenshotService.cs#L96-L111). The current helper uses the Windows GDI device-independent bitmap APIs directly.
 
 MIT License
 

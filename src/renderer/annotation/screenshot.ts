@@ -3,13 +3,9 @@ import type { ScreenFrame } from "../../../lib/annotation";
 import { invoke } from "../../../lib/annotationIpc";
 
 const { nativeImage } = require("electron") as typeof import("electron");
-const { inflateRawSync } = require("node:zlib") as typeof import("node:zlib");
-
-function framePixels(shot: Extract<ScreenFrame, { deflatedRgba: Uint8Array }>) {
+function framePixels(shot: Extract<ScreenFrame, { rgba: Uint8Array }>) {
     const expected = shot.width * shot.height * 4;
-    const raw = inflateRawSync(shot.deflatedRgba, {
-        maxOutputLength: expected,
-    });
+    const raw = shot.rgba;
     if (raw.length !== expected) throw new Error("Incomplete screen frame");
     return new ImageData(
         new Uint8ClampedArray(
@@ -66,7 +62,7 @@ export default function init() {
                     scaleFactor: shot.scaleFactor,
                     capture: async () => ({
                         toImageData: () =>
-                            "deflatedRgba" in shot
+                            "rgba" in shot
                                 ? framePixels(shot)
                                 : pixels(
                                       file ||
