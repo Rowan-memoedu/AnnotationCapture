@@ -5,10 +5,7 @@ export type ScreenFrame = {
     bounds: PixelRect;
     scaleFactor: number;
     pointer?: { x: number; y: number };
-} & (
-    | { deflatedRgba: Uint8Array; width: number; height: number }
-    | { png: string }
-);
+} & ({ rgba: Uint8Array; width: number; height: number } | { png: string });
 export type CaptureMode = "region" | "full" | "ocr";
 export type FormulaFont = "stix2" | "newcm";
 export type LassoRule = "intersect" | "contain";
@@ -167,6 +164,7 @@ export type AnnotationMessages = {
         png: string,
     ) => import("./whiteboard").WhiteboardDetection;
     captureVisibility: (visible: boolean) => void;
+    captureConfig: () => PublicConfig;
     checkUpdates: () => UpdateState;
     installUpdate: () => UpdateState;
     setAutoUpdate: (enabled: boolean) => UpdateState;

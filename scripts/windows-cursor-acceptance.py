@@ -6,7 +6,6 @@ import struct
 import subprocess
 import sys
 import time
-import zlib
 from ctypes import wintypes as w
 from pathlib import Path
 
@@ -60,8 +59,9 @@ def check(executable):
             if bitmap:
                 gdi.DeleteObject(w.HBITMAP(bitmap))
         black, white = icon_on(icon, 0, size), icon_on(icon, 255, size)
-        request = [str(executable), str(x-meta.x), str(y-meta.y), str(size), str(size)]
-        frame = zlib.decompress(subprocess.check_output(request, creationflags=subprocess.CREATE_NO_WINDOW), -15)
+        request = f"{x-meta.x} {y-meta.y} {size} {size}\n"
+        frame = subprocess.check_output([str(executable)], input=request.encode(), creationflags=subprocess.CREATE_NO_WINDOW)
+        assert len(frame) == size * size * 4
         if cursor() != (flags, icon, x, y):
             continue
         opaque = different = 0

@@ -14,15 +14,15 @@ import { maskWhiteboardInk, type WhiteboardRegion } from "./whiteboard";
 
 export type CaptureSnapshot = {
     composite: HTMLCanvasElement;
-    ink: HTMLCanvasElement;
+    ink?: HTMLCanvasElement;
     rect: PixelRect;
     screenId: number;
     annotations?: object;
     whiteboards?: WhiteboardRegion[];
 };
 export function installCompletion(
-    snapshot: () => Promise<CaptureSnapshot>,
-    rawClose: () => Promise<void>,
+    snapshot: (formula: boolean) => Promise<CaptureSnapshot>,
+    rawClose: () => void,
     drawingElement: HTMLElement,
     saveDefaults: () => Promise<void>,
 ) {
@@ -144,9 +144,9 @@ export function installCompletion(
         try {
             if (!formula || directFormat)
                 await invoke("captureVisibility", false);
-            const frozen = await snapshot();
+            const frozen = await snapshot(formula);
             const boardImage =
-                formula && frozen.whiteboards?.length
+                frozen.ink && frozen.whiteboards?.length
                     ? maskWhiteboardInk(frozen.ink, frozen.whiteboards)
                     : null;
             if (boardImage) await invoke("captureVisibility", false);
@@ -163,7 +163,7 @@ export function installCompletion(
             if (directFormat) {
                 await invoke("formula", {
                     archiveId: id,
-                    png: frozen.composite.toDataURL(),
+                    png: input.png,
                     rect: {
                         x: 0,
                         y: 0,
@@ -185,12 +185,12 @@ export function installCompletion(
                     },
                     outputFormat: config.outputFormat,
                 });
-            } else if (formula) {
+            } else if (frozen.ink) {
                 selectionOpen = true;
-                await selectFormula(frozen);
+                await selectFormula(frozen.composite, frozen.ink);
                 selectionOpen = false;
             }
-            await rawClose();
+            rawClose();
         } catch (error) {
             await invoke("captureVisibility", true);
             blocker.remove();
@@ -200,7 +200,10 @@ export function installCompletion(
         }
     }
 
-    async function selectFormula(frozen: CaptureSnapshot) {
+    async function selectFormula(
+        composite: HTMLCanvasElement,
+        ink: HTMLCanvasElement,
+    ) {
         const { config } = await invoke("state");
         return new Promise<void>((resolve) => {
             const outputFormat = ele("select")
@@ -218,8 +221,8 @@ export function installCompletion(
             const display = ele("canvas")
                 .attr({
                     id: "ac-selection",
-                    width: frozen.composite.width,
-                    height: frozen.composite.height,
+                    width: composite.width,
+                    height: composite.height,
                     ariaLabel: t("拖动框选要识别的批注"),
                 })
                 .style({
@@ -267,7 +270,7 @@ export function installCompletion(
                 .addInto();
             function draw() {
                 ctx.clearRect(0, 0, display.el.width, display.el.height);
-                ctx.drawImage(frozen.composite, 0, 0);
+                ctx.drawImage(composite, 0, 0);
                 if (rect) {
                     ctx.strokeStyle = "#006cff";
                     ctx.lineWidth = 3;
@@ -350,7 +353,7 @@ export function installCompletion(
                 }).el;
                 const c = crop.getContext("2d")!;
                 c.drawImage(
-                    frozen.ink,
+                    ink,
                     rect.x,
                     rect.y,
                     rect.width,
