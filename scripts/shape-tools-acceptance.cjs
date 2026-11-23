@@ -66,10 +66,16 @@ async function run() {
             }
 
             const shapes = page.locator("#draw_shapes");
+            await shapes.hover();
             await shapes.focus();
             await page.keyboard.press("Enter");
             assert.equal(await shapes.getAttribute("aria-expanded"), "true");
-            assert.ok(await page.locator("#draw_shapes_rect").evaluate(el => el === document.activeElement));
+            const focus = await page.evaluate(() => ({
+                activeId: document.activeElement?.id,
+                shapeMenuInert: document.querySelector("#draw_side").inert,
+                focused: document.hasFocus(),
+            }));
+            assert.equal(focus.activeId, "draw_shapes_rect", JSON.stringify({ mode, ...focus }));
             if (mode === "full" && !process.env.ANNOTATION_SCALE) {
                 const toolbar = await page.locator("#draw_main").boundingBox();
                 const menu = await page.locator("#draw_shapes_i").boundingBox();
@@ -85,7 +91,11 @@ async function run() {
                     },
                 });
             }
+            await page.mouse.move(900, 160);
+            await page.waitForTimeout(150);
+            assert.equal(await shapes.getAttribute("aria-expanded"), "true");
             await page.keyboard.press("Enter");
+            assert.equal(await shapes.getAttribute("aria-expanded"), "false");
             await drag(page, [[330, 250], [450, 325]]);
             await chooseShape(page, "ellipse");
             await drag(page, [[635, 325], [490, 250]]);

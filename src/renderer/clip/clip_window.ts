@@ -2661,6 +2661,11 @@ function isInDrawBar() {
     );
 }
 
+function hideUnfocusedSideBar() {
+    if (!isInDrawBar() && !drawSideBar.contains(document.activeElement))
+        showSideBar(false);
+}
+
 function showSideBar(show: boolean) {
     drawSideBar.inert = !show;
     if (show) {
@@ -5071,11 +5076,7 @@ for (const [index, e] of drawBarMainElList.entries()) {
     });
     e.on("pointerleave", () => {
         clearTimeout(willShowITime);
-        setTimeout(() => {
-            if (!isInDrawBar()) {
-                showSideBar(false);
-            }
-        }, 100);
+        setTimeout(hideUnfocusedSideBar, 100);
     });
     const type = Type[index];
     if (type && type !== "shape")
@@ -5083,16 +5084,19 @@ for (const [index, e] of drawBarMainElList.entries()) {
 }
 
 drawMainElsx.shapes.on("click", (event) => {
+    clearTimeout(willShowITime);
     showSideBarItem(drawBarMainElList.indexOf(drawMainElsx.shapes));
     if (event.detail === 0) drawSideShapes.rect.el.focus();
 });
 drawArrowEl.on("click", () => setEditType("shape", "arrow"));
+drawBarSideEl.on("focusout", (event) => {
+    if (event.relatedTarget && !drawBar.contains(event.relatedTarget as Node))
+        queueMicrotask(hideUnfocusedSideBar);
+});
 
 for (const el of drawBarSideElChildren) {
     el.el.on("pointerleave", () => {
-        setTimeout(() => {
-            if (!isInDrawBar()) showSideBar(false);
-        }, 100);
+        setTimeout(hideUnfocusedSideBar, 100);
     });
 }
 
