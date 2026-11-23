@@ -68,6 +68,8 @@ export function captureDefaults(version: string, pictures: string): setting {
                 副: {
                     line: "3+4",
                     circle: "3+5",
+                    ellipse: "",
+                    diamond: "",
                     rect: "3+6",
                     polyline: "5",
                     polygon: "6",

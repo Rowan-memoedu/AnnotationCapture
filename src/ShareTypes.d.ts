@@ -444,6 +444,8 @@ type EditType = {
     shape:
         | "line"
         | "circle"
+        | "ellipse"
+        | "diamond"
         | "rect"
         | "polyline"
         | "polygon"

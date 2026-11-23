@@ -11,6 +11,7 @@ import type { LassoRule } from "../../../lib/annotation";
 import { t } from "../../../lib/translate/translate";
 import { type Position, polylineMatchesLasso } from "./lassoGeometry";
 import { isPressurePath } from "./pressureInk";
+import { shapeMatchesLasso } from "./shapeGeometry";
 import { isWhiteboard } from "./whiteboard";
 
 export function installInkSelection(
@@ -176,7 +177,10 @@ export function installInkSelection(
                                       2
                                 : 0,
                         ) ||
-                        (isPressurePath(object) &&
+                        ((isPressurePath(object) ||
+                            (object.形状 === "arrow" &&
+                                object.fill &&
+                                path.at(-1)?.[0] === "Z")) &&
                             rule === "intersect" &&
                             polylineMatchesLasso(polygon, points, "intersect"))
                     );
@@ -188,6 +192,8 @@ export function installInkSelection(
                         : results.some(Boolean))
                 );
             }
+            const shapeMatch = shapeMatchesLasso(object, polygon, rule);
+            if (shapeMatch !== undefined) return shapeMatch;
             const points = object.getCoords();
             return (
                 polylineMatchesLasso([...points, points[0]], polygon, rule) ||

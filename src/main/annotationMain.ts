@@ -140,10 +140,16 @@ function showWhiteboard() {
         height: 850,
         icon,
         autoHideMenuBar: true,
-        webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+        },
     });
     whiteboardWindow = window;
-    window.on("closed", () => { whiteboardWindow = null; });
+    window.on("closed", () => {
+        whiteboardWindow = null;
+    });
     void load(window, "whiteboard.html");
 }
 function showPanel() {
