@@ -185,8 +185,8 @@ body input {
 }
 
 #tool_bar > div::before,
-#draw_main > div::before,
-.draw_items > div::before {
+#draw_main > :is(div, button[data-key])::before,
+.draw_items > :is(div, button[data-key])::before {
     content: attr(data-key);
     position: absolute;
     right: 2px;
@@ -267,6 +267,12 @@ body input {
 .ac-tool-icon:focus-visible {
     outline: 2px solid var(--ac-focus-color);
     outline-offset: -2px;
+}
+.ac-ellipse-icon > .icon {
+    transform: scaleY(0.7);
+}
+.ac-diamond-icon > .icon {
+    transform: rotate(45deg) scale(0.86);
 }
 .ac-stationary-cursor, .ac-stationary-cursor * {
     cursor: none !important;

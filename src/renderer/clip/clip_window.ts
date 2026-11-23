@@ -10,8 +10,9 @@ import {
     Circle,
     type CircleProps,
     classRegistry,
+    Ellipse,
     FabricImage,
-    type FabricObject,
+    FabricObject,
     filters,
     IText,
     Line,
@@ -37,6 +38,7 @@ import { installInkSelection } from "../annotation/inkSelection";
 import { PressureBrush } from "../annotation/pressureBrush";
 import { isPressurePath, resizePressurePath } from "../annotation/pressureInk";
 import initScreenShots from "../annotation/screenshot";
+import { createArrow } from "../annotation/shapeGeometry";
 import { installWhiteboard, isWhiteboard } from "../annotation/whiteboard";
 import { writeImage, writeText } from "../lib/clipboard";
 import { Class, cssColor, getImgUrl, initStyle, setTitle } from "../root/root";
@@ -88,7 +90,7 @@ function iconEl(src: IconType) {
     );
 }
 
-function whiteboardTool(name: IconType, label: string) {
+function toolbarIcon(name: IconType, label: string) {
     return button("")
         .class("ac-tool-icon")
         .attr({ title: t(label), ariaLabel: t(label) })
@@ -2531,7 +2533,8 @@ function setEditType<T extends keyof EditType>(
     for (const [i, mel] of Object.entries(drawMainEls)) {
         if (i === mainType) {
             mel.el.classList.add(SELECT);
-            mel.el.innerHTML = drawSideEls[mainType][type].el.innerHTML;
+            if (mainType !== "shape")
+                mel.el.innerHTML = drawSideEls[mainType][type].el.innerHTML;
         } else {
             mel.el.classList.remove(SELECT);
         }
@@ -2594,6 +2597,9 @@ function setEditType<T extends keyof EditType>(
         fabricCanvas.defaultCursor = "crosshair";
     }
     if (mainType === "shape") {
+        exitShape();
+        fabricCanvas.discardActiveObject();
+        fabricCanvas.requestRenderAll();
         shape = type as Shape;
         if (shape) {
             const sPro = getShapePro(shape);
@@ -2609,6 +2615,9 @@ function setEditType<T extends keyof EditType>(
         ableChangeColor();
     }
 
+    const arrowSelected = mainType === "shape" && type === "arrow";
+    drawArrowEl.el.classList.toggle(SELECT, arrowSelected);
+    drawArrowEl.el.setAttribute("aria-pressed", String(arrowSelected));
     if (!(mainType === "select" && type === "draw"))
         store.set(`图像编辑.记忆.${mainType}`, type);
 
@@ -2640,6 +2649,10 @@ function showSideBarItem(index: number) {
             el.style({ display: "none" });
         }
     }
+    drawMainElsx.shapes.el.setAttribute(
+        "aria-expanded",
+        String(drawBarMainElList[index] === drawMainElsx.shapes),
+    );
 }
 
 function isInDrawBar() {
@@ -2649,10 +2662,12 @@ function isInDrawBar() {
 }
 
 function showSideBar(show: boolean) {
+    drawSideBar.inert = !show;
     if (show) {
         drawSideBar.classList.remove("draw_side_hide");
     } else {
         drawSideBar.classList.add("draw_side_hide");
+        drawMainElsx.shapes.el.setAttribute("aria-expanded", "false");
     }
 }
 
@@ -2755,16 +2770,9 @@ function fabricDelete() {
     hisPush();
 }
 
-function rotate(x: number, y: number, r: number) {
-    const s = Math.sin(r);
-    const c = Math.cos(r);
-    return [x * c - y * s, x * s + y * c];
-}
-
 // 画一般图形
-function draw(
+function createShape(
     shape: EditType["shape"],
-    v: "start" | "move",
     x1: number,
     y1: number,
     x2: number,
@@ -2772,11 +2780,6 @@ function draw(
 ) {
     const pro = getShapePro(shape);
     const [fillColor, strokeColor, strokeWidth] = [pro.fc, pro.sc, pro.sw];
-    if (v === "move") {
-        const obj = shapes.at(-1);
-        if (obj) fabricCanvas.remove(obj);
-        shapes.splice(shapes.length - 1, 1);
-    }
     const x = Math.min(x1, x2);
     const y = Math.min(y1, y2);
     const w = Math.abs(x1 - x2);
@@ -2785,6 +2788,8 @@ function draw(
     if (shape === "line") {
         shapeX = new Line([x1, y1, x2, y2], {
             stroke: strokeColor,
+            strokeWidth,
+            strokeLineCap: "round",
             originX: "left",
             originY: "top",
             形状: "line",
@@ -2802,6 +2807,36 @@ function draw(
             canChangeFill: true,
             形状: "circle",
         });
+    } else if (shape === "ellipse") {
+        shapeX = new Ellipse({
+            left: x,
+            top: y,
+            originX: "left",
+            originY: "top",
+            rx: w / 2,
+            ry: h / 2,
+            fill: fillColor,
+            stroke: strokeColor,
+            strokeWidth,
+            canChangeFill: true,
+            形状: "ellipse",
+        });
+    } else if (shape === "diamond") {
+        shapeX = new Polygon(
+            [
+                { x: x + w / 2, y },
+                { x: x + w, y: y + h / 2 },
+                { x: x + w / 2, y: y + h },
+                { x, y: y + h / 2 },
+            ],
+            {
+                fill: fillColor,
+                stroke: strokeColor,
+                strokeWidth,
+                canChangeFill: true,
+                形状: "diamond",
+            },
+        );
     } else if (shape === "rect") {
         shapeX = new Rect({
             left: x,
@@ -2827,11 +2862,13 @@ function draw(
             fontFamily: 字体.主要字体,
         });
     } else if (shape === "arrow") {
-        shapeX = new arrow([x1, y1, x2, y2], {
-            stroke: strokeColor,
-            strokeWidth: strokeWidth,
-            形状: "arrow",
-        });
+        shapeX = createArrow(
+            { x: x1, y: y1 },
+            { x: x2, y: y2 },
+            strokeColor,
+            strokeWidth,
+            arrowConfig,
+        );
     } else if (shape === "mask") {
         shapeX = new mask({
             left: 0,
@@ -2844,10 +2881,7 @@ function draw(
             形状: "mask",
         });
     }
-    if (shapeX) {
-        shapes.push(shapeX);
-        fabricCanvas.add(shapeX);
-    }
+    return shapeX;
 }
 // 多边形
 function drawPoly(shape: EditType["shape"]) {
@@ -3171,7 +3205,10 @@ function setFObjectV(
                 // 只改变形的颜色
                 if (i.canChangeFill) i.set("fill", fill);
             }
-            if (stroke) i.set("stroke", stroke);
+            if (stroke) {
+                i.set("stroke", stroke);
+                if (i.形状 === "arrow" && i.fill) i.set("fill", stroke);
+            }
             if (sw) i.set("strokeWidth", sw);
             if (i.形状) {
                 store.set(`图像编辑.形状属性.${i.形状}.fc`, fill || fillColor);
@@ -3304,6 +3341,8 @@ function exitFree() {
     fabricCanvas.defaultCursor = "auto";
 }
 function exitShape() {
+    if (shapePreview) fabricCanvas.remove(shapePreview);
+    shapePreview = null;
     shape = "";
     drawingShape = false;
     fabricCanvas.selection = true;
@@ -3540,7 +3579,10 @@ const drawMainElsx = {
         title: "选择与控制",
     }),
     free: iconEl("free_draw").attr({ id: "draw_free", title: "自由绘画" }),
-    shapes: iconEl("shapes").attr({ id: "draw_shapes", title: "形状和文字" }),
+    shapes: toolbarIcon("shapes", "形状和文字").attr({
+        id: "draw_shapes",
+        ariaExpanded: "false",
+    }),
     filters: iconEl("filters").attr({ id: "draw_filters", title: "滤镜" }),
     color: view()
         .attr({ id: "draw_color", title: "颜色和大小" })
@@ -3550,15 +3592,21 @@ const drawMainElsx = {
         title: "层叠高度",
     }),
     操作: iconEl("setting").attr({ id: "draw_操作", title: "操作" }),
-    whiteboard: whiteboardTool("rect", "快速白板").attr({
+    whiteboard: toolbarIcon("rect", "快速白板").attr({
         id: "ac-whiteboard",
     }),
 } as const;
 
 const drawBarMainElList = Object.values(drawMainElsx);
+drawMainElsx.shapes.el.setAttribute("aria-controls", "draw_shapes_i");
 for (const el of drawBarMainElList) {
     drawBarMainEl.add(el);
 }
+const drawArrowEl = toolbarIcon("arrow", "箭头").attr({
+    id: "ac-arrow",
+    ariaPressed: "false",
+});
+drawMainElsx.shapes.el.after(drawArrowEl.el);
 
 const drawSideSelect = {
     rect: iconEl("rect_select").attr({ title: "矩形选择" }),
@@ -3567,10 +3615,10 @@ const drawSideSelect = {
 } as const;
 
 const whiteboardModes = {
-    smart: whiteboardTool("scan", "智能白板"),
-    center: whiteboardTool("rect", "中央白板"),
-    rect: whiteboardTool("rect_select", "反选白板矩形"),
-    free: whiteboardTool("free_select", "反选白板自由"),
+    smart: toolbarIcon("scan", "智能白板"),
+    center: toolbarIcon("rect", "中央白板"),
+    rect: toolbarIcon("rect_select", "反选白板矩形"),
+    free: toolbarIcon("free_select", "反选白板自由"),
 } as const;
 
 const drawSideFree = {
@@ -3582,15 +3630,17 @@ const drawSideFree = {
 const drawShadowBlur = view().attr({ id: "shadow_blur" });
 
 const drawSideShapes = {
-    line: iconEl("line").attr({ title: "线条" }),
-    circle: iconEl("circle").attr({ title: "圆" }),
-    rect: iconEl("rect").attr({ title: "矩形" }),
-    polyline: iconEl("polyline").attr({ title: "折线" }),
-    polygon: iconEl("polygon").attr({ title: "多边形" }),
-    text: iconEl("text").attr({ title: "文字" }),
-    number: iconEl("number").attr({ title: "序号" }),
-    arrow: iconEl("arrow").attr({ title: "箭头" }),
-    mask: iconEl("mask").attr({ title: "遮罩" }),
+    rect: toolbarIcon("rect", "矩形"),
+    ellipse: toolbarIcon("circle", "椭圆").class("ac-ellipse-icon"),
+    diamond: toolbarIcon("rect", "菱形").class("ac-diamond-icon"),
+    circle: toolbarIcon("circle", "圆"),
+    line: toolbarIcon("line", "线条"),
+    arrow: toolbarIcon("arrow", "箭头"),
+    polyline: toolbarIcon("polyline", "折线"),
+    polygon: toolbarIcon("polygon", "多边形"),
+    text: toolbarIcon("text", "文字"),
+    number: toolbarIcon("number", "序号"),
+    mask: toolbarIcon("mask", "遮罩"),
 } as const;
 
 const filterRangeEl = view().class("draw_filters_range");
@@ -4087,6 +4137,7 @@ type Shape = EditType["shape"] | "";
 let shape: Shape = "";
 
 let drawingShape = false;
+let shapePreview: FabricObject | null = null;
 const shapes: FabricObject[] = [];
 const unnormalShapes = ["polyline", "polygon", "number"];
 const strokeShapes = ["line", "polyline", "arrow"];
@@ -4106,6 +4157,12 @@ declare module "fabric" {
         形状?: Shape;
     }
 }
+
+FabricObject.customProperties = [
+    ...FabricObject.customProperties,
+    "canChangeFill",
+    "形状",
+];
 
 /** 规定当前色盘对应的是填充还是边框 */
 let colorM: "fill" | "stroke" = "fill";
@@ -4472,6 +4529,7 @@ for (const [mainKey, k] of typedEntries(drawHotKey)) {
         setEditType(mainKey, editType[mainKey]);
     });
     for (const [j, v] of typedEntries(k.副)) {
+        if (!v) continue;
         try {
             // @ts-expect-error
             drawSideEls[mainKey][j].data({
@@ -5020,8 +5078,15 @@ for (const [index, e] of drawBarMainElList.entries()) {
         }, 100);
     });
     const type = Type[index];
-    if (type) e.on("click", () => setEditType(type, editType[type]));
+    if (type && type !== "shape")
+        e.on("click", () => setEditType(type, editType[type]));
 }
+
+drawMainElsx.shapes.on("click", (event) => {
+    showSideBarItem(drawBarMainElList.indexOf(drawMainElsx.shapes));
+    if (event.detail === 0) drawSideShapes.rect.el.focus();
+});
+drawArrowEl.on("click", () => setEditType("shape", "arrow"));
 
 for (const el of drawBarSideElChildren) {
     el.el.on("pointerleave", () => {
@@ -5053,6 +5118,8 @@ drawShadowBlur.add(shadowBlurEl);
 for (const [k, el] of Object.entries(drawSideShapes)) {
     el.on("click", () => {
         setEditType("shape", k as EditType["shape"]);
+        if (el.el === document.activeElement) drawMainElsx.shapes.el.focus();
+        showSideBar(false);
     });
 }
 // 层叠位置
@@ -5078,15 +5145,18 @@ hotkeys("delete", fabricDelete);
 
 fabricCanvas.on("mouse:down", (options) => {
     // 非常规状态下点击
-    if (shape !== "" && !options.target) {
+    if (
+        shape !== "" &&
+        (!("button" in options.e) || options.e.button === 0) &&
+        !options.target
+    ) {
         drawingShape = true;
         fabricCanvas.selection = false;
-        const x = options.viewportPoint.x;
-        const y = options.viewportPoint.y;
+        const { x, y } = options.scenePoint;
         // 折线与多边形要多次点击，在poly_o_p存储点
         if (!unnormalShapes.includes(shape)) {
             drawOP = [x, y];
-            draw(shape, "start", drawOP[0], drawOP[1], x, y);
+            if (shape === "text") updateShapePreview(shape, x, y);
         } else {
             // 定义最后一个点,双击,点重复,结束
             const polyOPL = polyOP.at(-1);
@@ -5109,27 +5179,36 @@ fabricCanvas.on("mouse:down", (options) => {
         newFilterO = fabricCanvas.getViewportPoint(options.e);
     }
 });
+function updateShapePreview(kind: EditType["shape"], x: number, y: number) {
+    if (shapePreview) fabricCanvas.remove(shapePreview);
+    shapePreview = createShape(kind, drawOP[0], drawOP[1], x, y);
+    if (shapePreview) fabricCanvas.add(shapePreview);
+}
 fabricCanvas.on("mouse:move", (options) => {
-    if (drawingShape) {
-        if (!unnormalShapes.includes(shape)) {
-            if (shape !== "")
-                draw(
-                    shape,
-                    "move",
-                    drawOP[0],
-                    drawOP[1],
-                    options.viewportPoint.x,
-                    options.viewportPoint.y,
-                );
-        }
-    }
+    if (
+        drawingShape &&
+        shape &&
+        shape !== "text" &&
+        !unnormalShapes.includes(shape)
+    )
+        updateShapePreview(shape, options.scenePoint.x, options.scenePoint.y);
 });
 fabricCanvas.on("mouse:up", (options) => {
-    if (!unnormalShapes.includes(shape)) {
+    if (drawingShape && shape && !unnormalShapes.includes(shape)) {
         drawingShape = false;
-        if (shape !== "") {
-            const obj = shapes.at(-1);
-            if (obj) fabricCanvas.setActiveObject(obj);
+        fabricCanvas.selection = true;
+        const { x, y } = options.scenePoint;
+        if (shape !== "text") {
+            if (x !== drawOP[0] || y !== drawOP[1])
+                updateShapePreview(shape, x, y);
+            else if (shapePreview) {
+                fabricCanvas.remove(shapePreview);
+                shapePreview = null;
+            }
+        }
+        if (shapePreview) {
+            fabricCanvas.setActiveObject(shapePreview);
+            shapePreview = null;
             hisPush();
         }
     }
@@ -5210,44 +5289,6 @@ classRegistry.setClass(xnumber);
 classRegistry.setSVGClass(xnumber);
 
 const arrowConfig = store.get("图像编辑.arrow");
-
-class arrow extends Line {
-    static type = "arrow";
-    render(ctx: CanvasRenderingContext2D): void {
-        ctx.save();
-
-        const { x1, x2, y1, y2 } = this;
-
-        const angle = Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2;
-        const w = arrowConfig.w;
-        const h = arrowConfig.h;
-
-        const [x3, y3] = rotate(-w / 2, h, angle);
-        const [x4, y4] = rotate(w / 2, h, angle);
-
-        const x0 = (x2 - x1) / 2;
-        const y0 = (y2 - y1) / 2;
-
-        ctx.translate(x1 + x0, y1 + y0);
-
-        this._render(ctx);
-
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x0 + x3, y0 + y3);
-        if (arrowConfig.type === "stroke") ctx.moveTo(x0, y0);
-        ctx.lineTo(x0 + x4, y0 + y4);
-        ctx.closePath();
-
-        ctx.fillStyle = this.stroke?.toString() || "";
-        ctx.lineWidth = this.strokeWidth || 1;
-        ctx.strokeStyle = this.stroke?.toString() || "";
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.restore();
-    }
-}
 
 // 颜色选择
 
