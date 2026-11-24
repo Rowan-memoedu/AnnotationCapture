@@ -58,6 +58,7 @@ export function installWhiteboard(
         return patch;
     }
     let generation = 0;
+    let manualDetection: PublicConfig | undefined;
     let waiting = false;
     let autoOpenPending = false;
     let endLasso: (() => void) | undefined;
@@ -150,6 +151,11 @@ export function installWhiteboard(
     function choose(mode: BoardMode) {
         if (mode === "auto" && boards().length) return;
         autoOpenPending = false;
+        if (mode === "smart" && manualDetection) {
+            const config = manualDetection;
+            manualDetection = undefined;
+            void detectWhitespace(config, false);
+        }
         const finishingWait =
             mode === "smart" && waiting && detection !== "loading";
         stopEditing();
@@ -345,21 +351,25 @@ export function installWhiteboard(
         target.setCoords();
         history();
     });
-    async function initialize(config: PublicConfig, full: boolean) {
-        const current = ++generation;
+    function initialize(config: PublicConfig, full: boolean) {
+        generation++;
         candidates = [];
-        detection = full && config.whiteboard.enabled ? "loading" : "off";
-        autoOpenPending = detection === "loading" && config.whiteboard.autoOpen;
-        hint.el.textContent =
-            detection === "loading"
-                ? t(
-                      autoOpenPending
-                          ? "正在查找空白区域，可继续书写"
-                          : "正在查找空白区域；现在点击将使用中央白板",
-                  )
-                : "";
+        detection = "off";
+        autoOpenPending = false;
+        manualDetection =
+            full && config.whiteboard.enabled ? config : undefined;
+        hint.el.textContent = "";
         sync();
-        if (detection !== "loading") return;
+        if (!manualDetection || !config.whiteboard.autoOpen) return;
+        manualDetection = undefined;
+        return detectWhitespace(config, true);
+    }
+    async function detectWhitespace(config: PublicConfig, autoOpen: boolean) {
+        const current = ++generation;
+        detection = "loading";
+        autoOpenPending = autoOpen;
+        if (autoOpen) hint.el.textContent = t("正在查找空白区域，可继续书写");
+        sync();
         // Wait until the capture is drawable; model latency never gates the pen.
         await new Promise((resolve) => setTimeout(resolve, 0));
         try {
@@ -500,6 +510,7 @@ export function installWhiteboard(
         stopEditing,
         invalidate: () => {
             generation++;
+            manualDetection = undefined;
             autoOpenPending = false;
             candidates = [];
             detection = "off";

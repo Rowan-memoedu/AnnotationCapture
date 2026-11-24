@@ -184,6 +184,12 @@ export type AnnotationMessages = {
     typeset: (latex: string, font: FormulaFont, color: string) => string;
     screenshots: () => ScreenFrame[];
     archive: (input: CaptureInput) => ArchiveRecord;
+    prepareFormula: (
+        archiveId: string,
+        png: string,
+        format: OutputFormat,
+    ) => void;
+    cancelPreparedFormula: (archiveId: string) => void;
     formula: (input: {
         archiveId: string;
         png: string;

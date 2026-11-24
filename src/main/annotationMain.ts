@@ -1,7 +1,5 @@
-import { execFile } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { promisify } from "node:util";
 import {
     app,
     BrowserWindow,
@@ -17,7 +15,11 @@ import {
     Tray,
 } from "electron";
 import minimist from "minimist";
-import type { CaptureMode } from "../../lib/annotation";
+import {
+    type CaptureMode,
+    type OutputFormat,
+    outputFormats,
+} from "../../lib/annotation";
 import { handle } from "../../lib/annotationIpc";
 import { mainOn, mainSend } from "../../lib/ipc";
 import Store from "../../lib/store/store";
@@ -30,7 +32,7 @@ import { AnnotationUpdater, acknowledgeUpdate } from "./annotationUpdate";
 import { captureDefaults } from "./captureDefaults";
 import { FormulaJobs } from "./formulaJobs";
 import { FormulaTypesetter } from "./formulaTypeset";
-import { prepareFrameReader } from "./nativeFrames";
+import { prepareClipboardReader, prepareFrameReader } from "./nativeFrames";
 import { screenshotSource } from "./screenshotSource";
 
 app.setName("AnnotationCapture");
@@ -210,6 +212,7 @@ function prepareCaptureWindow() {
         clearTimeout(captureStartTimer);
         captureStarting = false;
         cancelInk();
+        cancelPreparedFormula();
         whitespaceRequest?.abort();
         whitespaceRequest = null;
         captureWindow = null;
@@ -376,16 +379,24 @@ function registerShortcuts(next: {
     return () => setShortcuts(previous);
 }
 
+let clipboardReader: ReturnType<typeof prepareClipboardReader> | undefined;
+let lastClipboardRead: Promise<string> | undefined;
 async function clipboardRevision(): Promise<string> {
     if (process.platform !== "win32") return await clipboard.readText();
-    const result = await promisify(execFile)(
-        frameHelper,
-        ["--clipboard-sequence"],
-        { windowsHide: true, timeout: 2000 },
-    );
-    const revision = result.stdout.trim();
-    if (!/^[1-9]\d*$/.test(revision)) throw new Error("无法读取剪贴板状态");
-    return revision;
+    const read = () => {
+        if (!clipboardReader?.available)
+            clipboardReader = prepareClipboardReader(frameHelper);
+        return clipboardReader.read();
+    };
+    const pending = lastClipboardRead
+        ? lastClipboardRead.then(read, read)
+        : read();
+    lastClipboardRead = pending;
+    try {
+        return await pending;
+    } finally {
+        if (lastClipboardRead === pending) lastClipboardRead = undefined;
+    }
 }
 
 ipcMain.on("store", (event, message) => {
@@ -537,15 +548,54 @@ handle("archive", async (input) => {
         throw new Error("截图数据无法解码");
     return archive.save(input);
 });
+let preparedFormula:
+    | {
+          id: string;
+          png: string;
+          format: OutputFormat;
+          result: NonNullable<ReturnType<FormulaJobs["prepare"]>>;
+      }
+    | undefined;
+function cancelPreparedFormula(id?: string) {
+    if (!preparedFormula || (id !== undefined && preparedFormula.id !== id))
+        return;
+    preparedFormula.result.cancel();
+    preparedFormula = undefined;
+}
+handle("prepareFormula", (id, png, format) => {
+    if (!/^[a-f0-9-]{36}$/.test(id) || !outputFormats.includes(format)) return;
+    decodePng(png);
+    cancelPreparedFormula();
+    const result = jobs.prepare(png, format);
+    preparedFormula = result ? { id, png, format, result } : undefined;
+});
+handle("cancelPreparedFormula", cancelPreparedFormula);
 handle("formula", async (input) => {
-    const result = await jobs.create(
-        input.archiveId,
-        input.png,
-        input.rect,
-        input.outputFormat,
-    );
-    void jobs.run(result.id, input.png);
-    return result;
+    const pending =
+        preparedFormula?.id === input.archiveId ? preparedFormula : undefined;
+    if (pending) preparedFormula = undefined;
+    const reusable =
+        pending &&
+        pending.png === input.png &&
+        pending.format === input.outputFormat;
+    if (!reusable) pending?.result.cancel();
+    try {
+        const result = await jobs.create(
+            input.archiveId,
+            input.png,
+            input.rect,
+            input.outputFormat,
+        );
+        void jobs.run(
+            result.id,
+            input.png,
+            reusable ? pending.result : undefined,
+        );
+        return result;
+    } catch (error) {
+        pending?.result.cancel();
+        throw error;
+    }
 });
 handle("typeset", (latex, font, color) =>
     typesetter.render(latex, font, color),
@@ -618,7 +668,10 @@ handle("capture", (mode = "region") => {
     void capture(undefined, mode);
 });
 handle("login", (code) => auth.login(code));
-handle("logout", () => auth.logout());
+handle("logout", () => {
+    cancelPreparedFormula();
+    return auth.logout();
+});
 handle("refreshLogin", () => auth.refresh());
 handle("openPanel", () => showPanel());
 handle("quit", quitImmediately);
@@ -654,12 +707,15 @@ else {
     });
     app.on("will-quit", () => {
         for (const reader of frameReaders.values()) reader.stop();
+        clipboardReader?.stop();
         updater?.dispose();
         retention?.dispose();
         globalShortcut.unregisterAll();
         tray?.destroy();
     });
     app.whenReady().then(() => {
+        if (process.platform === "win32")
+            void clipboardRevision().catch(() => {});
         config = new AnnotationConfig(
             dataRoot,
             args.archiveRoot || join(dataRoot, "Archive"),

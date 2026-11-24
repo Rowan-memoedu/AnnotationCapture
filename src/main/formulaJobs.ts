@@ -18,6 +18,8 @@ export type ClipboardPort = {
     writeText: (text: string) => Promise<void>;
 };
 
+type PreparedRecognition = NonNullable<ReturnType<FormulaJobs["prepare"]>>;
+
 export class FormulaJobs {
     readonly jobs = new Map<string, FormulaResult>();
     private latest = "";
@@ -69,7 +71,41 @@ export class FormulaJobs {
         return result;
     }
 
-    async run(id: string, png?: string) {
+    prepare(
+        image: string | (() => Promise<string>),
+        outputFormat: OutputFormat = "latex",
+    ) {
+        const provider = this.provider();
+        if (!provider) return null;
+        const controller = new AbortController();
+        const revision = this.clipboard.revision().catch(() => null);
+        const calculator =
+            outputFormat === "calculator" || outputFormat === "calculatorCas";
+        if (calculator)
+            void warmWhiteboardCalculator(
+                outputFormat === "calculatorCas",
+            ).catch(() => {});
+        const format = calculator
+            ? "calculator"
+            : outputFormat === "mathAcademy"
+              ? "latex"
+              : outputFormat;
+        const signal = AbortSignal.any([
+            controller.signal,
+            AbortSignal.timeout(60_000),
+        ]);
+        const recognition = (async () =>
+            provider.recognize(
+                typeof image === "string" ? image : await image(),
+                signal,
+                format,
+            ))();
+        // The result may arrive before the archive can register the job.
+        void recognition.catch(() => {});
+        return { recognition, revision, cancel: () => controller.abort() };
+    }
+
+    async run(id: string, png?: string, pending?: PreparedRecognition) {
         const result = this.get(id);
         if (this.running.has(id)) return result;
         this.running.add(id);
@@ -80,29 +116,22 @@ export class FormulaJobs {
         this.changed();
         const start = Date.now();
         try {
-            const provider = this.provider();
-            if (!provider) {
+            const prepared =
+                pending ??
+                this.prepare(
+                    png ?? (() => this.archives.readFormula(result)),
+                    result.outputFormat,
+                );
+            if (!prepared) {
                 result.status = "unconfigured";
                 result.message = "请先使用邀请码登录；截图与公式图已保存";
                 return result;
             }
-            const revision = this.clipboard.revision().catch(() => null);
             const useCalculator =
                 result.outputFormat === "calculator" ||
                 result.outputFormat === "calculatorCas";
             const cas = result.outputFormat === "calculatorCas";
-            if (useCalculator)
-                void warmWhiteboardCalculator(cas).catch(() => {});
-            const image = png ?? (await this.archives.readFormula(result));
-            const recognized = await provider.recognize(
-                image,
-                AbortSignal.timeout(60000),
-                useCalculator
-                    ? "calculator"
-                    : result.outputFormat === "mathAcademy"
-                      ? "latex"
-                      : result.outputFormat,
-            );
+            const recognized = await prepared.recognition;
             result.latex = recognized.latex;
             result.recognizedLatex = recognized.latex;
             result.detectedType = recognized.detectedType;
@@ -135,7 +164,7 @@ export class FormulaJobs {
             result.status = "ready";
             result.message = "识别完成";
             this.changed();
-            const originalRevision = await revision;
+            const originalRevision = await prepared.revision;
             if (
                 originalRevision !== null &&
                 this.latest === id &&

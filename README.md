@@ -48,11 +48,13 @@
 
 0.8.14 统一桌面和网站的公式转写，计算和化简使用同一版计算引擎。
 
+0.8.15 在确认选区后并行识别和归档，缩短 Windows 剪贴板序号读取时间，手动智能白板在选择时才检测空白。
+
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.14-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.15-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 从 0.8.4 起，运行新版后自动配置当前用户的 Windows 登录任务，在登录约 10 秒后后台启动，避免普通启动项队列造成的长时间等待。截图快捷键可直接使用，单击托盘图标打开设置；右键托盘的“开机自启动”可开启或关闭。
 
@@ -83,7 +85,7 @@
 
 检测进行中、不可用或没有可用区域时，直接点击主按钮会立即创建中央白板。悬停主按钮可在右侧竖栏选择模式。
 
-- **智能白板**等识别就绪后自动出现，等待期间可以书写。改选其他白板会取消等待。
+- **智能白板**未设为自动开启时，选择此模式后才检测空白区域。等待期间可以书写，改选其他白板会取消等待。
 - **中央白板**随时创建居中、可以调整的白板。
 - **反选白板矩形**保留拖出的矩形，选区外铺白。
 - **反选白板自由**沿手绘轮廓保留题面，凹口也按实际轨迹处理。
