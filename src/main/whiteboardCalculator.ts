@@ -2,22 +2,33 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 type SharedCalculator = {
+    warmCalculator: (module: string) => Promise<unknown>;
     calculateSelectedFormula: (input: {
         expression: string;
         cas: boolean;
     }) => Promise<{ text: string }>;
 };
 
-export async function calculateWhiteboardFormula(
-    expression: string,
-    cas: boolean,
-) {
+async function calculatorEngine() {
     const directory =
         process.env.ANNOTATION_CALCULATOR_ROOT ||
         join(process.resourcesPath, "calculator");
     const entry = pathToFileURL(join(directory, "calculator-engine.js")).href;
-    const engine = (await import(/* @vite-ignore */ entry)) as SharedCalculator;
+    return (await import(/* @vite-ignore */ entry)) as SharedCalculator;
+}
+
+export async function warmWhiteboardCalculator(cas: boolean) {
+    await (await calculatorEngine()).warmCalculator(
+        cas ? "symbolic" : "expression",
+    );
+}
+
+export async function calculateWhiteboardFormula(
+    expression: string,
+    cas: boolean,
+) {
     try {
+        const engine = await calculatorEngine();
         return (await engine.calculateSelectedFormula({ expression, cas }))
             .text;
     } catch {

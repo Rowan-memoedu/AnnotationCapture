@@ -301,6 +301,28 @@ describe("formula task boundaries", () => {
         expect(job.status).toBe("review");
         expect(writes).toEqual([]);
     });
+    it("recognizes while the initial clipboard revision is being read", async () => {
+        let release!: (value: string) => void;
+        const firstRevision = new Promise<string>((resolve) => {
+            release = resolve;
+        });
+        const revision = vi
+            .fn(async () => "new")
+            .mockReturnValueOnce(firstRevision);
+        const recognize = vi.fn(async () => ({ latex: "x", model: "test" }));
+        const { jobs, create, writes } = await setup({ recognize }, revision);
+        const job = await create();
+        const running = jobs.run(job.id);
+        try {
+            await vi.waitFor(() => expect(recognize).toHaveBeenCalledOnce());
+            expect(writes).toEqual([]);
+        } finally {
+            release("old");
+            await running;
+        }
+        expect(job.status).toBe("review");
+        expect(writes).toEqual([]);
+    });
     it("retains archive and clipboard on provider failure", async () => {
         const { jobs, create, writes } = await setup({
             recognize: async () => {
