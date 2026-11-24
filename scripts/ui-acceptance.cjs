@@ -62,15 +62,22 @@ async function draw(page, points) {
     const files = await archiveFiles(); assert.equal(files.length, 1);
     console.log('ARCHIVE_OK', files[0]);
     const p2 = await capture(await showPanel());
+    await app.evaluate(({ BrowserWindow }) => {
+        BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('annotation.html')).hide();
+    });
     await p2.locator('#draw_free').click();
     await draw(p2, [[350, 270], [390, 310], [430, 350]]);
     await draw(p2, [[350, 350], [390, 310], [430, 270]]);
     await p2.keyboard.press('Control+Shift+Enter');
     await p2.waitForSelector('#ac-selection');
     const bounds = await p2.locator('#ac-selection').boundingBox();
-    await draw(p2, [[bounds.x + bounds.width * 0.1, bounds.y + bounds.height * 0.1], [bounds.x + bounds.width * 0.9, bounds.y + bounds.height * 0.9]]);
     await p2.screenshot({ path: path.join(root, 'formula-selection.png') });
-    const closed = p2.waitForEvent('close'); await p2.locator('#ac-recognize').click(); await closed;
+    const closed = p2.waitForEvent('close');
+    await draw(p2, [[bounds.x + bounds.width * 0.1, bounds.y + bounds.height * 0.1], [bounds.x + bounds.width * 0.9, bounds.y + bounds.height * 0.9]]);
+    await closed;
+    await new Promise(resolve => setTimeout(resolve, 300));
+    assert.equal(await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('annotation.html')).isVisible()), false);
     const resultPanel = await showPanel();
     await resultPanel.waitForSelector('[data-status="unconfigured"]');
     await resultPanel.screenshot({ path: path.join(root, 'unconfigured-result.png') });

@@ -12,16 +12,10 @@ const near = [
     [[0, 0], [28, 0], [28, 38], [0, 38], [0, 0]],
     [[0, 18], [28, 18]],
 ];
-const target = [
-    [[49, 0], [43, 13], [55, 13], [47, 30], [58, 25]],
-    [[65, 0], [65, 12]],
-    [[62, 10], [86, 10]],
-    [[63, 16], [86, 16], [86, 38], [63, 38], [63, 16]],
-    [[63, 26], [84, 26]],
-];
+const target = [[[74, 0], [74, 38]]];
 const far = near.map(stroke => stroke.map(([x, y]) => [x + 103, y]));
 const rub = [[62, 17], [88, 20], [62, 23], [88, 26], [62, 29], [88, 32]];
-const neighbor = [...near, ...far];
+const neighbor = [...near, [[92, 11], [99, 20], [102, 9], [97, 34]], ...far];
 
 async function draw(page, origin, paths, pointerType = "mouse") {
     if (pointerType === "mouse") {
@@ -79,8 +73,8 @@ async function ink(page, selector, origin) {
         };
         return {
             before: pixelsIn(-4, -4, 36, 47),
-            target: pixelsIn(38, -4, 56, 47),
-            after: pixelsIn(99, -4, 37, 47),
+            target: pixelsIn(38, -4, 52, 47),
+            after: pixelsIn(90, -4, 46, 47),
         };
     }, origin);
 }
@@ -174,7 +168,7 @@ async function run() {
         await draw(board, [415, 320], [rub]);
         assert.ok((await ink(board, "#board", [415, 320])).target > 0);
         assert.deepEqual(errors, []);
-        const report = { passed: true, capturePen: true, quickWhiteboardMouse: true, standaloneMouse: true, archive: true, undoRedo: true, disable: true, hardwarePenTested: false };
+        const report = { passed: true, adjacentStrokePreserved: true, capturePen: true, quickWhiteboardMouse: true, standaloneMouse: true, archive: true, undoRedo: true, disable: true, hardwarePenTested: false };
         fs.writeFileSync(path.join(root, "scribble-desktop.json"), JSON.stringify(report, null, 2));
         console.log(JSON.stringify(report));
     } finally {

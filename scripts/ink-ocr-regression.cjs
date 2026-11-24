@@ -35,11 +35,11 @@ async function stroke(page,points){
   await page.screenshot({path:path.join(root,scenario.name+'-selection.png')});
   await page.locator('#ac-output-format').selectOption('mathAcademy');
   let b=await page.locator('#ac-selection').boundingBox();
-  await stroke(page,[[b.x+5,b.y+5],[b.x+20,b.y+20]]);await page.locator('#ac-recognize').click();
+  await stroke(page,[[b.x+5,b.y+5],[b.x+20,b.y+20]]);
   assert.match(await page.locator('#ac-selection-status').textContent(),/没有批注笔迹/);
   b=await page.locator('#ac-selection').boundingBox();
-  await stroke(page,[[b.x+2,b.y+2],[b.x+b.width-2,b.y+b.height-2]]);
-  const closed=page.waitForEvent('close');await page.locator('#ac-recognize').click();await closed;
+  const closed=page.waitForEvent('close');
+  await stroke(page,[[b.x+2,b.y+2],[b.x+b.width-2,b.y+b.height-2]]);await closed;
   let job;for(let i=0;i<320;i++){const state=await panel.evaluate(()=>require('electron').ipcRenderer.invoke('annotation:state'));job=state.jobs[0];if(job&&['copied','review','error','unconfigured'].includes(job.status)&&job.status!=='unconfigured')break;if(!process.env.ANNOTATION_INVITE_FILE&&job)break;await new Promise(r=>setTimeout(r,250));}
   assert.ok(job);if(process.env.ANNOTATION_INVITE_FILE)assert.ok(job.status==='copied'||(job.status==='review'&&job.message.includes('剪贴板或当前任务已变化')),job.message);
   fs.copyFileSync(job.path,path.join(root,scenario.name+'-ocr-input.png'));
@@ -47,6 +47,7 @@ async function stroke(page,points){
   assert.ok(ink.red>500);assert.equal(ink.other,0,'OCR image must contain only red ink and white, never desktop content');
   const canonical=s=>s.replace(/\s/g,'').replace(/\\left|\\right/g,'');
   checks.push({scenario:scenario.name,rememberedCaptureTool:'free',preview,ink,actual:job.latex,expected:'\\frac{X+1}{2}',exactMatch:canonical(job.latex)==='\\frac{X+1}{2}',realOcr:!!process.env.ANNOTATION_INVITE_FILE,clipboardMatched:await app.evaluate(({clipboard})=>clipboard.readText())===job.latex});
+  await panel.evaluate(()=>require('electron').ipcRenderer.invoke('annotation:openPanel'));
   await panel.locator('#ac-results').screenshot({path:path.join(root,scenario.name+'-result.png')});
   console.log('INK_OCR_CHECK',JSON.stringify(checks.at(-1)));
   await app.evaluate(({app})=>app.exit());app=null;

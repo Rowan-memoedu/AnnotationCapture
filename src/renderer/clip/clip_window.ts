@@ -5369,7 +5369,6 @@ const completion = installCompletion(
                 height: finalRect[3],
             },
             screenId: nowScreenId,
-            whiteboards: whiteboard?.regions(finalRect[0], finalRect[1]),
             annotations: {
                 version: 1,
                 canvas: fabricCanvas.toJSON(),

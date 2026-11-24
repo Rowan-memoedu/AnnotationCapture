@@ -7,7 +7,7 @@ export default defineConfig({
     build: {
         outDir: resolve(
             process.env.ANNOTATION_WHITEBOARD_OUTPUT ||
-                "D:/Artifacts/AnnotationCapture/whiteboard-v3",
+                "D:/Artifacts/AnnotationCapture/whiteboard-v4",
         ),
         emptyOutDir: false,
         rollupOptions: {

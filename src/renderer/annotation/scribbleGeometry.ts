@@ -25,10 +25,6 @@
  *   hairpins — steps out and back every time ({@link MAX_LOOPING}). Loopy
  *   "coil" scribbles are refused with it: a scribble that fails leaves ink,
  *   which is the safe way to be wrong.
- *
- * What a scribble covers is the hull of every two passes that follow one
- * another: the band the pen swept between them. The caller decides which
- * covered strokes are eligible for deletion.
  */
 
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
@@ -68,8 +64,6 @@ const LOOPING_FLOOR = 0.03;
 const HAIRPIN_WINDOW = 0.25;
 /** Most points the detector reads; a longer scribble is resampled coarser. */
 const MAX_SAMPLES = 800;
-/** Points along a stroke the coverage rule reads. */
-const COVERAGE_SAMPLES = 48;
 
 export interface ScribbleOptions {
     /**
@@ -98,38 +92,19 @@ export interface ScribbleMeasure {
     looping: number;
 }
 
-/** One pair of consecutive passes: its convex hull, flat `[x, y, …]`, counter-clockwise. */
-interface Region {
-    hull: number[];
-    bounds: Bounds;
-}
-
-export interface Scribble {
-    bounds: Bounds;
-    regions: readonly Region[];
-    measure: ScribbleMeasure;
-}
-
 /** Read the stroke as a scribble, or `null` when it is not one. */
 export function detectScribble(
     pts: readonly number[],
     options: ScribbleOptions,
-): Scribble | null {
-    const read = readScribble(pts, options);
-    if (!read) return null;
-    const { measure, r, cuts } = read;
+): ScribbleMeasure | null {
+    const measure = measureScribble(pts, options);
+    if (!measure) return null;
     if (measure.size < options.minSize) return null;
     if (measure.reversals < MIN_REVERSALS) return null;
     if (measure.hairpins < HAIRPIN_SHARE * measure.reversals) return null;
     if (measure.overlap < MIN_OVERLAP) return null;
     if (measure.looping > MAX_LOOPING) return null;
-    // What it covers: the hull of every two passes that follow one another.
-    const regions: Region[] = [];
-    for (let k = 0; k + 2 < cuts.length; k++) {
-        const hull = convexHull(r, cuts[k], cuts[k + 2]);
-        regions.push({ hull, bounds: boundsOf(hull) });
-    }
-    return { bounds: read.bounds, regions, measure };
+    return measure;
 }
 
 /** The detector's measurements without its verdict; `null` for a stroke too short to read. */
@@ -137,23 +112,6 @@ export function measureScribble(
     pts: readonly number[],
     options: ScribbleOptions,
 ): ScribbleMeasure | null {
-    return readScribble(pts, options)?.measure ?? null;
-}
-
-/** The resampled stroke, where its passes meet, and what was measured on it. */
-interface Reading {
-    /** The stroke walked at a fixed spacing, flat `[x, y, …]`. */
-    r: number[];
-    /** Indices into `r`: the start, every reversal, the end. */
-    cuts: number[];
-    bounds: Bounds;
-    measure: ScribbleMeasure;
-}
-
-function readScribble(
-    pts: readonly number[],
-    options: ScribbleOptions,
-): Reading | null {
     const xy = polylineXY(pts);
     if (xy.length < 8) return null;
     let length = 0;
@@ -267,12 +225,7 @@ function readScribble(
     }
     const looping = pairs > 0 ? back / pairs : 0;
 
-    return {
-        r,
-        cuts,
-        bounds,
-        measure: { reversals: turns.length, hairpins, overlap, size, looping },
-    };
+    return { reversals: turns.length, hairpins, overlap, size, looping };
 }
 
 /**
@@ -311,67 +264,6 @@ function reversalsOf(s: readonly number[], band: number): number[] {
         }
     }
     return turns;
-}
-
-/**
- * The share of a stroke's length (`[x, y, p, …]`) the scribble covers: read
- * at evenly spaced points, each covered when it lies in a region or within
- * `margin` of one. A stroke that never moves is all covered or none.
- */
-export function scribbleCoverage(
-    scribble: Scribble,
-    pts: readonly number[],
-    margin: number,
-): number {
-    const xy = polylineXY(pts);
-    if (xy.length === 0) return 0;
-    let length = 0;
-    for (let i = 2; i < xy.length; i += 2) {
-        length += Math.hypot(xy[i] - xy[i - 2], xy[i + 1] - xy[i - 1]);
-    }
-    if (!(length > 0)) return covered(scribble, xy[0], xy[1], margin) ? 1 : 0;
-    let inside = 0;
-    let seg = 2;
-    let walked = 0;
-    let segLength = Math.hypot(xy[2] - xy[0], xy[3] - xy[1]);
-    for (let k = 0; k < COVERAGE_SAMPLES; k++) {
-        const target = ((k + 0.5) / COVERAGE_SAMPLES) * length;
-        while (walked + segLength < target && seg + 2 < xy.length) {
-            walked += segLength;
-            seg += 2;
-            segLength = Math.hypot(
-                xy[seg] - xy[seg - 2],
-                xy[seg + 1] - xy[seg - 1],
-            );
-        }
-        const t =
-            segLength > 0 ? Math.min(1, (target - walked) / segLength) : 0;
-        const x = xy[seg - 2] + (xy[seg] - xy[seg - 2]) * t;
-        const y = xy[seg - 1] + (xy[seg + 1] - xy[seg - 1]) * t;
-        if (covered(scribble, x, y, margin)) inside++;
-    }
-    return inside / COVERAGE_SAMPLES;
-}
-
-function covered(
-    scribble: Scribble,
-    x: number,
-    y: number,
-    margin: number,
-): boolean {
-    for (const { hull, bounds } of scribble.regions) {
-        if (
-            x < bounds.minX - margin ||
-            x > bounds.maxX + margin ||
-            y < bounds.minY - margin ||
-            y > bounds.maxY + margin
-        ) {
-            continue;
-        }
-        if (insideConvex(hull, x, y) || distanceToPolygon(hull, x, y) <= margin)
-            return true;
-    }
-    return false;
 }
 
 /** `[x, y, p, …]` as `[x, y, …]`, without repeats; whole points only. */
@@ -435,99 +327,4 @@ function median(values: readonly number[]): number {
     return sorted.length % 2
         ? sorted[mid]
         : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-/** Convex hull of points `from..to` (inclusive) of a flat polyline, counter-clockwise. */
-function convexHull(xy: readonly number[], from: number, to: number): number[] {
-    const pts: Array<[number, number]> = [];
-    for (let i = from; i <= to; i++) pts.push([xy[2 * i], xy[2 * i + 1]]);
-    pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-    if (pts.length < 3) return pts.flat();
-    const cross = (
-        o: [number, number],
-        a: [number, number],
-        b: [number, number],
-    ): number => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-    const lower: Array<[number, number]> = [];
-    for (const p of pts) {
-        while (
-            lower.length >= 2 &&
-            cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0
-        )
-            lower.pop();
-        lower.push(p);
-    }
-    const upper: Array<[number, number]> = [];
-    for (let i = pts.length - 1; i >= 0; i--) {
-        const p = pts[i];
-        while (
-            upper.length >= 2 &&
-            cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0
-        )
-            upper.pop();
-        upper.push(p);
-    }
-    lower.pop();
-    upper.pop();
-    return [...lower, ...upper].flat();
-}
-
-/** Inside a counter-clockwise convex polygon (flat), edges included. Fewer than three vertices: never. */
-function insideConvex(hull: readonly number[], x: number, y: number): boolean {
-    const n = hull.length / 2;
-    if (n < 3) return false;
-    for (let i = 0; i < n; i++) {
-        const j = (i + 1) % n;
-        const ex = hull[2 * j] - hull[2 * i];
-        const ey = hull[2 * j + 1] - hull[2 * i + 1];
-        if (ex * (y - hull[2 * i + 1]) - ey * (x - hull[2 * i]) < 0)
-            return false;
-    }
-    return true;
-}
-
-/** Distance from a point to a polygon's outline (or to a point or segment, when it is one). */
-function distanceToPolygon(
-    poly: readonly number[],
-    x: number,
-    y: number,
-): number {
-    const n = poly.length / 2;
-    if (n === 0) return Infinity;
-    if (n === 1) return Math.hypot(poly[0] - x, poly[1] - y);
-    let best = Infinity;
-    const edges = n === 2 ? 1 : n;
-    for (let i = 0; i < edges; i++) {
-        const j = (i + 1) % n;
-        best = Math.min(
-            best,
-            distanceToSegment(
-                x,
-                y,
-                poly[2 * i],
-                poly[2 * i + 1],
-                poly[2 * j],
-                poly[2 * j + 1],
-            ),
-        );
-    }
-    return best;
-}
-
-function distanceToSegment(
-    x: number,
-    y: number,
-    ax: number,
-    ay: number,
-    bx: number,
-    by: number,
-): number {
-    const dx = bx - ax;
-    const dy = by - ay;
-    const len2 = dx * dx + dy * dy;
-    const t =
-        len2 > 0
-            ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2))
-            : 0;
-    return Math.hypot(ax + dx * t - x, ay + dy * t - y);
 }

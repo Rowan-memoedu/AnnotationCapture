@@ -81,13 +81,17 @@ class GatewayTests(unittest.TestCase):
                              "ANNOTATION_LLM_EXTRA_JSON": '{"thinking":{"type":"enabled"},"reasoning_effort":"low"}'})
         image = png()
         expected = {"latex": "3+7", "model": "deepseek-flash"}
-        with patch.object(provider, "_recognize", side_effect=[ValueError("UNREADABLE"), expected, expected]) as transcribe:
+        with patch.object(provider, "_recognize", side_effect=[ValueError("UNREADABLE"), expected, expected, expected, expected]) as transcribe:
             self.assertEqual(provider.recognize(image, "calculator"), expected)
             self.assertEqual(provider.recognize(image, "latex"), expected)
+            self.assertEqual(provider.recognize(image, "inlineMath"), expected)
+            self.assertEqual(provider.recognize(image, "markdown"), expected)
         self.assertEqual(transcribe.call_args_list, [
             call(image, "calculator", {"thinking": {"type": "disabled"}}, timeout=10),
             call(image, "calculator", provider.extra, timeout=14),
             call(image, "latex", {"thinking": {"type": "disabled"}}, timeout=10),
+            call(image, "inlineMath", {"thinking": {"type": "disabled"}}, timeout=10),
+            call(image, "markdown", {"thinking": {"type": "disabled"}}, timeout=10),
         ])
         with patch.object(provider, "_recognize", side_effect=TimeoutError) as transcribe:
             with self.assertRaises(TimeoutError):

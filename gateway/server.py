@@ -241,7 +241,7 @@ class Provider:
     def recognize(self, png: str, output_format: str = "latex") -> dict:
         if output_format not in PROMPTS:
             raise ValueError("Unsupported output format")
-        if (output_format in {"calculator", "latex"}
+        if (output_format in {"calculator", "latex", "inlineMath", "markdown"}
                 and urllib.parse.urlparse(self.base_url).hostname == "api.deepseek.com"
                 and self.model == "deepseek-flash"
                 and self.extra.get("thinking") != {"type": "disabled"}):

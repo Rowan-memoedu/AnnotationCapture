@@ -313,7 +313,7 @@ describe("formula task boundaries", () => {
         expect(await readFile(job.path)).toBeTruthy();
         expect(writes).toEqual([]);
     });
-    it("makes the OCR result available while clipboard connectivity is pending", async () => {
+    it("preserves a manual result if the clipboard revision could not be read", async () => {
         let rejectRevision!: (error: Error) => void;
         const revision = new Promise<string>((_, reject) => {
             rejectRevision = reject;
@@ -324,11 +324,10 @@ describe("formula task boundaries", () => {
         );
         const job = await create();
         const running = jobs.run(job.id);
-        await vi.waitFor(() => expect(job.status).toBe("ready"));
-        expect(job.latex).toBe("x");
         rejectRevision(new Error("Clipboard temporarily unavailable"));
         await running;
         expect(job.status).toBe("review");
+        expect(job.latex).toBe("x");
         expect(writes).toEqual([]);
     });
     it("rejects formula rectangles outside the archived capture", async () => {

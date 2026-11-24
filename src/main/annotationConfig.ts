@@ -22,6 +22,7 @@ import {
 
 type StoredConfig = {
     whiteboard: WhiteboardSettings;
+    whiteboardAutoOpenReset: boolean;
     archiveRoot: string;
     shortcut: string;
     fullShortcut: string;
@@ -46,6 +47,7 @@ export class AnnotationConfig {
         this.file = join(dataRoot, "annotation-settings.json");
         this.config = {
             whiteboard: whiteboardSettings(),
+            whiteboardAutoOpenReset: true,
             archiveRoot,
             shortcut: "Control+Alt+S",
             fullShortcut: "Alt+W",
@@ -62,10 +64,23 @@ export class AnnotationConfig {
             archiveRetentionDays: 7,
         };
         if (existsSync(this.file)) {
+            const stored: Partial<StoredConfig> = JSON.parse(
+                readFileSync(this.file, "utf8"),
+            );
             this.config = {
                 ...this.config,
-                ...JSON.parse(readFileSync(this.file, "utf8")),
+                ...stored,
             };
+            if (stored.whiteboardAutoOpenReset !== true) {
+                this.persist({
+                    ...this.config,
+                    whiteboard: whiteboardSettings({
+                        ...stored.whiteboard,
+                        autoOpen: false,
+                    }),
+                    whiteboardAutoOpenReset: true,
+                });
+            }
         }
         this.config.whiteboard = whiteboardSettings(this.config.whiteboard);
     }

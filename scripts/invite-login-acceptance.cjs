@@ -42,8 +42,10 @@ async function request(route,token,body){const r=await fetch(endpoint+route,{met
  await page.mouse.move(430,350);await page.mouse.down();await page.mouse.move(475,405,{steps:8});await page.mouse.up();
  await page.keyboard.press('Control+Shift+Enter');await page.waitForSelector('#ac-selection');
  const bounds=await page.locator('#ac-selection').boundingBox();
+ const closed = page.waitForEvent('close');
  await page.mouse.move(bounds.x+bounds.width*.2,bounds.y+bounds.height*.2);await page.mouse.down();await page.mouse.move(bounds.x+bounds.width*.7,bounds.y+bounds.height*.7,{steps:5});await page.mouse.up();
- const closed=page.waitForEvent('close');await page.locator('#ac-recognize').click();await closed;
+
+    await closed;
  await panel.waitForSelector('[data-status="error"]',{timeout:30000});const result=(await state()).jobs[0];assert.match(result.message,/统一 API/);assert.ok(fs.existsSync(result.path));assert.ok(fs.existsSync(path.join(path.dirname(result.path),'capture.png')));
  assert.equal(await app.evaluate(({clipboard})=>clipboard.readText()),clipboardBefore);checks.push('logged-in-formula-workflow-saves-images-and-reports-new-API-pending-without-fallback');
  await panel.screenshot({path:path.join(root,'provider-pending.png')});

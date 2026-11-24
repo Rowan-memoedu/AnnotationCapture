@@ -74,9 +74,12 @@ async function createJob(source, format = 'mathAcademy') {
     await capture.keyboard.press('Control+Shift+Enter'); await capture.waitForSelector('#ac-output-format');
     assert.equal(await capture.locator('#ac-output-format').inputValue(), 'mathAcademy');
     const box = await capture.locator('#ac-selection').boundingBox();
-    await capture.mouse.move(box.x + 10, box.y + 10); await capture.mouse.down(); await capture.mouse.move(box.x + box.width - 10, box.y + box.height - 10, { steps: 6 }); await capture.mouse.up();
+
     responseLatex = '\\displaystyle \\dfrac{X+x}{2}';
-    const closed = capture.waitForEvent('close'); await capture.locator('#ac-recognize').click(); await closed;
+    const closed = capture.waitForEvent('close');
+    await capture.mouse.move(box.x + 10, box.y + 10); await capture.mouse.down(); await capture.mouse.move(box.x + box.width - 10, box.y + box.height - 10, { steps: 6 }); await capture.mouse.up();
+
+    await closed;
     const first = await waitJob((await state()).jobs[0].id);
     assert.equal(first.status, 'copied'); assert.equal(first.latex, '\\frac{X+x}{2}');
     assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), first.latex);

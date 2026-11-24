@@ -403,7 +403,7 @@ export function refineWhiteboardRects(
 }
 export const whiteboardDefaults: WhiteboardSettings = {
     enabled: true,
-    autoOpen: true,
+    autoOpen: false,
     maxRects: 5,
     includeTaskbar: true,
     includeWindowChrome: true,
