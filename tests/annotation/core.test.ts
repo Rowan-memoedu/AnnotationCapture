@@ -176,13 +176,16 @@ describe("archive correctness", () => {
 });
 
 describe("formula task boundaries", () => {
-    async function setup(provider: FormulaProvider | null) {
+    async function setup(
+        provider: FormulaProvider | null,
+        readRevision?: ClipboardPort["revision"],
+    ) {
         const { archive, input } = await fixture();
         await archive.save(input);
         let revision = "0";
         const writes: string[] = [];
         const clipboard: ClipboardPort = {
-            revision: async () => revision,
+            revision: readRevision ?? (async () => revision),
             writeText: async (text) => {
                 writes.push(text);
                 revision += "x";
@@ -308,6 +311,24 @@ describe("formula task boundaries", () => {
         await jobs.run(job.id);
         expect(job.status).toBe("error");
         expect(await readFile(job.path)).toBeTruthy();
+        expect(writes).toEqual([]);
+    });
+    it("makes the OCR result available while clipboard connectivity is pending", async () => {
+        let rejectRevision!: (error: Error) => void;
+        const revision = new Promise<string>((_, reject) => {
+            rejectRevision = reject;
+        });
+        const { jobs, create, writes } = await setup(
+            { recognize: async () => ({ latex: "x", model: "test" }) },
+            () => revision,
+        );
+        const job = await create();
+        const running = jobs.run(job.id);
+        await vi.waitFor(() => expect(job.status).toBe("ready"));
+        expect(job.latex).toBe("x");
+        rejectRevision(new Error("Clipboard temporarily unavailable"));
+        await running;
+        expect(job.status).toBe("review");
         expect(writes).toEqual([]);
     });
     it("rejects formula rectangles outside the archived capture", async () => {

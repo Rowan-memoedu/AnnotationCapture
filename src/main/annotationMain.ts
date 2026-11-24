@@ -378,17 +378,14 @@ function registerShortcuts(next: {
 
 async function clipboardRevision(): Promise<string> {
     if (process.platform !== "win32") return await clipboard.readText();
-    const command =
-        "Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class ClipboardSequence { [DllImport(\"user32.dll\")] public static extern uint GetClipboardSequenceNumber(); }'; [ClipboardSequence]::GetClipboardSequenceNumber()";
     const result = await promisify(execFile)(
-        join(
-            process.env.SystemRoot || "C:\\Windows",
-            "System32/WindowsPowerShell/v1.0/powershell.exe",
-        ),
-        ["-NoProfile", "-NonInteractive", "-Command", command],
-        { windowsHide: true, timeout: 10000 },
+        frameHelper,
+        ["--clipboard-sequence"],
+        { windowsHide: true, timeout: 2000 },
     );
-    return result.stdout.trim();
+    const revision = result.stdout.trim();
+    if (!/^[1-9]\d*$/.test(revision)) throw new Error("无法读取剪贴板状态");
+    return revision;
 }
 
 ipcMain.on("store", (event, message) => {
@@ -547,10 +544,8 @@ handle("formula", async (input) => {
         input.rect,
         input.outputFormat,
     );
-    setTimeout(() => {
-        showPanel();
-        void jobs.run(result.id);
-    }, 200);
+    setTimeout(showPanel, 200);
+    void jobs.run(result.id);
     return result;
 });
 handle("typeset", (latex, font, color) =>

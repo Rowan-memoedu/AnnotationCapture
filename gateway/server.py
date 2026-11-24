@@ -241,14 +241,28 @@ class Provider:
     def recognize(self, png: str, output_format: str = "latex") -> dict:
         if output_format not in PROMPTS:
             raise ValueError("Unsupported output format")
+        if (output_format in {"calculator", "latex"}
+                and urllib.parse.urlparse(self.base_url).hostname == "api.deepseek.com"
+                and self.model == "deepseek-flash"
+                and self.extra.get("thinking") != {"type": "disabled"}):
+            fast = {key: value for key, value in self.extra.items() if key != "reasoning_effort"}
+            fast["thinking"] = {"type": "disabled"}
+            try:
+                return self._recognize(png, output_format, fast, timeout=10)
+            except (IndexError, KeyError, TypeError, ValueError):
+                # A malformed or unreadable transcription gets one pass with the configured model settings.
+                return self._recognize(png, output_format, self.extra, timeout=14)
+        return self._recognize(png, output_format, self.extra, timeout=45)
+
+    def _recognize(self, png: str, output_format: str, extra: dict, *, timeout: int) -> dict:
         endpoint = self.base_url if self.base_url.endswith("/chat/completions") else self.base_url + "/chat/completions"
-        payload = {"model": self.model, "stream": False, "max_tokens": 4096, **self.extra,
+        payload = {"model": self.model, "stream": False, "max_tokens": 4096, **extra,
                    "messages": [{"role": "system", "content": PROMPTS[output_format]}, {"role": "user", "content": [
                        {"type": "text", "text": "Transcribe only the selected image."},
                        {"type": "image_url", "image_url": {"url": png}}]}]}
         request = urllib.request.Request(endpoint, data=json.dumps(payload).encode(),
                                          headers={"Content-Type": "application/json", "Authorization": "Bearer " + self.key}, method="POST")
-        with urllib.request.build_opener(NoRedirect).open(request, timeout=45) as response:
+        with urllib.request.build_opener(NoRedirect).open(request, timeout=timeout) as response:
             raw = response.read(1024 * 1024 + 1)
         if len(raw) > 1024 * 1024:
             raise ValueError("Oversized provider response")
