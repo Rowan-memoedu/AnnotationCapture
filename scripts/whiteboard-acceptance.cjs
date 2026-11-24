@@ -36,7 +36,12 @@ async function checkpoint(page) {
     await page.locator('#ac-capture-status').evaluate(el => { el.textContent = ''; });
     return result;
 }
-async function finish(page) { const closed = page.waitForEvent('close'); await page.keyboard.press('Escape'); await closed; }
+async function finish(page) {
+    const closed = page.waitForEvent('close');
+    try { await page.keyboard.press('Escape'); }
+    catch (error) { if (!page.isClosed()) throw error; }
+    await closed;
+}
 async function option(page, mode) {
     await page.locator('#ac-whiteboard').hover();
     await page.waitForFunction(() => !document.querySelector('#draw_side').classList.contains('draw_side_hide') && document.querySelector('#draw_whiteboard_i').style.display !== 'none');
