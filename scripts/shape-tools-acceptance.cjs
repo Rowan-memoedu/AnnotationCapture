@@ -104,14 +104,15 @@ async function run() {
             await chooseShape(page, "line");
             await drag(page, [[330, 425], [450, 490]]);
 
-            const arrow = page.locator("#ac-arrow");
-            await arrow.click();
-            assert.equal(await arrow.getAttribute("aria-pressed"), "true");
+            assert.equal(await page.locator('#draw_main [aria-label="箭头"]').count(), 0);
+            const arrow = page.locator("#draw_shapes_i #draw_shapes_arrow");
+            await chooseShape(page, "arrow");
+            assert.equal(await arrow.evaluate(el => el.classList.contains("select")), true);
             await drag(page, [[655, 450], [510, 450]]);
             await page.keyboard.press("Control+z");
             await page.keyboard.press("Control+y");
             await page.keyboard.press("d");
-            assert.equal(await arrow.getAttribute("aria-pressed"), "false");
+            assert.equal(await arrow.evaluate(el => el.classList.contains("select")), false);
             await drag(page, [[500, 427], [545, 427], [545, 474], [500, 474], [500, 427]]);
             await drag(page, [[560, 450], [560, 502]]);
             await page.keyboard.press("Control+z");
