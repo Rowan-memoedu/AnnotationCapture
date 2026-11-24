@@ -168,13 +168,19 @@ export class PressureBrush extends PencilBrush {
                 object === path ||
                 !(object instanceof Path) ||
                 !object.visible ||
+                !object.opacity ||
                 object.clipPath
             )
                 return [];
-            const points = scenePoints(object);
-            return points ? [{ id: object, points }] : [];
+            return isPressurePath(object) || (object as PenPath).acPenPoints
+                ? [{ id: object, ...hitInk(object) }]
+                : [];
         });
-        const targets = scribbleTargets(scribble, candidates, unitsPerPixel);
+        const targets = scribbleTargets(
+            hitInk(path),
+            candidates,
+            unitsPerPixel,
+        );
         if (!targets.size) return false;
         this.canvas.remove(path, ...targets);
         this.canvas.requestRenderAll();
@@ -228,6 +234,27 @@ export class PressureBrush extends PencilBrush {
         this._resetShadow();
         this.canvas.clearContext(this.canvas.contextTop);
     }
+}
+
+function hitInk(path: Path) {
+    const { left, top, width, height } = path.getBoundingRect();
+    return {
+        bounds: { x: left, y: top, width, height },
+        draw(context: CanvasRenderingContext2D) {
+            const geometry = new Path2D(util.joinPath(path.path));
+            context.save();
+            context.transform(...path.calcTransformMatrix());
+            context.translate(-path.pathOffset.x, -path.pathOffset.y);
+            if (path.fill) context.fill(geometry, path.fillRule);
+            if (path.stroke && path.strokeWidth) {
+                context.lineWidth = path.strokeWidth;
+                context.lineCap = path.strokeLineCap;
+                context.lineJoin = path.strokeLineJoin;
+                context.stroke(geometry);
+            }
+            context.restore();
+        },
+    };
 }
 
 function scenePoints(path: PenPath): PressurePoint[] | undefined {

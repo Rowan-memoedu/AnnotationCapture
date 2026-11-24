@@ -66,7 +66,7 @@ export class FormulaJobs {
         return result;
     }
 
-    async run(id: string) {
+    async run(id: string, png?: string) {
         const result = this.get(id);
         if (this.running.has(id)) return result;
         this.running.add(id);
@@ -83,14 +83,15 @@ export class FormulaJobs {
                 result.message = "请先使用邀请码登录；截图与公式图已保存";
                 return result;
             }
-            const originalRevision = this.clipboard
-                .revision()
-                .catch(() => null);
+            const [originalRevision, image] = await Promise.all([
+                this.clipboard.revision().catch(() => null),
+                png ?? this.archives.readFormula(result),
+            ]);
             const useCalculator =
                 result.outputFormat === "calculator" ||
                 result.outputFormat === "calculatorCas";
             const recognized = await provider.recognize(
-                await this.archives.readFormula(result),
+                image,
                 AbortSignal.timeout(60000),
                 useCalculator
                     ? "calculator"
@@ -129,13 +130,12 @@ export class FormulaJobs {
             }
             result.status = "ready";
             result.message = "识别完成";
-            await this.archives.saveResult(result);
             this.changed();
-            const revision = await originalRevision;
             if (
-                revision !== null &&
+                originalRevision !== null &&
                 this.latest === id &&
-                revision === (await this.clipboard.revision().catch(() => null)) &&
+                originalRevision ===
+                    (await this.clipboard.revision().catch(() => null)) &&
                 this.latest === id &&
                 result.status === "ready"
             ) {

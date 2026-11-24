@@ -544,8 +544,7 @@ handle("formula", async (input) => {
         input.rect,
         input.outputFormat,
     );
-    setTimeout(showPanel, 200);
-    void jobs.run(result.id);
+    void jobs.run(result.id, input.png);
     return result;
 });
 handle("typeset", (latex, font, color) =>

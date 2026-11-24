@@ -14,7 +14,6 @@ import { pointerPatch } from "./cursorOverlay";
 import type { Position } from "./lassoGeometry";
 import { whiteboardLasso } from "./whiteboardLasso";
 
-export type WhiteboardRegion = PixelRect & { hole?: Position[] };
 type Board = (Rect | Path) & {
     acWhiteboard: true;
     acFixed: boolean;
@@ -29,39 +28,6 @@ FabricObject.customProperties = [
 ];
 export function isWhiteboard(object: unknown): object is Board {
     return !!object && (object as Board).acWhiteboard === true;
-}
-
-export function maskWhiteboardInk(
-    ink: HTMLCanvasElement,
-    boards: WhiteboardRegion[],
-) {
-    const masked = document.createElement("canvas");
-    masked.width = ink.width;
-    masked.height = ink.height;
-    const ctx = masked.getContext("2d")!;
-    ctx.fillStyle = "white";
-    for (const board of boards) {
-        ctx.beginPath();
-        ctx.rect(board.x, board.y, board.width, board.height);
-        if (board.hole?.length) {
-            ctx.moveTo(board.hole[0].x, board.hole[0].y);
-            for (const p of board.hole.slice(1)) ctx.lineTo(p.x, p.y);
-            ctx.closePath();
-        }
-        ctx.fill("evenodd");
-    }
-    ctx.globalCompositeOperation = "source-in";
-    ctx.drawImage(ink, 0, 0);
-    if (
-        !ctx
-            .getImageData(0, 0, masked.width, masked.height)
-            .data.some((v, i) => i % 4 === 3 && v > 8)
-    )
-        throw new Error(t("白板上没有笔迹，请先书写"));
-    ctx.globalCompositeOperation = "destination-over";
-    ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, masked.width, masked.height);
-    return masked;
 }
 
 export function installWhiteboard(
@@ -110,7 +76,7 @@ export function installWhiteboard(
     const remove = button(t("收起白板"))
         .class("ac-button")
         .attr({ id: "ac-whiteboard-remove", hidden: true });
-    const ocr = button(t("识别白板"))
+    const ocr = button(t("选区识别"))
         .class("ac-button", "ac-primary")
         .attr({ id: "ac-whiteboard-recognize", hidden: true })
         .on("click", recognize);
@@ -539,13 +505,5 @@ export function installWhiteboard(
             detection = "off";
             stopEditing();
         },
-        regions: (left: number, top: number): WhiteboardRegion[] =>
-            boards().map((b) => ({
-                x: b.left - left,
-                y: b.top - top,
-                width: b.width * b.scaleX,
-                height: b.height * b.scaleY,
-                hole: b.acHole?.map((p) => ({ x: p.x - left, y: p.y - top })),
-            })),
     };
 }

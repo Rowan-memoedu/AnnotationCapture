@@ -10,7 +10,6 @@ import {
 import { invoke } from "../../../lib/annotationIpc";
 import { t } from "../../../lib/translate/translate";
 import { annotationStyles } from "./styles";
-import { maskWhiteboardInk, type WhiteboardRegion } from "./whiteboard";
 
 export type CaptureSnapshot = {
     composite: HTMLCanvasElement;
@@ -18,7 +17,27 @@ export type CaptureSnapshot = {
     rect: PixelRect;
     screenId: number;
     annotations?: object;
-    whiteboards?: WhiteboardRegion[];
+};
+
+function archivePng(canvas: HTMLCanvasElement): Promise<string> {
+    return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+            if (!blob) {
+                reject(new Error("截图编码失败"));
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(blob);
+        });
+    });
+}
+
+type FormulaSelection = {
+    png: string;
+    rect: PixelRect;
+    outputFormat: OutputFormat;
 };
 export function installCompletion(
     snapshot: (formula: boolean) => Promise<CaptureSnapshot>,
@@ -145,25 +164,37 @@ export function installCompletion(
             if (!formula || directFormat)
                 await invoke("captureVisibility", false);
             const frozen = await snapshot(formula);
-            const boardImage =
-                frozen.ink && frozen.whiteboards?.length
-                    ? maskWhiteboardInk(frozen.ink, frozen.whiteboards)
-                    : null;
-            if (boardImage) await invoke("captureVisibility", false);
-            const input: CaptureInput = {
+            const input = {
                 id,
                 capturedAt,
-                png: frozen.composite.toDataURL(),
                 rect: frozen.rect,
                 screenId: frozen.screenId,
                 annotations: frozen.annotations,
-            };
-            await invoke("archive", input);
+            } satisfies Omit<CaptureInput, "png">;
+            const png = archivePng(frozen.composite);
+            const archived = png.then((image) =>
+                invoke("archive", { ...input, png: image }),
+            );
+            // The archive can fail while the selection dialog is still open.
+            void archived.catch(() => {});
             blocker.remove();
+            let selection: FormulaSelection | null = null;
+            if (!directFormat && frozen.ink) {
+                selectionOpen = true;
+                try {
+                    selection = await selectFormula(
+                        frozen.composite,
+                        frozen.ink,
+                    );
+                } finally {
+                    selectionOpen = false;
+                }
+                await invoke("captureVisibility", false);
+            }
+            await archived;
             if (directFormat) {
-                await invoke("formula", {
-                    archiveId: id,
-                    png: input.png,
+                selection = {
+                    png: await png,
                     rect: {
                         x: 0,
                         y: 0,
@@ -171,25 +202,10 @@ export function installCompletion(
                         height: frozen.rect.height,
                     },
                     outputFormat: directFormat,
-                });
-            } else if (boardImage) {
-                const { config } = await invoke("state");
-                await invoke("formula", {
-                    archiveId: id,
-                    png: boardImage.toDataURL(),
-                    rect: {
-                        x: 0,
-                        y: 0,
-                        width: boardImage.width,
-                        height: boardImage.height,
-                    },
-                    outputFormat: config.outputFormat,
-                });
-            } else if (frozen.ink) {
-                selectionOpen = true;
-                await selectFormula(frozen.composite, frozen.ink);
-                selectionOpen = false;
+                };
             }
+            if (selection)
+                await invoke("formula", { archiveId: id, ...selection });
             rawClose();
         } catch (error) {
             await invoke("captureVisibility", true);
@@ -204,8 +220,8 @@ export function installCompletion(
         composite: HTMLCanvasElement,
         ink: HTMLCanvasElement,
     ) {
-        const { config } = await invoke("state");
-        return new Promise<void>((resolve) => {
+        const config = await invoke("captureConfig");
+        return new Promise<FormulaSelection | null>((resolve) => {
             const outputFormat = ele("select")
                 .class("ac-field")
                 .attr({ id: "ac-output-format", ariaLabel: t("识别输出格式") })
@@ -235,24 +251,16 @@ export function installCompletion(
                     background: "white",
                 });
             const ctx = display.el.getContext("2d")!;
-            let start: { x: number; y: number } | null = null;
+            let start: { x: number; y: number; pointerId: number } | null =
+                null;
             let rect: PixelRect | null = null;
-            let submitting = false;
-            const info = p(
-                t(
-                    "截图已归档。选择输出格式，再框选公式或图示；仅发送选区内的批注笔迹。",
-                ),
-            )
+            const info = p(t("拖动框选要识别的批注"))
                 .class("ac-status")
                 .attr({ id: "ac-selection-status", role: "status" });
-            const accept = button(t("识别选区"))
-                .class("ac-button", "ac-primary")
-                .attr({ id: "ac-recognize", disabled: true })
-                .on("click", submit);
             const cancel = button(t("保留截图并退出"))
                 .class("ac-button")
                 .attr({ id: "ac-cancel-selection" })
-                .on("click", close);
+                .on("click", () => close(null));
             const overlay = view()
                 .class("ac-overlay")
                 .attr({
@@ -261,12 +269,7 @@ export function installCompletion(
                     ariaLabel: t("选择公式"),
                     id: "ac-formula-dialog",
                 })
-                .add([
-                    info,
-                    outputFormat,
-                    display,
-                    view("x").style({ gap: "12px" }).add([accept, cancel]),
-                ])
+                .add([info, outputFormat, display, cancel])
                 .addInto();
             function draw() {
                 ctx.clearRect(0, 0, display.el.width, display.el.height);
@@ -299,15 +302,14 @@ export function installCompletion(
                 };
             }
             display.on("pointerdown", (event) => {
-                if (submitting || event.button !== 0) return;
-                start = point(event);
+                if (start || event.button !== 0) return;
+                start = { ...point(event), pointerId: event.pointerId };
                 rect = null;
                 display.el.setPointerCapture(event.pointerId);
-                accept.el.disabled = true;
                 draw();
             });
             display.on("pointermove", (event) => {
-                if (!start || submitting) return;
+                if (start?.pointerId !== event.pointerId) return;
                 rect = selectedRect(
                     start,
                     point(event),
@@ -317,7 +319,7 @@ export function installCompletion(
                 draw();
             });
             display.on("pointerup", (event) => {
-                if (!start || submitting) return;
+                if (start?.pointerId !== event.pointerId) return;
                 rect = selectedRect(
                     start,
                     point(event),
@@ -325,28 +327,30 @@ export function installCompletion(
                     display.el.height,
                 );
                 start = null;
-                accept.el.disabled = rect.width < 2 || rect.height < 2;
+                if (rect.width >= 2 && rect.height >= 2) submit(rect);
+                else resetSelection(event);
+            });
+            function resetSelection(event: PointerEvent) {
+                if (start && start.pointerId !== event.pointerId) return;
+                start = rect = null;
                 draw();
+            }
+            display.on("lostpointercapture", (event) => {
+                if (start) resetSelection(event);
             });
             function key(event: KeyboardEvent) {
                 event.stopImmediatePropagation();
                 if (event.key === "Escape") {
                     event.preventDefault();
-                    close();
-                }
-                if (event.key === "Enter" && !accept.el.disabled) {
-                    event.preventDefault();
-                    void submit();
+                    close(null);
                 }
             }
-            function close() {
-                if (submitting) return;
+            function close(selection: FormulaSelection | null) {
                 document.removeEventListener("keydown", key, true);
                 overlay.remove();
-                resolve();
+                resolve(selection);
             }
-            async function submit() {
-                if (!rect || submitting) return;
+            function submit(rect: PixelRect) {
                 const crop = ele("canvas").attr({
                     width: rect.width,
                     height: rect.height,
@@ -366,33 +370,17 @@ export function installCompletion(
                 const data = c.getImageData(0, 0, crop.width, crop.height).data;
                 if (!data.some((v, i) => i % 4 === 3 && v > 8)) {
                     info.el.textContent = t("选区没有批注笔迹，请重新框选");
+                    draw();
                     return;
                 }
                 c.globalCompositeOperation = "destination-over";
                 c.fillStyle = "white";
                 c.fillRect(0, 0, crop.width, crop.height);
-                submitting = true;
-                accept.el.disabled = true;
-                cancel.el.disabled = true;
-                outputFormat.el.disabled = true;
-                info.el.textContent = t("正在保存公式图…");
-                try {
-                    await invoke("formula", {
-                        archiveId: id,
-                        png: crop.toDataURL(),
-                        rect,
-                        outputFormat: outputFormat.el.value as OutputFormat,
-                    });
-                    submitting = false;
-                    close();
-                } catch (error) {
-                    submitting = false;
-                    accept.el.disabled = false;
-                    cancel.el.disabled = false;
-                    outputFormat.el.disabled = false;
-                    info.class("ac-error");
-                    info.el.textContent = `${t("公式图保存失败，可重试：")}${String(error)}`;
-                }
+                close({
+                    png: crop.toDataURL(),
+                    rect,
+                    outputFormat: outputFormat.el.value as OutputFormat,
+                });
             }
             document.addEventListener("keydown", key, true);
             draw();

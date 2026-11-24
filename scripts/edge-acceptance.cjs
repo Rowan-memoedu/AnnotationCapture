@@ -58,7 +58,11 @@ async function archivedInk(){const f=files()[0];return app.evaluate(({nativeImag
     await finish();assert.equal(files().length,1);report.push({case:'write-failure-retains-canvas-and-retries',passed:true});await stop();
 
     await launch('cancel-formula');await stroke([[330,250],[520,310]]);await page.keyboard.press('Control+Shift+Enter');await page.waitForSelector('#ac-selection');
-    const beforeCancel=fs.readFileSync(files()[0]);await finish();assert.deepEqual(fs.readFileSync(files()[0]),beforeCancel);assert.equal(files().length,1);report.push({case:'cancel-formula-keeps-full-archive',passed:true});await stop();
+    await finish();
+    const cancelled = await archivedInk();
+    assert.deepEqual(cancelled.size, {width:1200,height:800}); assert.ok(cancelled.ink > 100);
+    assert.equal(files().length,1); assert.deepEqual(files('annotations.json').length,1);
+    report.push({case:'cancel-formula-keeps-full-archive',passed:true});await stop();
 
     await launch('text-edit');await page.locator('#draw_shapes').hover();await page.locator('#draw_shapes_text').click();await page.mouse.click(350,300);await page.keyboard.type('x^2 + 1 = 0');await finish('Control+Enter');
     const text=await archivedInk();assert.ok(text.ink>100);report.push({case:'active-text-edit-committed',...text,passed:true});await stop();

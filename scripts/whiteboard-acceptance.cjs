@@ -5,7 +5,7 @@ const { _electron } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { prepareProfile, isolateWindow } = require('./acceptance-window.cjs');
 const root = process.env.ANNOTATION_EVIDENCE || 'D:/Artifacts/AnnotationCapture/whiteboard';
 const data = path.join(root, `profile-${Date.now()}`);
-prepareProfile(data);
+prepareProfile(data, { whiteboard: { autoOpen: true } });
 let app, panel, current;
 const checks = [], errors = [], timings = [];
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -42,6 +42,11 @@ async function option(page, mode) {
     await page.waitForFunction(() => !document.querySelector('#draw_side').classList.contains('draw_side_hide') && document.querySelector('#draw_whiteboard_i').style.display !== 'none');
     await page.locator('#draw_whiteboard_' + mode).click();
 }
+async function selectOcr(page, from, to) {
+    const box = await page.locator('#ac-selection').boundingBox();
+    const map = ([x, y]) => [box.x + x * box.width, box.y + y * box.height];
+    await stroke(page, map(from), map(to));
+}
 function boards(objects) { return objects.filter(o => o.acWhiteboard); }
 async function point(page, x, y) { return page.locator('#main_photo').evaluate((c, p) => {
     const b = c.getBoundingClientRect(); return [b.x + p[0] / c.width * b.width, b.y + p[1] / c.height * b.height];
@@ -77,8 +82,8 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
     });
     // Defaults and persistence through the real settings controls.
     assert.equal(await panel.locator('#ac-whiteboard-enabled').isChecked(), true);
-    assert.equal(await panel.locator('#ac-whiteboard-auto-open').isChecked(), true);
-    await panel.locator('#ac-whiteboard-auto-open').uncheck();
+    assert.equal(await panel.locator('#ac-whiteboard-auto-open').isChecked(), false);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(data, 'annotation-settings.json'))).whiteboard.autoOpen, false);
     assert.equal(await panel.locator('#ac-whiteboard-limit').inputValue(), '5');
     await panel.locator('#ac-whiteboard-enabled').uncheck();
     assert.equal(await panel.locator('#ac-whiteboard-auto-open').isDisabled(), true);
@@ -96,9 +101,6 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
     let objects = await checkpoint(page), b = boards(objects)[0];
     assert.equal(b.acFixed, false); assert.equal(b.fill, 'white'); assert.equal(b.strokeWidth, 0);
     assert.equal(await app.evaluate(() => globalThis.boardFixture.calls), 0);
-    await page.locator('#ac-whiteboard-recognize').click();
-    await page.waitForFunction(() => document.querySelector('#ac-capture-status').textContent.includes('白板上没有笔迹'));
-    assert.equal(await app.evaluate(() => globalThis.boardFixture.inputs.length), 0);
     const center = await point(page, b.left + b.width / 2, b.top + b.height / 2);
     await page.locator('#ac-whiteboard-adjust').click();
     await stroke(page, [center[0] - 50, center[1]], [center[0] + 50, center[1] + 20]);
@@ -153,16 +155,28 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
     const dimensions = await page.locator('#main_photo').evaluate(c => ({ width: c.width, height: c.height }));
     for (const x of [.2, .5, .75]) await stroke(page, await point(page, dimensions.width * x, dimensions.height * .3), await point(page, dimensions.width * x + 60, dimensions.height * .3 + 40));
     await page.screenshot({ path: path.join(root, 'detected-whiteboards.png') });
-    const closed = page.waitForEvent('close'); await page.locator('#ac-whiteboard-recognize').click(); await closed;
+    await page.locator('#ac-whiteboard-recognize').click();
+    await page.waitForSelector('#ac-selection');
+    assert.equal(await app.evaluate(() => globalThis.boardFixture.inputs.length), 0);
+    await selectOcr(page, [.12, .19], [.16, .22]);
+    await page.waitForFunction(() => document.querySelector('#ac-selection-status').textContent.includes('没有批注笔迹'));
+    assert.equal(await app.evaluate(() => globalThis.boardFixture.inputs.length), 0);
+    const closed = page.waitForEvent('close');
+    await selectOcr(page, [.15, .25], [.38, .45]);
+    await closed;
     const result = await app.evaluate(({ nativeImage }) => {
-        const input = globalThis.boardFixture.inputs.at(-1), image = nativeImage.createFromDataURL(input.png);
-        const { width, height } = image.getSize(), pixels = image.toBitmap(); let left = 0, middle = 0, right = 0;
-        for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) { const i = (y * width + x) * 4;
-            if (pixels[i + 2] > 180 && pixels[i + 1] < 120 && pixels[i] < 120) { if (x < width * .4) left++; else if (x > width * .6) right++; else middle++; } }
-        return { count: globalThis.boardFixture.inputs.length, left, middle, right };
+        const { inputs } = globalThis.boardFixture;
+        const input = inputs.at(-1), image = nativeImage.createFromDataURL(input.png);
+        const data = image.toBitmap();
+        let red = 0;
+        for (let i = 0; i < data.length; i += 4)
+            if (data[i + 2] > 180 && data[i + 1] < 120 && data[i] < 120) red++;
+        return { count: inputs.length, rect: input.rect, red };
     });
-    assert.equal(result.count, 1); assert.ok(result.left > 10 && result.right > 10); assert.equal(result.middle, 0);
-    checks.push('two fixed whiteboards make one OCR image with outside and gap ink excluded');
+    assert.equal(result.count, 1);
+    assert.ok(result.red > 10);
+    assert.ok(result.rect.x > 0 && result.rect.width < dimensions.width * .25);
+    checks.push('whiteboard OCR waits for a non-empty manual selection and submits it on release');
     // Failure and empty results fall back; saving hides promptly and retains the final stroke.
     await fixture({ rects: [{ x: 2, y: 0, width: .2, height: .3 }] });
     page = await open(); await page.waitForFunction(() => document.querySelector('#ac-whiteboard-status').textContent.includes('不可用'));
@@ -216,19 +230,18 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
         assert.equal(await alpha(.32,.3),0); assert.equal(await alpha(.71,.5),255);
     }
     for(const [x,y] of [[.33,.3],[.55,.49],[.72,.52]]) await stroke(page,await xy(x,y),await xy(x+.022,y+.016));
-    const last=page.waitForEvent('close'); await page.locator('#ac-whiteboard-recognize').click(); await last;
-    const counts=await app.evaluate(({nativeImage})=>{
-        const im=nativeImage.createFromDataURL(globalThis.boardFixture.inputs.at(-1).png), buf=im.toBitmap(),{width,height}=im.getSize();
-        return [[.33,.3],[.55,.49],[.72,.52]].map(([x,y])=>{
-            let n=0; for(let j=Math.floor(y*height)-7;j<(y+.025)*height;j++) for(let k=Math.floor(x*width)-7;k<(x+.03)*width;k++){
-                const i=(j*width+k)*4; if(buf[i+2]>150 && buf[i+1]<125 && buf[i]<125)n++;
-            } return n;
-        });
-    });
-    assert.equal(counts[0],0); assert.ok(counts[1]>8 && counts[2]>8);
-    checks.push('inverse rectangle and concave freehand preserve holes, undo and exact OCR mask');
+    await page.locator('#ac-whiteboard-recognize').click();
+    await page.waitForSelector('#ac-selection');
+    const last = page.waitForEvent('close');
+    await selectOcr(page, [.53, .46], [.63, .55]);
+    await last;
+    const selected = await app.evaluate(() => globalThis.boardFixture.inputs.at(-1).rect);
+    assert.ok(selected.x > dims[0] * .5 && selected.width < dims[0] * .12);
+    checks.push('inverse rectangle and concave freehand preserve holes, undo and manual OCR selection');
 
     await configure({ autoOpen: true });
+    await panel.reload();
+    await panel.waitForSelector('#ac-whiteboard-auto-open:checked');
     await fixture({ detectionDelay: 2200, rects: [{ x: .22, y: .23, width: .56, height: .46 }] });
     page = await open();
     const backdrop = await page.locator('#main_photo').evaluate(c => ({ w: c.width, h: c.height }));

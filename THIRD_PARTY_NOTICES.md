@@ -42,4 +42,4 @@ MathJax 4.1.3 and the MathJax STIX2 / New Computer Modern SVG font packages 4.1.
 
 ## Scribble to erase
 
-`src/renderer/annotation/scribbleGeometry.ts` adapts the [FineNotes 2.10.0 detector and coverage geometry](https://github.com/Joost-8/FineNotes/blob/b65f5a04f2843393275f3d05c73b1c9c0b2d3e9d/src/ink/scribble.ts), by Joost and contributors, licensed under GPL-3.0-or-later. AnnotationCapture replaces the upstream document type imports with local types and applies its own word and character grouping. See LICENSE for the GPLv3 text.
+`src/renderer/annotation/scribbleGeometry.ts` adapts the [FineNotes 2.10.0 scribble detector](https://github.com/Joost-8/FineNotes/blob/b65f5a04f2843393275f3d05c73b1c9c0b2d3e9d/src/ink/scribble.ts), by Joost and contributors, licensed under GPL-3.0-or-later. AnnotationCapture uses its own ink-contact test to select strokes for deletion. See LICENSE for the GPLv3 text.

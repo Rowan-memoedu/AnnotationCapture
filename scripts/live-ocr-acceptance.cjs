@@ -56,8 +56,10 @@ let app;const errors=[];
     if(outputFormat==='markdown')expected=`$$\n${expected}\n$$`;
     const box = await page.locator('#ac-selection').boundingBox();
     function mapped(x,y) { return [box.x + (x-canvasGeometry.left)/canvasGeometry.cssWidth*box.width, box.y+(y-canvasGeometry.top)/canvasGeometry.cssHeight*box.height]; }
+    const closed = page.waitForEvent('close');
     await page.mouse.move(...mapped(412,304)); await page.mouse.down(); await page.mouse.move(...mapped(805,500),{steps:6}); await page.mouse.up();
-    const closed=page.waitForEvent('close'); await page.locator('#ac-recognize').click(); await closed;
+
+    await closed;
     await panel.waitForSelector('[data-status="copied"], [data-status="error"], [data-status="review"]', { timeout: 75000 });
     const state=await panel.evaluate(()=>require('electron').ipcRenderer.invoke('annotation:state'));
     const result=state.jobs[0];

@@ -234,6 +234,29 @@ function itemPath(item: Stroke) {
     return path;
 }
 
+function hitInk(item: Stroke) {
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+    for (const [x, y] of item.points) {
+        left = Math.min(left, x);
+        top = Math.min(top, y);
+        right = Math.max(right, x);
+        bottom = Math.max(bottom, y);
+    }
+    const padding = item.width;
+    return {
+        bounds: {
+            x: left - padding,
+            y: top - padding,
+            width: right - left + 2 * padding,
+            height: bottom - top + 2 * padding,
+        },
+        draw: (surface: CanvasRenderingContext2D) => draw(item, false, surface),
+    };
+}
+
 function draw(item: Item, highlighted = false, surface = context) {
     surface.fillStyle = surface.strokeStyle = highlighted
         ? "#2e67cf"
@@ -568,9 +591,9 @@ function end(commit: boolean, duration?: number) {
         const targets =
             scribble &&
             scribbleTargets(
-                scribble,
+                hitInk(stroke),
                 items.flatMap((item, id) =>
-                    item.kind === "pen" ? [{ id, points: item.points }] : [],
+                    item.kind === "pen" ? [{ id, ...hitInk(item) }] : [],
                 ),
                 unitsPerPixel,
             );
@@ -611,11 +634,18 @@ function end(commit: boolean, duration?: number) {
     render();
 }
 board.addEventListener("pointerup", (event) => {
-    if (event.pointerId === pointer)
+    if (event.pointerId === pointer) {
+        if (stroke?.kind === "pen" && stroke.points.length < 6000) {
+            const [x, y] = point(event);
+            const last = stroke.points.at(-1)!;
+            if (x !== last[0] || y !== last[1])
+                stroke.points.push([x, y, last[2]]);
+        }
         end(
             true,
             event.shiftKey ? undefined : event.timeStamp - strokeStartedAt,
         );
+    }
 });
 board.addEventListener("lostpointercapture", () => {
     if (pointer !== undefined) end(false);
@@ -743,9 +773,12 @@ function setLocked(value: boolean) {
 function encodePng(canvas: HTMLCanvasElement) {
     const png = canvas.toDataURL("image/png").split(",")[1];
     if (!png) throw Error("Image unavailable");
-    return new Blob([Uint8Array.from(atob(png), (byte) => byte.charCodeAt(0))], {
-        type: "image/png",
-    });
+    return new Blob(
+        [Uint8Array.from(atob(png), (byte) => byte.charCodeAt(0))],
+        {
+            type: "image/png",
+        },
+    );
 }
 
 function scene() {
