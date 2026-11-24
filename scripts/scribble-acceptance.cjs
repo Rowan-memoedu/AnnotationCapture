@@ -24,6 +24,16 @@ const rub = [[62, 17], [88, 20], [62, 23], [88, 26], [62, 29], [88, 32]];
 const neighbor = [...near, ...far];
 
 async function draw(page, origin, paths, pointerType = "mouse") {
+    if (pointerType === "mouse") {
+        for (const stroke of paths) {
+            const absolute = stroke.map(([x, y]) => [x + origin[0], y + origin[1]]);
+            await page.mouse.move(...absolute[0]);
+            await page.mouse.down();
+            for (const [x, y] of absolute.slice(1)) await page.mouse.move(x, y, { steps: 4 });
+            await page.mouse.up();
+        }
+        return;
+    }
     const session = await page.context().newCDPSession(page);
     try {
         for (const stroke of paths) {
@@ -76,6 +86,7 @@ async function ink(page, selector, origin) {
 }
 
 async function checkSurface(page, selector, origin, pointerType, redo) {
+    await page.waitForFunction(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await draw(page, origin, neighbor, pointerType);
     await draw(page, origin, target, pointerType);
     await page.waitForFunction(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
