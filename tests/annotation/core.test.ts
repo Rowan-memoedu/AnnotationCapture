@@ -323,6 +323,18 @@ describe("formula task boundaries", () => {
         expect(job.status).toBe("review");
         expect(writes).toEqual([]);
     });
+    it("can prepare recognition without publishing or repeating it", async () => {
+        const recognize = vi.fn(async () => ({ latex: "x", model: "test" }));
+        const { jobs, create, writes } = await setup({ recognize });
+        const prepared = jobs.prepare(png(2, 2), "latex")!;
+        await prepared.recognition;
+        expect(jobs.jobs.size).toBe(0);
+        expect(writes).toEqual([]);
+        const job = await create();
+        await jobs.run(job.id, png(2, 2), prepared);
+        expect(recognize).toHaveBeenCalledTimes(1);
+        expect(writes).toEqual(["x"]);
+    });
     it("retains archive and clipboard on provider failure", async () => {
         const { jobs, create, writes } = await setup({
             recognize: async () => {

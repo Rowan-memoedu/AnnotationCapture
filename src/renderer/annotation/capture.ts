@@ -191,7 +191,6 @@ export function installCompletion(
                 }
                 await invoke("captureVisibility", false);
             }
-            await archived;
             if (directFormat) {
                 selection = {
                     png: await png,
@@ -204,10 +203,19 @@ export function installCompletion(
                     outputFormat: directFormat,
                 };
             }
+            if (selection && !directFormat)
+                await invoke(
+                    "prepareFormula",
+                    id,
+                    selection.png,
+                    selection.outputFormat,
+                );
+            await archived;
             if (selection)
                 await invoke("formula", { archiveId: id, ...selection });
             rawClose();
         } catch (error) {
+            void invoke("cancelPreparedFormula", id).catch(() => {});
             await invoke("captureVisibility", true);
             blocker.remove();
             status.class("ac-error");

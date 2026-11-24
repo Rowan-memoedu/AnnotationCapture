@@ -15,7 +15,11 @@ import {
     Tray,
 } from "electron";
 import minimist from "minimist";
-import type { CaptureMode } from "../../lib/annotation";
+import {
+    type CaptureMode,
+    type OutputFormat,
+    outputFormats,
+} from "../../lib/annotation";
 import { handle } from "../../lib/annotationIpc";
 import { mainOn, mainSend } from "../../lib/ipc";
 import Store from "../../lib/store/store";
@@ -208,6 +212,7 @@ function prepareCaptureWindow() {
         clearTimeout(captureStartTimer);
         captureStarting = false;
         cancelInk();
+        cancelPreparedFormula();
         whitespaceRequest?.abort();
         whitespaceRequest = null;
         captureWindow = null;
@@ -543,15 +548,54 @@ handle("archive", async (input) => {
         throw new Error("截图数据无法解码");
     return archive.save(input);
 });
+let preparedFormula:
+    | {
+          id: string;
+          png: string;
+          format: OutputFormat;
+          result: NonNullable<ReturnType<FormulaJobs["prepare"]>>;
+      }
+    | undefined;
+function cancelPreparedFormula(id?: string) {
+    if (!preparedFormula || (id !== undefined && preparedFormula.id !== id))
+        return;
+    preparedFormula.result.cancel();
+    preparedFormula = undefined;
+}
+handle("prepareFormula", (id, png, format) => {
+    if (!/^[a-f0-9-]{36}$/.test(id) || !outputFormats.includes(format)) return;
+    decodePng(png);
+    cancelPreparedFormula();
+    const result = jobs.prepare(png, format);
+    preparedFormula = result ? { id, png, format, result } : undefined;
+});
+handle("cancelPreparedFormula", cancelPreparedFormula);
 handle("formula", async (input) => {
-    const result = await jobs.create(
-        input.archiveId,
-        input.png,
-        input.rect,
-        input.outputFormat,
-    );
-    void jobs.run(result.id, input.png);
-    return result;
+    const pending =
+        preparedFormula?.id === input.archiveId ? preparedFormula : undefined;
+    if (pending) preparedFormula = undefined;
+    const reusable =
+        pending &&
+        pending.png === input.png &&
+        pending.format === input.outputFormat;
+    if (!reusable) pending?.result.cancel();
+    try {
+        const result = await jobs.create(
+            input.archiveId,
+            input.png,
+            input.rect,
+            input.outputFormat,
+        );
+        void jobs.run(
+            result.id,
+            input.png,
+            reusable ? pending.result : undefined,
+        );
+        return result;
+    } catch (error) {
+        pending?.result.cancel();
+        throw error;
+    }
 });
 handle("typeset", (latex, font, color) =>
     typesetter.render(latex, font, color),
@@ -624,7 +668,10 @@ handle("capture", (mode = "region") => {
     void capture(undefined, mode);
 });
 handle("login", (code) => auth.login(code));
-handle("logout", () => auth.logout());
+handle("logout", () => {
+    cancelPreparedFormula();
+    return auth.logout();
+});
 handle("refreshLogin", () => auth.refresh());
 handle("openPanel", () => showPanel());
 handle("quit", quitImmediately);
