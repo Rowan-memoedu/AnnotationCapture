@@ -45,6 +45,24 @@ body {
     background: #e3ecff;
     border-color: #527ac0;
 }
+.whiteboardShapeGroup {
+    position: relative;
+}
+.whiteboardShapeOptions {
+    position: absolute;
+    inset: 100% auto auto 0;
+    display: grid;
+    grid-template-columns: repeat(2, max-content);
+    gap: 4px;
+    padding: 5px;
+    border: 1px solid #d9e1ec;
+    border-radius: 6px;
+    background: #f5f7fa;
+    z-index: 2;
+}
+.whiteboardShapeOptions[hidden] {
+    display: none;
+}
 #tools button:disabled {
     opacity: 0.5;
     cursor: default;

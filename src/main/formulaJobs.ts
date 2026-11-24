@@ -8,6 +8,7 @@ import {
 import type { ArchiveStore } from "./annotationArchive";
 import type { FormulaProvider } from "./formulaProvider";
 import { mathAcademyOutput } from "./mathAcademy";
+import { calculateWhiteboardFormula } from "./whiteboardCalculator";
 
 export type ClipboardPort = {
     revision: () => Promise<string>;
@@ -83,18 +84,35 @@ export class FormulaJobs {
                 return result;
             }
             const revision = await this.clipboard.revision();
+            const useCalculator =
+                result.outputFormat === "calculator" ||
+                result.outputFormat === "calculatorCas";
             const recognized = await provider.recognize(
                 await this.archives.readFormula(result),
                 AbortSignal.timeout(60000),
-                result.outputFormat === "mathAcademy"
-                    ? "latex"
-                    : result.outputFormat,
+                useCalculator
+                    ? "calculator"
+                    : result.outputFormat === "mathAcademy"
+                      ? "latex"
+                      : result.outputFormat,
             );
             result.latex = recognized.latex;
             result.recognizedLatex = recognized.latex;
             result.detectedType = recognized.detectedType;
             result.model = recognized.model;
-            if (result.outputFormat === "mathAcademy") {
+            if (useCalculator) {
+                try {
+                    result.latex = await calculateWhiteboardFormula(
+                        recognized.latex,
+                        result.outputFormat === "calculatorCas",
+                    );
+                } catch (error) {
+                    result.status = "review";
+                    result.message =
+                        error instanceof Error ? error.message : "计算未完成";
+                    return result;
+                }
+            } else if (result.outputFormat === "mathAcademy") {
                 try {
                     result.latex = mathAcademyOutput(recognized.latex);
                 } catch (error) {
