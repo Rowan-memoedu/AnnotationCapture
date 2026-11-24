@@ -142,7 +142,6 @@ async function createJob(source, format = 'mathAcademy') {
         assert.ok(layout.scroll <= layout.width, JSON.stringify(layout));
         const buttons = await panel.locator('#ac-results .ac-button').evaluateAll(elements => elements.map(e => ({ height: e.getBoundingClientRect().height, nowrap: getComputedStyle(e).whiteSpace })));
         assert.ok(buttons.every(b => b.height >= 44 && b.nowrap === 'nowrap'), 'Result action labels must stay on one line at every width');
-        await panel.screenshot({ path: path.join(root, `results-${width}.png`) });
     }
     assert.equal(requests.at(-1).format, 'latex');
     fs.writeFileSync(path.join(root, 'math-academy-outputs.json'), JSON.stringify(outputs, null, 2));
