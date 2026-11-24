@@ -1,5 +1,5 @@
 import { type Position, polylineMatchesLasso } from "./lassoGeometry";
-import { type PressurePoint, pressurePathData } from "./pressureInk";
+import { type PressurePoint, pressurePathData } from "./pressureGeometry";
 import { readScribble, scribbleTargets } from "./scribbleErase";
 import {
     arrowPoints,
@@ -771,22 +771,28 @@ function setLocked(value: boolean) {
 }
 
 function encodePng(canvas: HTMLCanvasElement) {
-    return new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((blob) =>
-            blob ? resolve(blob) : reject(Error("Image unavailable")),
-        );
-    });
+    const png = canvas.toDataURL("image/png").split(",")[1];
+    if (!png) throw Error("Image unavailable");
+    return new Blob(
+        [Uint8Array.from(atob(png), (byte) => byte.charCodeAt(0))],
+        {
+            type: "image/png",
+        },
+    );
 }
 
-async function snapshot() {
+function scene() {
+    return { version: 1, items };
+}
+
+function snapshot() {
     paint(false);
-    const pngPending = encodePng(board);
+    const png = encodePng(board);
     render();
-    const png = await pngPending;
-    return { scene: { version: 1, items }, png, empty: items.length === 0 };
+    return { scene: scene(), png, empty: items.length === 0 };
 }
 
-async function snapshotSelection() {
+function snapshotSelection() {
     if (!selected.size || pointer !== undefined) return null;
     const id = selectionId;
     const layer = document.createElement("canvas");
@@ -839,7 +845,7 @@ async function snapshotSelection() {
             : undefined;
     return {
         id,
-        png: await encodePng(cropped),
+        png: encodePng(cropped),
         ...(expression ? { expression } : {}),
     };
 }
@@ -884,14 +890,15 @@ function connect(event: MessageEvent) {
     window.removeEventListener("message", connect);
     const port = event.ports[0];
     selectionPort = port;
-    port.onmessage = async ({ data }) => {
+    port.onmessage = ({ data }) => {
         const { id, command, value } = data;
         try {
             let result: unknown;
             if (command === "lock") setLocked(value === true);
-            else if (command === "snapshot") result = await snapshot();
+            else if (command === "scene") result = scene();
+            else if (command === "snapshot") result = snapshot();
             else if (command === "snapshotSelection" && !locked)
-                result = await snapshotSelection();
+                result = snapshotSelection();
             else if (command === "replaceSelection")
                 result = replaceSelection(value);
             else if (command === "restore") restore(value);

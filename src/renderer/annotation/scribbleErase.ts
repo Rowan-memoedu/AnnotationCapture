@@ -1,5 +1,5 @@
 import type { PixelRect } from "../../../lib/annotation";
-import type { PressurePoint } from "./pressureInk";
+import type { PressurePoint } from "./pressureGeometry";
 import { detectScribble } from "./scribbleGeometry";
 
 export function readScribble(
