@@ -48,11 +48,13 @@
 
 0.8.14 统一桌面和网站的公式转写，计算和化简使用同一版计算引擎。
 
+0.8.16 在截图开启超时时自动重新打开一次，并给 Windows 截屏进程的第一帧留出更多启动时间。
+
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.14-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.16-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 从 0.8.4 起，运行新版后自动配置当前用户的 Windows 登录任务，在登录约 10 秒后后台启动，避免普通启动项队列造成的长时间等待。截图快捷键可直接使用，单击托盘图标打开设置；右键托盘的“开机自启动”可开启或关闭。
 
@@ -211,7 +213,7 @@ pnpm run release:win
 
 脚本需要 Playwright，可通过 `PLAYWRIGHT_MODULE` 指向模块目录；实际使用软件不需要 Playwright。设置 `ANNOTATION_EXE` 可针对打包后的程序执行相同验收。`pnpm run test:gateway` 运行隔离网关测试，使用本机假上游验证协议与权限，不计为真实模型识别通过。
 
-`node scripts/capture-latency-acceptance.cjs --native --verify` 用实际 Windows 截屏测量从请求到画布显示、从 Esc 到窗口隐藏，验证截图失败后重试和保存期间的再次开启。延迟测试在屏幕外显示验收窗口，真实桌面像素仅用于内存测量。归档写入和失败恢复由 `scripts/edge-acceptance.cjs` 使用测试图片核验。
+`node scripts/capture-latency-acceptance.cjs --native --verify` 用实际 Windows 截屏测量从请求到画布显示、从 Esc 到窗口隐藏，验证启动超时后自动重试、两次超时后恢复手动开启，以及保存期间的再次开启。延迟测试在屏幕外显示验收窗口，真实桌面像素仅用于内存测量。归档写入和失败恢复由 `scripts/edge-acceptance.cjs` 使用测试图片核验。
 
 `scripts/upgrade-acceptance.cjs` 从旧版正式 ZIP 启动，在同一程序路径覆盖新版，检查默认/自定义数据目录、原归档哈希、设置、首次邀请码登录及重复覆盖后免登录。需要分别指定旧、新 ZIP 和私密邀请码文件，可通过 `ANNOTATION_OLD_ZIP`、`ANNOTATION_NEW_ZIP`、`ANNOTATION_INVITE_FILE` 配置。
 

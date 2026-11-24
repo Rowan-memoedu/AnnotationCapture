@@ -9,6 +9,7 @@ export function prepareFrameReader(executable: string) {
         stdio: ["pipe", "pipe", "ignore"],
     });
     let available = true;
+    let hasFrame = false;
     let pending:
         | {
               frame: Buffer;
@@ -47,6 +48,7 @@ export function prepareFrameReader(executable: string) {
             clearTimeout(pending.timeout);
             const { frame, resolve } = pending;
             pending = undefined;
+            hasFrame = true;
             resolve(frame);
         }
     });
@@ -68,7 +70,8 @@ export function prepareFrameReader(executable: string) {
                     received: 0,
                     resolve,
                     reject,
-                    timeout: setTimeout(stop, 350),
+                    // The first frame may still be waiting for the helper to start.
+                    timeout: setTimeout(stop, hasFrame ? 350 : 1200),
                 };
                 child.stdin.write(`${x} ${y} ${width} ${height}\n`);
             });
