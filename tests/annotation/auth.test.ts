@@ -67,6 +67,7 @@ describe("invitation sessions", () => {
         await auth.detectWhitespace("fixture", whiteboardDefaults, signal);
         selected = "deepseek";
         await auth.detectWhitespace("fixture", whiteboardDefaults, signal);
+        await auth.provider()!.recognize("fixture", signal, "text");
         await auth.provider()!.recognize("fixture", signal);
         expect(
             request.mock.calls
@@ -74,7 +75,13 @@ describe("invitation sessions", () => {
                 .map(
                     ([, options]) => JSON.parse(String(options?.body)).provider,
                 ),
-        ).toEqual(["openai", "deepseek", "deepseek"]);
+        ).toEqual(["openai", "deepseek", "deepseek", undefined]);
+        expect(
+            JSON.parse(String(request.mock.calls.at(-1)?.[1]?.body)),
+        ).toEqual({
+            png: "fixture",
+            formulaMode: "shared",
+        });
     });
     it("reuses page detections, separating changed preferences and sessions", async () => {
         const request = vi.fn(async () =>
@@ -214,6 +221,7 @@ describe("invitation sessions", () => {
         expect(url).toBe("https://example.invalid/annotation/api/recognize");
         expect(JSON.parse(input!.body as string)).toEqual({
             png: "data:image/png;base64,fixture",
+            formulaMode: "shared",
         });
         expect(input!.headers).toEqual({
             Authorization: `Bearer ${session.token}`,
