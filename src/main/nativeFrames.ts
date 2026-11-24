@@ -92,15 +92,16 @@ export function prepareFrameReader(executable: string) {
 
 export function prepareClipboardReader(executable: string) {
     const reader = prepareNativeReader(executable, ["--clipboard-sequences"]);
+    let warmed = false;
     return {
         get available() {
             return reader.available;
         },
         stop: reader.stop,
         async read() {
-            const sequence = (
-                await reader.read("sequence", 4, 450)
-            ).readUInt32LE();
+            const frame = await reader.read("sequence", 4, warmed ? 450 : 2000);
+            warmed = true;
+            const sequence = frame.readUInt32LE();
             if (!sequence) throw new Error("无法读取剪贴板状态");
             return String(sequence);
         },
