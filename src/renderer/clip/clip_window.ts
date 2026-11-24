@@ -2623,9 +2623,6 @@ function setEditType<T extends keyof EditType>(
         ableChangeColor();
     }
 
-    const arrowSelected = mainType === "shape" && type === "arrow";
-    drawArrowEl.el.classList.toggle(SELECT, arrowSelected);
-    drawArrowEl.el.setAttribute("aria-pressed", String(arrowSelected));
     if (!(mainType === "select" && type === "draw"))
         store.set(`图像编辑.记忆.${mainType}`, type);
 
@@ -3600,11 +3597,6 @@ drawMainElsx.shapes.el.setAttribute("aria-controls", "draw_shapes_i");
 for (const el of drawBarMainElList) {
     drawBarMainEl.add(el);
 }
-const drawArrowEl = toolbarIcon("arrow", "箭头").attr({
-    id: "ac-arrow",
-    ariaPressed: "false",
-});
-drawMainElsx.shapes.el.after(drawArrowEl.el);
 
 const drawSideSelect = {
     rect: iconEl("rect_select").attr({ title: "矩形选择" }),
@@ -5067,7 +5059,6 @@ drawMainElsx.shapes.on("click", (event) => {
     showSideBarItem(drawBarMainElList.indexOf(drawMainElsx.shapes));
     if (event.detail === 0) drawSideShapes.rect.el.focus();
 });
-drawArrowEl.on("click", () => setEditType("shape", "arrow"));
 drawBarSideEl.on("focusout", (event) => {
     if (event.relatedTarget && !drawBar.contains(event.relatedTarget as Node))
         queueMicrotask(hideUnfocusedSideBar);
