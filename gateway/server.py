@@ -179,9 +179,9 @@ class Provider:
     def ready(self):
         return bool(self.base_url and self.key and self.model)
 
-    def _openai_completion(self, png, prompt, input_text, *, effort, max_tokens, timeout):
+    def _openai_completion(self, png, prompt, input_text, *, effort, max_tokens, timeout, tier="default"):
         payload = {
-            "model": self.model, "store": False, "service_tier": "default",
+            "model": self.model, "store": False, "service_tier": tier,
             "reasoning": {"effort": effort}, "max_output_tokens": max_tokens,
             "input": [{"role": "system", "content": prompt}, {"role": "user", "content": [
                 {"type": "input_text", "text": input_text},
@@ -302,10 +302,11 @@ class Provider:
                        {"type": "text", "text": "Transcribe only the selected image."},
                        {"type": "image_url", "image_url": {"url": png}}]}]}
         if self.openai_port is not None:
-            effort = "low" if output_format in {"latex", "calculator", "inlineMath", "markdown", "auto"} else "none"
+            is_formula = output_format in {"latex", "calculator", "inlineMath", "markdown"}
             value = self._openai_completion(
                 png, PROMPTS[output_format], "Transcribe only the selected image.",
-                effort=effort, max_tokens=4096, timeout=timeout
+                effort="low" if is_formula or output_format == "auto" else "none",
+                max_tokens=4096, timeout=timeout, tier="fast" if is_formula else "default"
             )
         else:
             value = self._compat_completion(endpoint, payload, timeout=timeout)
