@@ -1,5 +1,5 @@
 import { type Position, polylineMatchesLasso } from "./lassoGeometry";
-import { type PressurePoint, pressurePathData } from "./pressureInk";
+import { type PressurePoint, pressurePathData } from "./pressureGeometry";
 import { readScribble, scribbleTargets } from "./scribbleErase";
 import {
     arrowPoints,
@@ -741,22 +741,25 @@ function setLocked(value: boolean) {
 }
 
 function encodePng(canvas: HTMLCanvasElement) {
-    return new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((blob) =>
-            blob ? resolve(blob) : reject(Error("Image unavailable")),
-        );
+    const png = canvas.toDataURL("image/png").split(",")[1];
+    if (!png) throw Error("Image unavailable");
+    return new Blob([Uint8Array.from(atob(png), (byte) => byte.charCodeAt(0))], {
+        type: "image/png",
     });
 }
 
-async function snapshot() {
-    paint(false);
-    const pngPending = encodePng(board);
-    render();
-    const png = await pngPending;
-    return { scene: { version: 1, items }, png, empty: items.length === 0 };
+function scene() {
+    return { version: 1, items };
 }
 
-async function snapshotSelection() {
+function snapshot() {
+    paint(false);
+    const png = encodePng(board);
+    render();
+    return { scene: scene(), png, empty: items.length === 0 };
+}
+
+function snapshotSelection() {
     if (!selected.size || pointer !== undefined) return null;
     const id = selectionId;
     const layer = document.createElement("canvas");
@@ -799,13 +802,19 @@ async function snapshotSelection() {
     const expression =
         text &&
         text.length <= 64 &&
-        /^[\p{Script=Greek}a-z0-9_+*/^%.,()[\]=!<>×÷−≤≥≠√ \t-]+$/iu.test(text) &&
+        /^[\p{Script=Greek}a-z0-9_+*/^%.,()[\]=!<>×÷−≤≥≠√ \t-]+$/iu.test(
+            text,
+        ) &&
         !/[\p{L}\d][ \t]+[\p{L}\d]/u.test(text) &&
         (/^[\p{Script=Greek}a-z](?:_\d+)?$/iu.test(text) ||
             /[0-9_+*/^%=<>×÷−≤≥≠√()-]/u.test(text))
             ? text
             : undefined;
-    return { id, png: await encodePng(cropped), ...(expression ? { expression } : {}) };
+    return {
+        id,
+        png: encodePng(cropped),
+        ...(expression ? { expression } : {}),
+    };
 }
 
 function replaceSelection(value: { id: number; text: string }) {
@@ -848,14 +857,15 @@ function connect(event: MessageEvent) {
     window.removeEventListener("message", connect);
     const port = event.ports[0];
     selectionPort = port;
-    port.onmessage = async ({ data }) => {
+    port.onmessage = ({ data }) => {
         const { id, command, value } = data;
         try {
             let result: unknown;
             if (command === "lock") setLocked(value === true);
-            else if (command === "snapshot") result = await snapshot();
+            else if (command === "scene") result = scene();
+            else if (command === "snapshot") result = snapshot();
             else if (command === "snapshotSelection" && !locked)
-                result = await snapshotSelection();
+                result = snapshotSelection();
             else if (command === "replaceSelection")
                 result = replaceSelection(value);
             else if (command === "restore") restore(value);
