@@ -1,17 +1,28 @@
 import {
     type Canvas,
+    FabricObject,
+    Path,
     PencilBrush,
     Point,
     Shadow,
     type TEvent,
+    type TSimplePathData,
     util,
 } from "fabric";
 import {
     createPressurePath,
+    isPressurePath,
     type PressureInk,
     type PressurePoint,
     pressurePathData,
 } from "./pressureInk";
+import { readScribble, scribbleTargets } from "./scribbleErase";
+
+type PenPath = Path & { acPenPoints?: PressurePoint[] };
+FabricObject.customProperties = [
+    ...FabricObject.customProperties,
+    "acPenPoints",
+];
 
 type Options = { pressureEnabled: boolean; pressureSensitivity: number };
 
@@ -22,6 +33,9 @@ export class PressureBrush extends PencilBrush {
     private drawing = false;
     private inkColor = "";
     private inkShadow: Shadow | null = null;
+    private releaseDuration?: number;
+    private strokeStartedAt = 0;
+    private readonly releasedPaths = new WeakMap<Path, number>();
 
     constructor(
         canvas: Canvas,
@@ -35,6 +49,7 @@ export class PressureBrush extends PencilBrush {
         this.cancel();
         this.drawing = true;
         const e = event.e;
+        this.strokeStartedAt = e.timeStamp;
         const options = this.options();
         if (
             !("pointerType" in e) ||
@@ -94,6 +109,10 @@ export class PressureBrush extends PencilBrush {
 
     onMouseUp(event: TEvent) {
         if (!this.drawing) return false;
+        this.releaseDuration =
+            event.e.isTrusted && !event.e.shiftKey
+                ? event.e.timeStamp - this.strokeStartedAt
+                : undefined;
         if (!this.ink) {
             const result = super.onMouseUp(event);
             if (!result) this.drawing = false;
@@ -106,6 +125,8 @@ export class PressureBrush extends PencilBrush {
         // pointerup reports zero pressure even when the last contact was heavy.
         if (last) this.addPoint(this.canvas.getScenePoint(e), last[2]);
         const path = createPressurePath(this.ink, this.inkColor);
+        if (this.releaseDuration !== undefined)
+            this.releasedPaths.set(path, this.releaseDuration);
         if (this.inkShadow) {
             path.shadow = this.inkShadow;
             path.shadow.affectStroke = false;
@@ -117,6 +138,47 @@ export class PressureBrush extends PencilBrush {
         this.canvas.requestRenderAll();
         this.canvas.fire("path:created", { path });
         return false;
+    }
+
+    createPath(data: TSimplePathData): Path {
+        const path: PenPath = super.createPath(data);
+        path.acPenPoints = this._points.map(({ x, y }) => [x, y, 0.5]);
+        if (this.releaseDuration !== undefined)
+            this.releasedPaths.set(path, this.releaseDuration);
+        return path;
+    }
+
+    eraseScribble(path: FabricObject): boolean {
+        if (!(path instanceof Path)) return false;
+        const duration = this.releasedPaths.get(path);
+        if (duration === undefined) return false;
+        const unitsPerPixel =
+            this.canvas.getWidth() /
+            (this.canvas.upperCanvasEl.getBoundingClientRect().width *
+                this.canvas.getZoom());
+        const scribble = readScribble(
+            scenePoints(path) ?? [],
+            unitsPerPixel,
+            duration,
+        );
+        if (!scribble) return false;
+
+        const candidates = this.canvas.getObjects().flatMap((object) => {
+            if (
+                object === path ||
+                !(object instanceof Path) ||
+                !object.visible ||
+                object.clipPath
+            )
+                return [];
+            const points = scenePoints(object);
+            return points ? [{ id: object, points }] : [];
+        });
+        const targets = scribbleTargets(scribble, candidates, unitsPerPixel);
+        if (!targets.size) return false;
+        this.canvas.remove(path, ...targets);
+        this.canvas.requestRenderAll();
+        return true;
     }
 
     private addPoint(point: Point, pressure: number) {
@@ -158,6 +220,7 @@ export class PressureBrush extends PencilBrush {
         if (this.frame !== undefined) cancelAnimationFrame(this.frame);
         this.frame = undefined;
         this.drawing = false;
+        this.releaseDuration = undefined;
         this.ink = undefined;
         this.pointerId = undefined;
         this._points = [];
@@ -165,4 +228,18 @@ export class PressureBrush extends PencilBrush {
         this._resetShadow();
         this.canvas.clearContext(this.canvas.contextTop);
     }
+}
+
+function scenePoints(path: PenPath): PressurePoint[] | undefined {
+    const source = isPressurePath(path)
+        ? path.acPressure.points
+        : path.acPenPoints;
+    const matrix = path.calcTransformMatrix();
+    return source?.map(([x, y, pressure]) => {
+        const point = new Point(
+            x - path.pathOffset.x,
+            y - path.pathOffset.y,
+        ).transform(matrix);
+        return [point.x, point.y, pressure];
+    });
 }

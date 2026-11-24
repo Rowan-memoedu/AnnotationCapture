@@ -425,6 +425,7 @@ export function installFormulaInk(
     };
     return {
         setActive,
+        isActive: () => active,
         pathCreated,
         cancel,
         setFont: (value: FormulaFont) => {

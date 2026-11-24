@@ -30,6 +30,7 @@ type StoredConfig = {
     penWidth: number;
     pressureEnabled: boolean;
     pressureSensitivity: number;
+    scribbleEnabled: boolean;
     showMagnifier: boolean;
     outputFormat: OutputFormat;
     formulaFont: FormulaFont;
@@ -53,6 +54,7 @@ export class AnnotationConfig {
             penWidth: 2,
             pressureEnabled: true,
             pressureSensitivity: 50,
+            scribbleEnabled: true,
             showMagnifier: false,
             outputFormat: "latex",
             formulaFont: "stix2",
@@ -97,6 +99,7 @@ export class AnnotationConfig {
             penWidth: this.config.penWidth,
             pressureEnabled: this.config.pressureEnabled,
             pressureSensitivity: this.config.pressureSensitivity,
+            scribbleEnabled: this.config.scribbleEnabled,
             showMagnifier: this.config.showMagnifier,
             outputFormat: this.config.outputFormat,
             formulaFont: this.config.formulaFont,
@@ -122,6 +125,11 @@ export class AnnotationConfig {
                 input.pressureSensitivity > 100)
         )
             throw new Error("压感灵敏度须为 1 到 100");
+        if (
+            input.scribbleEnabled !== undefined &&
+            typeof input.scribbleEnabled !== "boolean"
+        )
+            throw new Error("涂抹删除设置无效");
         if (
             input.archiveRetentionDays !== undefined &&
             (!Number.isInteger(input.archiveRetentionDays) ||
@@ -184,6 +192,8 @@ export class AnnotationConfig {
                 input.pressureEnabled ?? this.config.pressureEnabled,
             pressureSensitivity:
                 input.pressureSensitivity ?? this.config.pressureSensitivity,
+            scribbleEnabled:
+                input.scribbleEnabled ?? this.config.scribbleEnabled,
             showMagnifier: input.showMagnifier ?? this.config.showMagnifier,
             outputFormat: input.outputFormat ?? this.config.outputFormat,
             formulaFont: input.formulaFont ?? this.config.formulaFont,

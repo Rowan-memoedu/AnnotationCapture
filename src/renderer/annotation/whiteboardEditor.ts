@@ -1,5 +1,6 @@
 import { type Position, polylineMatchesLasso } from "./lassoGeometry";
 import { type PressurePoint, pressurePathData } from "./pressureInk";
+import { readScribble, scribbleTargets } from "./scribbleErase";
 import "./whiteboardEditor.css";
 
 type Stroke = {
@@ -29,7 +30,9 @@ let items: Item[] = [];
 let selected = new Set<number>();
 let tool: Tool = "pen";
 let locked = false;
+let scribbleEnabled = true;
 let pointer: number | undefined;
+let strokeStartedAt = 0;
 let stroke: Stroke | undefined;
 let polygon: Position[] = [];
 let start: Position | undefined;
@@ -72,6 +75,11 @@ for (const [name, label] of Object.entries({
 }
 const undoButton = button("撤销", "Undo", () => history(undo, redo));
 const redoButton = button("重做", "Redo", () => history(redo, undo));
+const scribbleButton = button("涂抹删除", "Scribble to erase", () => {
+    scribbleEnabled = !scribbleEnabled;
+    scribbleButton.setAttribute("aria-pressed", String(scribbleEnabled));
+});
+scribbleButton.setAttribute("aria-pressed", String(scribbleEnabled));
 const deleteButton = button("删除所选", "Delete selection", () =>
     remove(selected),
 );
@@ -296,6 +304,7 @@ board.addEventListener("pointerdown", (event) => {
     if (locked || pointer !== undefined || event.button !== 0) return;
     board.focus({ preventScroll: true });
     pointer = event.pointerId;
+    strokeStartedAt = event.timeStamp;
     board.setPointerCapture(pointer);
     const p = point(event);
     start = { x: p[0], y: p[1] };
@@ -343,10 +352,26 @@ board.addEventListener("pointermove", (event) => {
     }
     render();
 });
-function end(commit: boolean) {
+function end(commit: boolean, duration?: number) {
     pointer = undefined;
-    if (commit && items.length < 1000 && stroke) update([...items, stroke]);
-    else if (commit && movement && (movement.x || movement.y)) {
+    if (commit && stroke) {
+        const unitsPerPixel = board.width / board.getBoundingClientRect().width;
+        const scribble =
+            duration !== undefined && scribbleEnabled && stroke.kind === "pen"
+                ? readScribble(stroke.points, unitsPerPixel, duration)
+                : null;
+        const targets =
+            scribble &&
+            scribbleTargets(
+                scribble,
+                items.flatMap((item, id) =>
+                    item.kind === "pen" ? [{ id, points: item.points }] : [],
+                ),
+                unitsPerPixel,
+            );
+        if (targets?.size) remove(targets);
+        else if (items.length < 1000) update([...items, stroke]);
+    } else if (commit && movement && (movement.x || movement.y)) {
         const delta = movement;
         update(
             items.map((item, index) =>
@@ -371,7 +396,11 @@ function end(commit: boolean) {
     render();
 }
 board.addEventListener("pointerup", (event) => {
-    if (event.pointerId === pointer) end(true);
+    if (event.pointerId === pointer)
+        end(
+            true,
+            event.shiftKey ? undefined : event.timeStamp - strokeStartedAt,
+        );
 });
 board.addEventListener("lostpointercapture", () => {
     if (pointer !== undefined) end(false);

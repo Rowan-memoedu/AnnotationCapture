@@ -36,11 +36,13 @@
 
 0.8.7 增加可拖动、自动靠壁的工具栏悬浮球。全屏批注默认在空白检测完成后自动铺开智能白板，保留已有笔迹。修复鼠标与数位笔交替使用、指针捕获中断和漏掉落笔事件时的绘制故障。
 
+0.8.8 在截图批注、独立白板和网站白板加入涂抹删除。涂到能明确分组的手写字词时，清除其完整笔迹和涂抹痕迹，可一步撤销。
+
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.7-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.8-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 从 0.8.4 起，运行新版后自动配置当前用户的 Windows 登录任务，在登录约 10 秒后后台启动，避免普通启动项队列造成的长时间等待。截图快捷键可直接使用，单击托盘图标打开设置；右键托盘的“开机自启动”可开启或关闭。
 
@@ -129,6 +131,8 @@
 按 Esc 时取消未完成的转换，保存当时可见的批注并退出。已转换公式及原始笔迹源数据随截图保存在 `annotations.json` 中；当前版本尚无重新打开整个归档画布的入口。
 
 ## 自由圈选与快捷清除
+
+用普通画笔在字词上快速往返涂抹，至少折返四次后抬笔。笔迹能明确归入同一个字或词时，会连同涂抹痕迹一起删除，按 `Ctrl+Z` 可以一次恢复。空白处的涂抹和无法判断删除目标的涂抹会作为普通笔迹保留。此操作在本地完成，作用于手写笔迹，键入的文字与排版公式保留。截图批注可在托盘设置关闭「涂抹删除」，独立白板和网站白板可直接用工具栏开关。
 
 按住 `D`，用鼠标或数位笔沿自由边界圈住笔迹，抬笔即删除完全圈入的笔迹；松开 `D` 恢复普通画笔。一次按住可连续清除多处，`Ctrl+Z` 可撤销。
 
