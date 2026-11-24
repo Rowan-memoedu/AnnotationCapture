@@ -83,7 +83,9 @@ export class FormulaJobs {
                 result.message = "请先使用邀请码登录；截图与公式图已保存";
                 return result;
             }
-            const revision = await this.clipboard.revision();
+            const originalRevision = this.clipboard
+                .revision()
+                .catch(() => null);
             const useCalculator =
                 result.outputFormat === "calculator" ||
                 result.outputFormat === "calculatorCas";
@@ -128,9 +130,14 @@ export class FormulaJobs {
             result.status = "ready";
             result.message = "识别完成";
             await this.archives.saveResult(result);
+            this.changed();
+            const revision = await originalRevision;
             if (
+                revision !== null &&
                 this.latest === id &&
-                revision === (await this.clipboard.revision())
+                revision === (await this.clipboard.revision().catch(() => null)) &&
+                this.latest === id &&
+                result.status === "ready"
             ) {
                 await this.clipboard.writeText(result.latex);
                 result.status = "copied";
@@ -138,7 +145,7 @@ export class FormulaJobs {
                     result.outputFormat === "mathAcademy"
                         ? "Math Academy 公式已复制"
                         : "识别结果已复制到剪贴板";
-            } else {
+            } else if (result.status === "ready") {
                 result.status = "review";
                 result.message = "识别完成；剪贴板或当前任务已变化，请手动复制";
             }

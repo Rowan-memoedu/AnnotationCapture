@@ -6,6 +6,7 @@ import struct
 import tempfile
 import threading
 import unittest
+from unittest.mock import call, patch
 import urllib.error
 import urllib.request
 
@@ -73,6 +74,25 @@ class GatewayTests(unittest.TestCase):
         status, value = self.request("/login", {"inviteCode": (account or self.alice)["inviteCode"]})
         self.assertEqual(status, 200)
         return value["token"]
+
+    def test_deepseek_formula_uses_fast_mode_then_configured_fallback(self):
+        provider = Provider({**self.environment, "ANNOTATION_LLM_BASE_URL": "https://api.deepseek.com",
+                             "ANNOTATION_LLM_MODEL": "deepseek-flash",
+                             "ANNOTATION_LLM_EXTRA_JSON": '{"thinking":{"type":"enabled"},"reasoning_effort":"low"}'})
+        image = png()
+        expected = {"latex": "3+7", "model": "deepseek-flash"}
+        with patch.object(provider, "_recognize", side_effect=[ValueError("UNREADABLE"), expected, expected]) as transcribe:
+            self.assertEqual(provider.recognize(image, "calculator"), expected)
+            self.assertEqual(provider.recognize(image, "latex"), expected)
+        self.assertEqual(transcribe.call_args_list, [
+            call(image, "calculator", {"thinking": {"type": "disabled"}}, timeout=10),
+            call(image, "calculator", provider.extra, timeout=14),
+            call(image, "latex", {"thinking": {"type": "disabled"}}, timeout=10),
+        ])
+        with patch.object(provider, "_recognize", side_effect=TimeoutError) as transcribe:
+            with self.assertRaises(TimeoutError):
+                provider.recognize(image, "calculator")
+            transcribe.assert_called_once()
 
     def test_invites_are_private_and_session_survives_store_restart(self):
         token = self.login()

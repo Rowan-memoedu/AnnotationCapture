@@ -8,6 +8,9 @@ internal static class ScreenFrame
     [DllImport("user32.dll")]
     private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
 
+    [DllImport("user32.dll")]
+    private static extern uint GetClipboardSequenceNumber();
+
     [StructLayout(LayoutKind.Sequential)]
     private struct BitmapInfo
     {
@@ -82,10 +85,17 @@ internal static class ScreenFrame
         output.Flush();
     }
 
-    private static int Main()
+    private static int Main(string[] options)
     {
         try
         {
+            if (options.Length == 1 && options[0] == "--clipboard-sequence")
+            {
+                uint sequence = GetClipboardSequenceNumber();
+                if (sequence == 0) return 1;
+                Console.WriteLine(sequence.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                return 0;
+            }
             SetProcessDpiAwarenessContext(new IntPtr(-4)); // Per-monitor v2, physical desktop coordinates.
             using (var stream = Console.OpenStandardOutput())
             {
