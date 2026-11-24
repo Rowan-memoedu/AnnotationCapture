@@ -38,11 +38,13 @@
 
 0.8.8 在截图批注、独立白板和网站白板加入涂抹删除。涂到能明确分组的手写字词时，清除其完整笔迹和涂抹痕迹，可一步撤销。
 
+0.8.9 将箭头统一放在「形状和文字」菜单，腾出左侧工具栏的一格。
+
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.8-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.9-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 从 0.8.4 起，运行新版后自动配置当前用户的 Windows 登录任务，在登录约 10 秒后后台启动，避免普通启动项队列造成的长时间等待。截图快捷键可直接使用，单击托盘图标打开设置；右键托盘的“开机自启动”可开启或关闭。
 
@@ -59,7 +61,7 @@
 
 ### 图形与箭头
 
-在全屏或区域批注中，点击左侧工具栏的“形状和文字”，选择矩形、圆、椭圆、菱形或直线，然后在截图或白板上拖动。常用箭头也可直接从左栏选中，从起点拖到箭头指向的位置。折线、多边形、文字和序号也在同一栏。
+在全屏或区域批注中，点击左侧工具栏的「形状和文字」，可选择箭头、矩形、圆、椭圆、菱形或直线。选中箭头后，从起点拖向箭头应指向的位置。折线、多边形、文字和序号也在同一菜单。
 
 用“颜色和大小”调整边框、填充和线宽。单击 `D` 可圈选图形并拖动或删除，按住 `D` 可圈选清除。套索按图形的实际轮廓命中，填充的区域也可选中。图形和手写笔迹一起撤销、重做、复制和归档。
 
