@@ -40,11 +40,13 @@
 
 0.8.9 将箭头统一放在「形状和文字」菜单，腾出左侧工具栏的一格。
 
+0.8.10 在共享白板加入套索缩放和悬浮形状菜单。在截图批注的 OCR 输出格式中，Calculator 数值计算与 Calculator（含 CAS）使用 GraspMemoEdu 的计算引擎。发行包附固定源版本和依赖许可。
+
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.9-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.10-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 从 0.8.4 起，运行新版后自动配置当前用户的 Windows 登录任务，在登录约 10 秒后后台启动，避免普通启动项队列造成的长时间等待。截图快捷键可直接使用，单击托盘图标打开设置；右键托盘的“开机自启动”可开启或关闭。
 

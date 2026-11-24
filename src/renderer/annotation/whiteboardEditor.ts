@@ -1,10 +1,16 @@
 import { type Position, polylineMatchesLasso } from "./lassoGeometry";
 import { type PressurePoint, pressurePathData } from "./pressureInk";
 import { readScribble, scribbleTargets } from "./scribbleErase";
+import {
+    arrowPoints,
+    bindToolHover,
+    diamondPoints,
+    shapeTitles,
+} from "./shapeTools";
 import "./whiteboardEditor.css";
 
 type Stroke = {
-    kind: "pen" | "line" | "rect" | "ellipse";
+    kind: "pen" | keyof typeof shapeTitles;
     color: string;
     width: number;
     points: PressurePoint[];
@@ -16,7 +22,9 @@ type Label = {
     x: number;
     y: number;
     text: string;
+    fontSize?: number;
 };
+type Resize = { anchor: Position; handle: Position; factor: number };
 type Item = Stroke | Label;
 type Tool = Stroke["kind"] | "lasso" | "erase";
 
@@ -28,51 +36,102 @@ const undo: Item[][] = [];
 const redo: Item[][] = [];
 let items: Item[] = [];
 let selected = new Set<number>();
+let selectionId = 0;
+let selectionPort: MessagePort | undefined;
+let selectionAnchor: Position | undefined;
 let tool: Tool = "pen";
 let locked = false;
 let scribbleEnabled = true;
 let pointer: number | undefined;
 let strokeStartedAt = 0;
 let stroke: Stroke | undefined;
+let vertices: PressurePoint[] = [];
 let polygon: Position[] = [];
 let start: Position | undefined;
 let movement: Position | undefined;
+let resizing: Resize | undefined;
 let frame = 0;
-const doubles = {
-    pen: "Pen",
-    line: "Line",
-    rect: "Rectangle",
-    ellipse: "Ellipse",
-    lasso: "Lasso",
-    erase: "Eraser",
-};
 const english = new URL(location.href).searchParams.get("lang") === "en";
 
-function button(zh: string, en: string, action: () => void) {
+function button(
+    zh: string,
+    en: string,
+    action: () => void,
+    parent: HTMLElement = tools,
+) {
     const element = document.createElement("button");
     element.type = "button";
     element.textContent = english ? en : zh;
     element.addEventListener("click", () => {
         if (!locked) action();
     });
-    tools.append(element);
+    parent.append(element);
     return element;
 }
 
-for (const [name, label] of Object.entries({
-    pen: "画笔",
-    line: "直线",
-    rect: "矩形",
-    ellipse: "椭圆",
-    lasso: "套索",
-    erase: "橡皮",
-})) {
+const shapeGroup = document.createElement("div");
+shapeGroup.className = "whiteboardShapeGroup";
+const shapeOptions = document.createElement("div");
+shapeOptions.className = "whiteboardShapeOptions";
+function showShapes(show: boolean) {
+    if (show && locked) return;
+    shapeOptions.hidden = !show;
+    shapeTrigger.setAttribute("aria-expanded", String(show));
+}
+controls.set(
+    "pen",
+    button("画笔", "Pen", () => choose("pen")),
+);
+const shapeTrigger = button(
+    "形状",
+    "Shapes",
+    () => showShapes(true),
+    shapeGroup,
+);
+showShapes(false);
+shapeGroup.append(shapeOptions);
+tools.append(shapeGroup);
+bindToolHover(
+    shapeGroup,
+    () => showShapes(true),
+    () => {
+        if (!shapeOptions.contains(document.activeElement)) showShapes(false);
+    },
+);
+shapeGroup.addEventListener("focusout", (event) => {
+    if (!shapeGroup.contains(event.relatedTarget as Node | null))
+        showShapes(false);
+});
+shapeGroup.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+        showShapes(false);
+        shapeTrigger.focus();
+    }
+});
+for (const [name, [zh, en]] of Object.entries(shapeTitles)) {
     const mode = name as Tool;
     controls.set(
         mode,
-        button(label, doubles[mode], () => choose(mode)),
+        button(
+            zh,
+            en,
+            () => {
+                choose(mode);
+                showShapes(false);
+                board.focus({ preventScroll: true });
+            },
+            shapeOptions,
+        ),
     );
 }
+controls.set(
+    "lasso",
+    button("套索", "Lasso", () => choose("lasso")),
+);
+controls.set(
+    "erase",
+    button("橡皮", "Eraser", () => choose("erase")),
+);
 const undoButton = button("撤销", "Undo", () => history(undo, redo));
 const redoButton = button("重做", "Redo", () => history(redo, undo));
 const scribbleButton = button("涂抹删除", "Scribble to erase", () => {
@@ -113,10 +172,24 @@ if (window.parent === window) {
 
 function choose(mode: Tool) {
     tool = mode;
-    selected.clear();
+    vertices = [];
+    select();
     for (const [name, control] of controls)
         control.setAttribute("aria-pressed", String(name === mode));
+    shapeTrigger.setAttribute(
+        "aria-pressed",
+        String(Object.hasOwn(shapeTitles, mode)),
+    );
     render();
+}
+
+function select(next = new Set<number>()) {
+    if (!selected.size && !next.size) return;
+    selected = next;
+    selectionAnchor = undefined;
+    selectionPort?.postMessage({
+        selection: { id: ++selectionId, count: next.size },
+    });
 }
 
 function update(next: Item[]) {
@@ -124,7 +197,7 @@ function update(next: Item[]) {
     if (undo.length > 80) undo.shift();
     redo.length = 0;
     items = next;
-    selected.clear();
+    select();
     render();
 }
 
@@ -133,7 +206,7 @@ function history(from: Item[][], to: Item[][]) {
     if (next) {
         to.push(items);
         items = next;
-        selected.clear();
+        select();
         render();
     }
 }
@@ -145,7 +218,6 @@ function remove(indices: Set<number>) {
 function itemPath(item: Stroke) {
     const path = new Path2D();
     const [first] = item.points;
-    const last = item.points.at(-1) ?? first;
     if (item.pressure) {
         const segments = pressurePathData({
             version: 1,
@@ -155,45 +227,31 @@ function itemPath(item: Stroke) {
         });
         return new Path2D(segments.map((part) => part.join(" ")).join(" "));
     }
-    const [x, y] = first;
-    const [endX, endY] = last;
-    if (item.kind === "rect") path.rect(x, y, endX - x, endY - y);
-    else if (item.kind === "ellipse") {
-        path.ellipse(
-            (x + endX) / 2,
-            (y + endY) / 2,
-            Math.abs(endX - x) / 2,
-            Math.abs(endY - y) / 2,
-            0,
-            0,
-            Math.PI * 2,
-        );
-    } else {
-        path.moveTo(x, y);
-        if (item.points.length === 1) path.lineTo(x + 0.01, y);
-        for (const [px, py] of item.points) path.lineTo(px, py);
-    }
+    const points = samples(item);
+    path.moveTo(points[0].x, points[0].y);
+    if (points.length === 1) path.lineTo(first[0] + 0.01, first[1]);
+    for (const point of points.slice(1)) path.lineTo(point.x, point.y);
     return path;
 }
 
-function draw(item: Item, highlighted = false) {
-    context.fillStyle = context.strokeStyle = highlighted
+function draw(item: Item, highlighted = false, surface = context) {
+    surface.fillStyle = surface.strokeStyle = highlighted
         ? "#2e67cf"
         : item.color;
     if (item.kind === "text") {
-        context.font = "25px Cambria Math, serif";
-        context.fillText(
+        surface.font = `${item.fontSize ?? 25}px Cambria Math, serif`;
+        surface.fillText(
             item.text,
             item.x,
             item.y,
             board.width - Math.max(item.x, 20),
         );
     } else {
-        context.lineWidth = item.width;
-        context.lineCap = context.lineJoin = "round";
+        surface.lineWidth = item.width;
+        surface.lineCap = surface.lineJoin = "round";
         const path = itemPath(item);
-        if (item.pressure) context.fill(path);
-        else context.stroke(path);
+        if (item.pressure) surface.fill(path);
+        else surface.stroke(path);
     }
 }
 
@@ -204,10 +262,18 @@ function paint(guides = true) {
         const active = guides && selected.has(index);
         context.save();
         if (active && movement) context.translate(movement.x, movement.y);
-        draw(item, active);
+        draw(active && resizing ? scaled(item, resizing) : item, active);
         context.restore();
     });
     if (!guides) return;
+    if (selected.size && !polygon.length) paintSelection();
+    if (vertices.length && (tool === "polyline" || tool === "polygon"))
+        draw({
+            kind: tool,
+            color: color.value,
+            width: Number(width.value),
+            points: vertices,
+        });
     if (stroke) draw(stroke);
     if (!polygon.length) return;
     context.beginPath();
@@ -243,17 +309,20 @@ function point(event: PointerEvent): PressurePoint {
 function samples(item: Item): Position[] {
     if (item.kind === "text")
         return [
-            { x: item.x, y: item.y - 12 },
+            { x: item.x, y: item.y - (item.fontSize ?? 25) },
             {
                 x:
                     item.x +
-                    Math.min(item.text.length * 13, board.width - item.x),
-                y: item.y - 12,
+                    Math.min(
+                        item.text.length * (item.fontSize ?? 25) * 0.54,
+                        board.width - item.x,
+                    ),
+                y: item.y + (item.fontSize ?? 25) / 5,
             },
         ];
     const [x, y] = item.points[0];
     const [right, bottom] = item.points.at(-1) ?? item.points[0];
-    if (item.kind === "rect" || item.kind === "ellipse") {
+    if (item.kind === "rect") {
         return [
             { x, y },
             { x: right, y },
@@ -262,7 +331,42 @@ function samples(item: Item): Position[] {
             { x, y },
         ];
     }
-    return item.points.map(([px, py]) => ({ x: px, y: py }));
+    if (item.kind === "ellipse" || item.kind === "circle") {
+        const size = Math.max(Math.abs(right - x), Math.abs(bottom - y));
+        const rx = (item.kind === "circle" ? size : Math.abs(right - x)) / 2;
+        const ry = (item.kind === "circle" ? size : Math.abs(bottom - y)) / 2;
+        const cx = Math.min(x, right) + rx,
+            cy = Math.min(y, bottom) + ry;
+        return Array.from({ length: 65 }, (_, index) => {
+            const angle = (index * Math.PI) / 32;
+            return {
+                x: cx + rx * Math.cos(angle),
+                y: cy + ry * Math.sin(angle),
+            };
+        });
+    }
+    if (item.kind === "diamond") {
+        const points = diamondPoints(
+            Math.min(x, right),
+            Math.min(y, bottom),
+            Math.abs(x - right),
+            Math.abs(y - bottom),
+        );
+        return [...points, points[0]];
+    }
+    if (item.kind === "arrow") {
+        const start = { x, y },
+            end = { x: right, y: bottom };
+        return [
+            start,
+            end,
+            ...arrowPoints(start, end, item.width * 6, item.width * 5),
+        ];
+    }
+    const points = item.points.map(([px, py]) => ({ x: px, y: py }));
+    return item.kind === "polygon" && points.length > 2
+        ? [...points, points[0]]
+        : points;
 }
 
 function matching(boundary: Position[]) {
@@ -300,9 +404,88 @@ function moved(item: Item, { x, y }: Position): Item {
     };
 }
 
+function scaled(item: Item, { anchor, factor }: Resize): Item {
+    const x = (value: number) => anchor.x + (value - anchor.x) * factor;
+    const y = (value: number) => anchor.y + (value - anchor.y) * factor;
+    if (item.kind === "text") {
+        return {
+            ...item,
+            x: x(item.x),
+            y: y(item.y),
+            fontSize: Math.max(
+                5,
+                Math.min(160, (item.fontSize ?? 25) * factor),
+            ),
+        };
+    }
+    return {
+        ...item,
+        width: Math.max(1, Math.min(16, item.width * factor)),
+        points: item.points.map(([px, py, pressure]) => [
+            x(px),
+            y(py),
+            pressure,
+        ]),
+    };
+}
+
+function selectionCorners() {
+    const pad = (8 * board.width) / board.getBoundingClientRect().width;
+    let x1 = Infinity,
+        y1 = Infinity,
+        x2 = -Infinity,
+        y2 = -Infinity;
+    for (const index of selected) {
+        const item = items[index];
+        for (const point of samples(resizing ? scaled(item, resizing) : item)) {
+            const x = point.x + (movement?.x ?? 0),
+                y = point.y + (movement?.y ?? 0);
+            x1 = Math.min(x1, x);
+            y1 = Math.min(y1, y);
+            x2 = Math.max(x2, x);
+            y2 = Math.max(y2, y);
+        }
+    }
+    const top = Math.max(2, y1 - pad),
+        bottom = Math.min(board.height - 2, y2 + pad);
+    const left = Math.max(2, x1 - pad),
+        right = Math.min(board.width - 2, x2 + pad);
+    return [
+        { x: left, y: top },
+        { x: right, y: top },
+        { x: right, y: bottom },
+        { x: left, y: bottom },
+    ];
+}
+
+function paintSelection() {
+    const corners = selectionCorners();
+    const unit = board.width / board.getBoundingClientRect().width;
+    context.strokeStyle = "#2e67cf";
+    context.lineWidth = unit;
+    context.strokeRect(
+        corners[0].x,
+        corners[0].y,
+        corners[2].x - corners[0].x,
+        corners[2].y - corners[0].y,
+    );
+    for (const { x, y } of corners) {
+        const radius = 4 * unit;
+        context.fillStyle = "white";
+        context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+        context.strokeRect(x - radius, y - radius, radius * 2, radius * 2);
+    }
+}
+
 board.addEventListener("pointerdown", (event) => {
     if (locked || pointer !== undefined || event.button !== 0) return;
     board.focus({ preventScroll: true });
+    if (tool === "polyline" || tool === "polygon") {
+        if (vertices.length < 128 && event.detail <= 1)
+            vertices.push(point(event));
+        render();
+        return;
+    }
     pointer = event.pointerId;
     strokeStartedAt = event.timeStamp;
     board.setPointerCapture(pointer);
@@ -310,6 +493,20 @@ board.addEventListener("pointerdown", (event) => {
     start = { x: p[0], y: p[1] };
     if (tool === "lasso" && selected.size) {
         const { x, y } = start;
+        const corners = selectionCorners();
+        const tolerance =
+            (12 * board.width) / board.getBoundingClientRect().width;
+        const corner = corners.findIndex(
+            (p) => Math.hypot(p.x - x, p.y - y) <= tolerance,
+        );
+        if (corner !== -1) {
+            resizing = {
+                anchor: corners[(corner + 2) % 4],
+                handle: corners[corner],
+                factor: 1,
+            };
+            return;
+        }
         const touched = matching([
             { x: x - 20, y: y - 20 },
             { x: x + 20, y: y - 20 },
@@ -336,7 +533,15 @@ board.addEventListener("pointerdown", (event) => {
 board.addEventListener("pointermove", (event) => {
     if (event.pointerId !== pointer || !start) return;
     const p = point(event);
-    if (movement) movement = { x: p[0] - start.x, y: p[1] - start.y };
+    if (resizing) {
+        const { anchor, handle } = resizing;
+        const dx = handle.x - anchor.x,
+            dy = handle.y - anchor.y;
+        const change =
+            ((p[0] - start.x) * dx + (p[1] - start.y) * dy) /
+            Math.max(1, dx * dx + dy * dy);
+        resizing.factor = Math.min(5, Math.max(0.2, 1 + change));
+    } else if (movement) movement = { x: p[0] - start.x, y: p[1] - start.y };
     else if (stroke?.kind === "pen" && stroke.points.length < 6000) {
         const events = event.getCoalescedEvents?.();
         stroke.points.push(
@@ -371,6 +576,15 @@ function end(commit: boolean, duration?: number) {
             );
         if (targets?.size) remove(targets);
         else if (items.length < 1000) update([...items, stroke]);
+    } else if (commit && resizing && Math.abs(resizing.factor - 1) > 0.01) {
+        const transform = resizing;
+        const sameSelection = new Set(selected);
+        update(
+            items.map((item, index) =>
+                selected.has(index) ? scaled(item, transform) : item,
+            ),
+        );
+        select(sameSelection);
     } else if (commit && movement && (movement.x || movement.y)) {
         const delta = movement;
         update(
@@ -390,8 +604,9 @@ function end(commit: boolean, duration?: number) {
                 hits.add(index);
         }
         remove(hits);
-    } else if (commit && polygon.length > 2) selected = matching(polygon);
+    } else if (commit && polygon.length > 2) select(matching(polygon));
     movement = stroke = start = undefined;
+    resizing = undefined;
     polygon = [];
     render();
 }
@@ -405,10 +620,38 @@ board.addEventListener("pointerup", (event) => {
 board.addEventListener("lostpointercapture", () => {
     if (pointer !== undefined) end(false);
 });
+function finishVertices() {
+    if (locked || (tool !== "polyline" && tool !== "polygon")) return;
+    if (vertices.length >= (tool === "polygon" ? 3 : 2) && items.length < 1000)
+        update([
+            ...items,
+            {
+                kind: tool,
+                width: Number(width.value),
+                color: color.value,
+                points: vertices,
+            },
+        ]);
+    vertices = [];
+    render();
+}
+board.addEventListener("dblclick", finishVertices);
 board.addEventListener("keydown", (event) => {
     if (locked) return;
     if (event.key === "Delete") remove(selected);
-    else if (event.key.toLowerCase() === "d")
+    else if (event.key === "Enter" && vertices.length) finishVertices();
+    else if (event.key === "Escape" && (selected.size || vertices.length)) {
+        vertices = [];
+        select();
+        render();
+    } else if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "a"
+    ) {
+        choose("lasso");
+        select(new Set(items.keys()));
+        render();
+    } else if (event.key.toLowerCase() === "d")
         choose(tool === "lasso" ? "pen" : "lasso");
     else if (
         (event.ctrlKey || event.metaKey) &&
@@ -456,11 +699,15 @@ function restore(scene: { version: number; items: Item[] }) {
                 !Number.isFinite(item.x) ||
                 !Number.isFinite(item.y) ||
                 typeof item.text !== "string" ||
-                item.text.length > 1000
+                item.text.length > 1000 ||
+                (item.fontSize !== undefined &&
+                    (!Number.isFinite(item.fontSize) ||
+                        item.fontSize < 5 ||
+                        item.fontSize > 160))
             )
                 throw Error("Invalid text");
         } else if (
-            !["pen", "rect", "ellipse", "line"].includes(item.kind) ||
+            (item.kind !== "pen" && !Object.hasOwn(shapeTitles, item.kind)) ||
             !Number.isFinite(item.width) ||
             item.width < 1 ||
             item.width > 16 ||
@@ -477,7 +724,7 @@ function restore(scene: { version: number; items: Item[] }) {
             throw Error("Invalid stroke");
     }
     items = scene.items;
-    selected.clear();
+    select();
     undo.length = 0;
     redo.length = 0;
     render();
@@ -485,21 +732,96 @@ function restore(scene: { version: number; items: Item[] }) {
 
 function setLocked(value: boolean) {
     if (value && pointer !== undefined) end(true);
+    if (value && vertices.length) finishVertices();
     locked = value;
+    if (value) showShapes(false);
     for (const control of tools.querySelectorAll("button, input"))
         (control as HTMLButtonElement).disabled = value;
     render();
 }
 
-async function snapshot() {
-    paint(false);
-    const png = await new Promise<Blob>((resolve, reject) => {
-        board.toBlob((blob) =>
+function encodePng(canvas: HTMLCanvasElement) {
+    return new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) =>
             blob ? resolve(blob) : reject(Error("Image unavailable")),
         );
-        render();
     });
+}
+
+async function snapshot() {
+    paint(false);
+    const pngPending = encodePng(board);
+    render();
+    const png = await pngPending;
     return { scene: { version: 1, items }, png, empty: items.length === 0 };
+}
+
+async function snapshotSelection() {
+    if (!selected.size || pointer !== undefined) return null;
+    const id = selectionId;
+    const layer = document.createElement("canvas");
+    layer.width = board.width;
+    layer.height = board.height;
+    const surface = layer.getContext("2d", { willReadFrequently: true })!;
+    for (const index of selected) draw(items[index], false, surface);
+    const { data } = surface.getImageData(0, 0, layer.width, layer.height);
+    let left = layer.width,
+        top = layer.height,
+        right = -1,
+        bottom = -1;
+    for (let y = 0; y < layer.height; y++) {
+        for (let x = 0; x < layer.width; x++) {
+            if (data[(y * layer.width + x) * 4 + 3] === 0) continue;
+            left = Math.min(left, x);
+            top = Math.min(top, y);
+            right = Math.max(right, x);
+            bottom = Math.max(bottom, y);
+        }
+    }
+    if (right < left) return null;
+    const cropped = document.createElement("canvas");
+    const padding = 20;
+    const w = right - left + 1,
+        h = bottom - top + 1;
+    cropped.width = Math.max(80, w + 2 * padding);
+    cropped.height = Math.max(62, h + 2 * padding);
+    const output = cropped.getContext("2d")!;
+    output.fillStyle = "white";
+    output.fillRect(0, 0, cropped.width, cropped.height);
+    output.drawImage(layer, left, top, w, h, padding, padding, w, h);
+    selectionAnchor = {
+        x: left,
+        y: Math.min(layer.height - 2, Math.max(24, bottom)),
+    };
+    return { id, png: await encodePng(cropped) };
+}
+
+function replaceSelection(value: { id: number; text: string }) {
+    if (
+        locked ||
+        pointer !== undefined ||
+        !selected.size ||
+        !selectionAnchor ||
+        value?.id !== selectionId ||
+        typeof value.text !== "string" ||
+        !value.text.trim() ||
+        value.text.length > 64 ||
+        /[\r\n]/.test(value.text)
+    )
+        return false;
+    const first = Math.min(...selected);
+    const label: Label = {
+        kind: "text",
+        ...selectionAnchor,
+        text: value.text,
+        color: items[first].color,
+    };
+    update(
+        items.flatMap((item, index) =>
+            index === first ? [label] : selected.has(index) ? [] : [item],
+        ),
+    );
+    return true;
 }
 
 choose("pen");
@@ -513,12 +835,17 @@ function connect(event: MessageEvent) {
         return;
     window.removeEventListener("message", connect);
     const port = event.ports[0];
+    selectionPort = port;
     port.onmessage = async ({ data }) => {
         const { id, command, value } = data;
         try {
-            let result: Awaited<ReturnType<typeof snapshot>> | undefined;
+            let result: unknown;
             if (command === "lock") setLocked(value === true);
             else if (command === "snapshot") result = await snapshot();
+            else if (command === "snapshotSelection" && !locked)
+                result = await snapshotSelection();
+            else if (command === "replaceSelection")
+                result = replaceSelection(value);
             else if (command === "restore") restore(value);
             else if (
                 command === "insert" &&
@@ -533,6 +860,9 @@ function connect(event: MessageEvent) {
             port.postMessage({ id, failed: true });
         }
     };
-    port.postMessage({ ready: 1 });
+    port.postMessage({
+        ready: 1,
+        selection: { id: selectionId, count: selected.size },
+    });
 }
 window.addEventListener("message", connect);

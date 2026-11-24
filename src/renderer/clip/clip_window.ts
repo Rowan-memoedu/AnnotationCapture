@@ -39,6 +39,11 @@ import { PressureBrush } from "../annotation/pressureBrush";
 import { isPressurePath, resizePressurePath } from "../annotation/pressureInk";
 import initScreenShots from "../annotation/screenshot";
 import { createArrow } from "../annotation/shapeGeometry";
+import {
+    bindToolHover,
+    diamondPoints,
+    shapeTitles,
+} from "../annotation/shapeTools";
 import { installToolbarDock } from "../annotation/toolbarDock";
 import { installWhiteboard, isWhiteboard } from "../annotation/whiteboard";
 import { writeImage, writeText } from "../lib/clipboard";
@@ -2820,21 +2825,13 @@ function createShape(
             形状: "ellipse",
         });
     } else if (shape === "diamond") {
-        shapeX = new Polygon(
-            [
-                { x: x + w / 2, y },
-                { x: x + w, y: y + h / 2 },
-                { x: x + w / 2, y: y + h },
-                { x, y: y + h / 2 },
-            ],
-            {
-                fill: fillColor,
-                stroke: strokeColor,
-                strokeWidth,
-                canChangeFill: true,
-                形状: "diamond",
-            },
-        );
+        shapeX = new Polygon(diamondPoints(x, y, w, h), {
+            fill: fillColor,
+            stroke: strokeColor,
+            strokeWidth,
+            canChangeFill: true,
+            形状: "diamond",
+        });
     } else if (shape === "rect") {
         shapeX = new Rect({
             left: x,
@@ -3623,14 +3620,18 @@ const drawSideFree = {
 const drawShadowBlur = view().attr({ id: "shadow_blur" });
 
 const drawSideShapes = {
-    rect: toolbarIcon("rect", "矩形"),
-    ellipse: toolbarIcon("circle", "椭圆").class("ac-ellipse-icon"),
-    diamond: toolbarIcon("rect", "菱形").class("ac-diamond-icon"),
-    circle: toolbarIcon("circle", "圆"),
-    line: toolbarIcon("line", "线条"),
-    arrow: toolbarIcon("arrow", "箭头"),
-    polyline: toolbarIcon("polyline", "折线"),
-    polygon: toolbarIcon("polygon", "多边形"),
+    rect: toolbarIcon("rect", shapeTitles.rect[0]),
+    ellipse: toolbarIcon("circle", shapeTitles.ellipse[0]).class(
+        "ac-ellipse-icon",
+    ),
+    diamond: toolbarIcon("rect", shapeTitles.diamond[0]).class(
+        "ac-diamond-icon",
+    ),
+    circle: toolbarIcon("circle", shapeTitles.circle[0]),
+    line: toolbarIcon("line", shapeTitles.line[0]),
+    arrow: toolbarIcon("arrow", shapeTitles.arrow[0]),
+    polyline: toolbarIcon("polyline", shapeTitles.polyline[0]),
+    polygon: toolbarIcon("polygon", shapeTitles.polygon[0]),
     text: toolbarIcon("text", "文字"),
     number: toolbarIcon("number", "序号"),
     mask: toolbarIcon("mask", "遮罩"),
@@ -4119,8 +4120,6 @@ editType.select = editTypeRecord.select || editType.select;
 editType.draw = editTypeRecord.draw || editType.draw;
 editType.filter = editTypeRecord.filter || editType.filter;
 editType.shape = editTypeRecord.shape || editType.shape;
-
-let willShowITime: NodeJS.Timeout;
 
 let isShowBars = !store.get("工具栏.稍后出现") as boolean;
 
@@ -5046,23 +5045,17 @@ showSideBar(false);
 
 for (const [index, e] of drawBarMainElList.entries()) {
     const Type: (keyof EditType)[] = ["select", "draw", "shape", "filter"];
-    e.on("mouseenter", () => {
-        // 用于防误触，防经过时误切换
-        willShowITime = setTimeout(() => {
-            showSideBarItem(index);
-        }, 100);
-    });
-    e.on("pointerleave", () => {
-        clearTimeout(willShowITime);
-        setTimeout(hideUnfocusedSideBar, 100);
-    });
+    bindToolHover(
+        e.el,
+        () => showSideBarItem(index),
+        () => setTimeout(hideUnfocusedSideBar, 100),
+    );
     const type = Type[index];
     if (type && type !== "shape")
         e.on("click", () => setEditType(type, editType[type]));
 }
 
 drawMainElsx.shapes.on("click", (event) => {
-    clearTimeout(willShowITime);
     showSideBarItem(drawBarMainElList.indexOf(drawMainElsx.shapes));
     if (event.detail === 0) drawSideShapes.rect.el.focus();
 });

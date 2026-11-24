@@ -99,6 +99,19 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.request("/recognize", {"png": png()})[0], 401)
         self.assertEqual(self.upstream.requests, [])
 
+    def test_calculator_transcribes_without_evaluating(self):
+        token = self.login()
+        self.upstream.content = "mod(17,5)+sqrt(4)"
+        status, actual = self.request("/recognize", {"png": png(), "outputFormat": "calculator"}, token)
+        self.assertEqual(status, 200)
+        self.assertEqual(actual["latex"], self.upstream.content)
+        prompt = self.upstream.requests[-1]["body"]["messages"][0]["content"]
+        self.assertIn("Do not solve", prompt)
+        self.assertIn("mod(a,b)", prompt)
+        for content in ("UNREADABLE", "1\n2", "\\frac{3}{2}"):
+            self.upstream.content = content
+            self.assertEqual(self.request("/recognize", {"png": png(), "outputFormat": "calculator"}, token)[0], 400)
+
     def test_whitespace_is_authenticated_and_preferences_reach_the_prompt(self):
         self.assertEqual(self.request("/whitespace", {"png": png()})[0], 401)
         self.gateway.provider.extra = {"thinking": {"type": "enabled"}, "reasoning_effort": "low"}

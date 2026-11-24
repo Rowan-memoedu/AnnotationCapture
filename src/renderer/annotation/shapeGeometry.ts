@@ -14,6 +14,7 @@ import {
 import type { LassoRule } from "../../../lib/annotation";
 import type { setting } from "../../ShareTypes";
 import { type Position, polylineMatchesLasso } from "./lassoGeometry";
+import { arrowPoints } from "./shapeTools";
 
 export function createArrow(
     start: Position,
@@ -22,22 +23,15 @@ export function createArrow(
     strokeWidth: number,
     head: setting["图像编辑"]["arrow"],
 ) {
-    const length = Math.hypot(end.x - start.x, end.y - start.y);
-    if (!length) return null;
-    const ux = (end.x - start.x) / length;
-    const uy = (end.y - start.y) / length;
-    const headHeight = Math.max(1, head.h);
-    const depth = Math.min(headHeight, length * 0.65);
-    const halfWidth = (head.w * depth) / (2 * headHeight);
-    const x = end.x - ux * depth;
-    const y = end.y - uy * depth;
+    const wings = arrowPoints(start, end, head.h, head.w);
+    if (!wings.length) return null;
     const filled = head.type === "fill";
     const path: TSimplePathData = [
         ["M", start.x, start.y],
         ["L", end.x, end.y],
-        ["M", x - uy * halfWidth, y + ux * halfWidth],
+        ["M", wings[0].x, wings[0].y],
         ["L", end.x, end.y],
-        ["L", x + uy * halfWidth, y - ux * halfWidth],
+        ["L", wings[2].x, wings[2].y],
     ];
     if (filled) path.push(["Z"]);
     return new Path(path, {

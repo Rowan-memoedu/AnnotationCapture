@@ -1,9 +1,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const {execFileSync} = require('node:child_process');
 const metadata = require('../package.json');
 const artifacts = process.env.ANNOTATION_ARTIFACTS || 'D:/Artifacts/AnnotationCapture';
 const staging = path.join(artifacts, 'package');
 fs.mkdirSync(staging, { recursive: true });
+execFileSync(process.execPath, [path.join(__dirname, 'stage-calculator.cjs'), path.join(staging, 'calculator')], {stdio: 'inherit'});
 const compiled=path.resolve(staging,'out');
 if(fs.existsSync(compiled)){
     if(fs.lstatSync(compiled).isSymbolicLink()||fs.realpathSync(compiled).toLowerCase()!==compiled.toLowerCase())throw new Error('Refusing to clean linked package output');

@@ -1,0 +1,16 @@
+{
+  "commit": "b0ebee9859fe75f92f0ab82d67f24f5b34a41dc9",
+  "files": {
+    "calculator-engine.js": "0ac39df3374f3b2533552c331cdb9a60658a72cbf8f78e55740169c124dbce42",
+    "calculator-policy.js": "0df29c7c078456f80e173bee769ddc4044e97b6e495400b32a1a515979e99ed3",
+    "vendor/calculator/advanced.mjs": "5e846486c25815c725a497d351a8e3fc6e920a993f92fd769228c1d28039153d",
+    "vendor/calculator/advanced.mjs.LEGAL.txt": "e227a4ca4cb66de4627634704f6ed7529baa8c4fd9871b70c6d65305429d4884",
+    "vendor/calculator/applied.mjs": "410d393c0ef65ca307709861425be36db19ee4a2dd8f658ddd73c8c68628e8f0",
+    "vendor/calculator/applied.mjs.LEGAL.txt": "e4522d215eaf75078532275cecc3b71903be312168394dc97a78041a88c3c320",
+    "vendor/calculator/core.mjs": "031eb742975622bf83860015762200cd14032f49b4165fca38557428e16c4f97",
+    "vendor/calculator/core.mjs.LEGAL.txt": "9dac36af0ad36a295dbf3242b1efa538aceb2aaf04e44a4da5593342547c39e4",
+    "vendor/calculator/LICENSES.txt": "644ca43d17276927bbc72c91bcd0ac0d5c5be127a52d66cf03946e89e74a8625",
+    "vendor/calculator/symbolic.mjs": "a65c8ae3a8d5ad5fed3e0c8320a5a2806b80ab1d4d280d5418c31cc4a5083fe4",
+    "vendor/calculator/symbolic.mjs.LEGAL.txt": "8e3a4bb56f37df8f7395f68b91937e299e0c95ec89308b8348a93704d83c9361"
+  }
+}
