@@ -130,6 +130,9 @@ async function run() {
         await capture.waitForFunction(() => document.body.dataset.acReady === "true");
         await isolateWindow(app, capture);
         await checkSurface(capture, "#draw_photo", [415, 320], "pen", "Control+y");
+        await capture.locator("#ac-whiteboard").click();
+        await capture.locator("#ac-whiteboard-adjust").click();
+        await checkSurface(capture, "#draw_photo", [415, 420], "mouse", "Control+y");
         const closed = capture.waitForEvent("close");
         await capture.keyboard.press("Escape");
         await closed;
@@ -138,6 +141,8 @@ async function run() {
         assert.equal(records.length, 1);
         const recorded = JSON.parse(fs.readFileSync(path.join(archive, records[0]), "utf8"));
         assert.equal(recorded.canvas.objects.filter(object => object.acPressure).length, neighbor.length);
+        assert.equal(recorded.canvas.objects.filter(object => object.acPenPoints).length, neighbor.length);
+        assert.ok(recorded.canvas.objects.some(object => object.acWhiteboard));
 
         const whiteboardHtml = path.resolve(exe ? path.join(path.dirname(exe), "resources", "app.asar") : ".", "out/renderer/whiteboard.html");
         const [board] = await Promise.all([
@@ -158,7 +163,7 @@ async function run() {
         await draw(board, [415, 320], [rub]);
         assert.ok((await ink(board, "#board", [415, 320])).target > 0);
         assert.deepEqual(errors, []);
-        const report = { passed: true, capturePen: true, standaloneMouse: true, archive: true, undoRedo: true, disable: true, hardwarePenTested: false };
+        const report = { passed: true, capturePen: true, quickWhiteboardMouse: true, standaloneMouse: true, archive: true, undoRedo: true, disable: true, hardwarePenTested: false };
         fs.writeFileSync(path.join(root, "scribble-desktop.json"), JSON.stringify(report, null, 2));
         console.log(JSON.stringify(report));
     } finally {
