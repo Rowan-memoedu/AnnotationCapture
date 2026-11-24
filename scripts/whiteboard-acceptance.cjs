@@ -147,8 +147,12 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
     checks.push('pending model response never replaces a manual fallback'); await finish(page);
     await configure({ autoOpen: false });
     await fixture({ detectionDelay: 0, rects: [{ x: .1, y: .15, width: .25, height: .4 }, { x: .65, y: .15, width: .25, height: .4 }] });
-    page = await open(); await page.waitForFunction(() => document.querySelector('#ac-whiteboard-status').textContent === '空白区域已就绪');
-    await page.locator('#ac-whiteboard').click(); objects = await checkpoint(page);
+    const requests = await app.evaluate(() => globalThis.boardFixture.calls);
+    page = await open();
+    assert.equal(await app.evaluate(() => globalThis.boardFixture.calls), requests);
+    await option(page, 'smart');
+    await page.waitForSelector('#ac-whiteboard-remove');
+    objects = await checkpoint(page);
     assert.equal(boards(objects).length, 2); assert.ok(boards(objects).every(o => o.acFixed));
     assert.equal(await page.locator('#ac-whiteboard-adjust').isVisible(), false);
     // Real ink in both boards, plus a distractor between them.
@@ -179,7 +183,8 @@ async function point(page, x, y) { return page.locator('#main_photo').evaluate((
     checks.push('whiteboard OCR waits for a non-empty manual selection and submits it on release');
     // Failure and empty results fall back; saving hides promptly and retains the final stroke.
     await fixture({ rects: [{ x: 2, y: 0, width: .2, height: .3 }] });
-    page = await open(); await page.waitForFunction(() => document.querySelector('#ac-whiteboard-status').textContent.includes('不可用'));
+    page = await open(); await option(page, 'smart');
+    await page.waitForFunction(() => document.querySelector('#ac-whiteboard-status').textContent.includes('当前没有可用'));
     await page.locator('#ac-whiteboard').click(); assert.equal(boards(await checkpoint(page))[0].acFixed, false);
     await fixture({ saveDelay: 1500 });
     const closed2 = page.waitForEvent('close'), started = performance.now(); await page.keyboard.press('Escape');

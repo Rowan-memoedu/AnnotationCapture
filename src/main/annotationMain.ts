@@ -1,7 +1,5 @@
-import { execFile } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { promisify } from "node:util";
 import {
     app,
     BrowserWindow,
@@ -30,7 +28,7 @@ import { AnnotationUpdater, acknowledgeUpdate } from "./annotationUpdate";
 import { captureDefaults } from "./captureDefaults";
 import { FormulaJobs } from "./formulaJobs";
 import { FormulaTypesetter } from "./formulaTypeset";
-import { prepareFrameReader } from "./nativeFrames";
+import { prepareClipboardReader, prepareFrameReader } from "./nativeFrames";
 import { screenshotSource } from "./screenshotSource";
 
 app.setName("AnnotationCapture");
@@ -376,16 +374,24 @@ function registerShortcuts(next: {
     return () => setShortcuts(previous);
 }
 
+let clipboardReader: ReturnType<typeof prepareClipboardReader> | undefined;
+let lastClipboardRead: Promise<string> | undefined;
 async function clipboardRevision(): Promise<string> {
     if (process.platform !== "win32") return await clipboard.readText();
-    const result = await promisify(execFile)(
-        frameHelper,
-        ["--clipboard-sequence"],
-        { windowsHide: true, timeout: 2000 },
-    );
-    const revision = result.stdout.trim();
-    if (!/^[1-9]\d*$/.test(revision)) throw new Error("无法读取剪贴板状态");
-    return revision;
+    const read = () => {
+        if (!clipboardReader?.available)
+            clipboardReader = prepareClipboardReader(frameHelper);
+        return clipboardReader.read();
+    };
+    const pending = lastClipboardRead
+        ? lastClipboardRead.then(read, read)
+        : read();
+    lastClipboardRead = pending;
+    try {
+        return await pending;
+    } finally {
+        if (lastClipboardRead === pending) lastClipboardRead = undefined;
+    }
 }
 
 ipcMain.on("store", (event, message) => {
@@ -654,12 +660,15 @@ else {
     });
     app.on("will-quit", () => {
         for (const reader of frameReaders.values()) reader.stop();
+        clipboardReader?.stop();
         updater?.dispose();
         retention?.dispose();
         globalShortcut.unregisterAll();
         tray?.destroy();
     });
     app.whenReady().then(() => {
+        if (process.platform === "win32")
+            void clipboardRevision().catch(() => {});
         config = new AnnotationConfig(
             dataRoot,
             args.archiveRoot || join(dataRoot, "Archive"),

@@ -96,6 +96,19 @@ internal static class ScreenFrame
                 Console.WriteLine(sequence.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 return 0;
             }
+            if (options.Length == 1 && options[0] == "--clipboard-sequences")
+            {
+                using (var output = Console.OpenStandardOutput())
+                {
+                    while (Console.ReadLine() == "sequence")
+                    {
+                        var sequence = BitConverter.GetBytes(GetClipboardSequenceNumber());
+                        output.Write(sequence, 0, sequence.Length);
+                        output.Flush();
+                    }
+                }
+                return 0;
+            }
             SetProcessDpiAwarenessContext(new IntPtr(-4)); // Per-monitor v2, physical desktop coordinates.
             using (var stream = Console.OpenStandardOutput())
             {
