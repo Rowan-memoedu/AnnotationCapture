@@ -8,7 +8,10 @@ import {
 import type { ArchiveStore } from "./annotationArchive";
 import type { FormulaProvider } from "./formulaProvider";
 import { mathAcademyOutput } from "./mathAcademy";
-import { calculateWhiteboardFormula } from "./whiteboardCalculator";
+import {
+    calculateWhiteboardFormula,
+    warmWhiteboardCalculator,
+} from "./whiteboardCalculator";
 
 export type ClipboardPort = {
     revision: () => Promise<string>;
@@ -83,13 +86,14 @@ export class FormulaJobs {
                 result.message = "请先使用邀请码登录；截图与公式图已保存";
                 return result;
             }
-            const [originalRevision, image] = await Promise.all([
-                this.clipboard.revision().catch(() => null),
-                png ?? this.archives.readFormula(result),
-            ]);
+            const revision = this.clipboard.revision().catch(() => null);
             const useCalculator =
                 result.outputFormat === "calculator" ||
                 result.outputFormat === "calculatorCas";
+            const cas = result.outputFormat === "calculatorCas";
+            if (useCalculator)
+                void warmWhiteboardCalculator(cas).catch(() => {});
+            const image = png ?? (await this.archives.readFormula(result));
             const recognized = await provider.recognize(
                 image,
                 AbortSignal.timeout(60000),
@@ -107,7 +111,7 @@ export class FormulaJobs {
                 try {
                     result.latex = await calculateWhiteboardFormula(
                         recognized.latex,
-                        result.outputFormat === "calculatorCas",
+                        cas,
                     );
                 } catch (error) {
                     result.status = "review";
@@ -131,6 +135,7 @@ export class FormulaJobs {
             result.status = "ready";
             result.message = "识别完成";
             this.changed();
+            const originalRevision = await revision;
             if (
                 originalRevision !== null &&
                 this.latest === id &&
