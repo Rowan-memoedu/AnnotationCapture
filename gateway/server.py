@@ -6,6 +6,7 @@ import base64
 import collections
 import contextlib
 import hashlib
+from http.client import HTTPSConnection, HTTPException
 import http.server
 import json
 import math
@@ -14,6 +15,7 @@ from pathlib import Path
 import re
 import secrets
 import socket
+import ssl
 import sqlite3
 import struct
 import threading
@@ -151,6 +153,16 @@ class Provider:
         self.base_url = env.get("ANNOTATION_LLM_BASE_URL", "").rstrip("/")
         self.key = env.get("ANNOTATION_LLM_API_KEY", "")
         self.model = env.get("ANNOTATION_LLM_MODEL", "")
+        self.openai_port = None
+        if model := env.get("ANNOTATION_LLM_OPENAI_MODEL", "").strip():
+            self.base_url = "https://api.openai.com/v1"
+            self.key = (env.get("ANNOTATION_LLM_OPENAI_API_KEY") or
+                        env.get("GRASPMEMOEDU_CLIPPER_SPEECH_API_KEY", "")).strip()
+            self.model = model
+            port = env.get("GRASPMEMOEDU_CLIPPER_OPENAI_SSH_PORT", "")
+            if not self.key or not port.isascii() or not port.isdecimal() or len(port) > 5 or not 1024 <= int(port) <= 65535:
+                raise ValueError("Incomplete OpenAI vision configuration")
+            self.openai_port = int(port)
         self.extra = json.loads(env.get("ANNOTATION_LLM_EXTRA_JSON", "{}"))
         if not isinstance(self.extra, dict) or set(self.extra) - {"thinking", "reasoning_effort", "temperature", "top_p"}:
             raise ValueError("Unsupported extra provider parameters")
@@ -166,6 +178,41 @@ class Provider:
     @property
     def ready(self):
         return bool(self.base_url and self.key and self.model)
+
+    def _openai_completion(self, png, prompt, input_text, *, effort, max_tokens, timeout):
+        payload = {
+            "model": self.model, "store": False, "service_tier": "default",
+            "reasoning": {"effort": effort}, "max_output_tokens": max_tokens,
+            "input": [{"role": "system", "content": prompt}, {"role": "user", "content": [
+                {"type": "input_text", "text": input_text},
+                {"type": "input_image", "image_url": png},
+            ]}],
+        }
+        host = "api.openai.com"
+        tls = ssl.create_default_context()
+        try:
+            with contextlib.closing(HTTPSConnection(host, timeout=timeout, context=tls)) as connection:
+                with socket.create_connection(("127.0.0.1", self.openai_port), timeout) as raw:
+                    connection.sock = tls.wrap_socket(raw, server_hostname=host)
+                connection.request("POST", "/v1/responses", json.dumps(payload).encode(), {
+                    "Content-Type": "application/json", "Authorization": "Bearer " + self.key,
+                })
+                with connection.getresponse() as response:
+                    if response.status != 200:
+                        raise OSError("OpenAI returned an upstream error")
+                    raw = response.read(1024 * 1024 + 1)
+        except HTTPException as error:
+            raise OSError("Invalid OpenAI HTTP response") from error
+        if len(raw) > 1024 * 1024:
+            raise ValueError("Oversized provider response")
+        result = json.loads(raw)
+        if result.get("status") != "completed":
+            raise ValueError("Incomplete provider output")
+        return "".join(
+            part["text"]
+            for message in result["output"] if message.get("type") == "message"
+            for part in message.get("content", []) if part.get("type") == "output_text"
+        )
 
     def whitespace(self, png: str, options: dict) -> dict:
         options = validate_whiteboard_options(options)
@@ -198,18 +245,12 @@ class Provider:
                    "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": [
                        {"type": "text", "text": "Locate content blocks only."},
                        {"type": "image_url", "image_url": {"url": png}}]}]}
-        request = urllib.request.Request(endpoint, data=json.dumps(payload).encode(),
-                                        headers={"Content-Type": "application/json", "Authorization": "Bearer " + self.key}, method="POST")
-        with urllib.request.build_opener(NoRedirect).open(request, timeout=10) as response:
-            raw = response.read(1024 * 1024 + 1)
-        if len(raw) > 1024 * 1024:
-            raise ValueError("Oversized provider response")
-        choice = json.loads(raw)["choices"][0]
-        if choice.get("finish_reason") != "stop":
-            raise ValueError("Incomplete provider output")
-        content = choice["message"]["content"]
-        if not isinstance(content, str):
-            raise ValueError("Invalid provider output")
+        if self.openai_port is not None:
+            content = self._openai_completion(
+                png, prompt, "Locate content blocks only.", effort="none", max_tokens=1200, timeout=10
+            )
+        else:
+            content = self._compat_completion(endpoint, payload, timeout=10)
         content = re.sub(r"^```(?:json)?\s*", "", content.strip(), flags=re.I)
         content = re.sub(r"\s*```$", "", content).strip()
         layout = json.loads(content)
@@ -260,19 +301,14 @@ class Provider:
                    "messages": [{"role": "system", "content": PROMPTS[output_format]}, {"role": "user", "content": [
                        {"type": "text", "text": "Transcribe only the selected image."},
                        {"type": "image_url", "image_url": {"url": png}}]}]}
-        request = urllib.request.Request(endpoint, data=json.dumps(payload).encode(),
-                                         headers={"Content-Type": "application/json", "Authorization": "Bearer " + self.key}, method="POST")
-        with urllib.request.build_opener(NoRedirect).open(request, timeout=timeout) as response:
-            raw = response.read(1024 * 1024 + 1)
-        if len(raw) > 1024 * 1024:
-            raise ValueError("Oversized provider response")
-        result = json.loads(raw)
-        choice = result["choices"][0]
-        if choice.get("finish_reason") != "stop":
-            raise ValueError("Incomplete provider output")
-        value = choice["message"]["content"]
-        if not isinstance(value, str):
-            raise ValueError("Invalid provider output")
+        if self.openai_port is not None:
+            effort = "low" if output_format in {"latex", "calculator", "inlineMath", "markdown", "auto"} else "none"
+            value = self._openai_completion(
+                png, PROMPTS[output_format], "Transcribe only the selected image.",
+                effort=effort, max_tokens=4096, timeout=timeout
+            )
+        else:
+            value = self._compat_completion(endpoint, payload, timeout=timeout)
         detected_type = None
         if output_format == "auto":
             body = re.sub(r"^```(?:json)?\s*", "", value.strip(), flags=re.I)
@@ -285,6 +321,21 @@ class Provider:
                 raise ValueError("Invalid automatic transcription")
         latex = normalize_output(value, output_format, detected_type)
         return {"latex": latex, "model": self.model, **({"detectedType": detected_type} if detected_type else {})}
+
+    def _compat_completion(self, endpoint, payload, *, timeout):
+        request = urllib.request.Request(endpoint, data=json.dumps(payload).encode(),
+                                         headers={"Content-Type": "application/json", "Authorization": "Bearer " + self.key}, method="POST")
+        with urllib.request.build_opener(NoRedirect).open(request, timeout=timeout) as response:
+            raw = response.read(1024 * 1024 + 1)
+        if len(raw) > 1024 * 1024:
+            raise ValueError("Oversized provider response")
+        choice = json.loads(raw)["choices"][0]
+        if choice.get("finish_reason") != "stop":
+            raise ValueError("Incomplete provider output")
+        content = choice["message"]["content"]
+        if not isinstance(content, str):
+            raise ValueError("Invalid provider output")
+        return content
 
 
 def validate_content_boxes(blocked):
