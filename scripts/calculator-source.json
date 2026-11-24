@@ -1,8 +1,8 @@
 {
-  "commit": "b0ebee9859fe75f92f0ab82d67f24f5b34a41dc9",
+  "commit": "159f3a535e7960f809517127284a2b894f6a5217",
   "files": {
-    "calculator-engine.js": "0ac39df3374f3b2533552c331cdb9a60658a72cbf8f78e55740169c124dbce42",
-    "calculator-policy.js": "0df29c7c078456f80e173bee769ddc4044e97b6e495400b32a1a515979e99ed3",
+    "calculator-engine.js": "fe396d849206f42b3886fa960c6b17b8726b0eeef411fde9c01f8b92cd436796",
+    "calculator-policy.js": "7f8624e8ef261d8d7cbcd97370376ead71d4434d57798e8fc4dd492c6bb9ea7e",
     "vendor/calculator/advanced.mjs": "5e846486c25815c725a497d351a8e3fc6e920a993f92fd769228c1d28039153d",
     "vendor/calculator/advanced.mjs.LEGAL.txt": "e227a4ca4cb66de4627634704f6ed7529baa8c4fd9871b70c6d65305429d4884",
     "vendor/calculator/applied.mjs": "410d393c0ef65ca307709861425be36db19ee4a2dd8f658ddd73c8c68628e8f0",

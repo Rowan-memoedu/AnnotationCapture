@@ -10,7 +10,7 @@ from unittest.mock import call, patch
 import urllib.error
 import urllib.request
 
-from server import AccessStore, Gateway, Provider, PROMPTS, normalize_latex, normalize_output, blank_rectangles
+from server import AccessStore, Gateway, Provider, PROMPTS, normalize_latex, normalize_output, blank_rectangles, calculator_notation
 
 
 def png():
@@ -74,6 +74,37 @@ class GatewayTests(unittest.TestCase):
         status, value = self.request("/login", {"inviteCode": (account or self.alice)["inviteCode"]})
         self.assertEqual(status, 200)
         return value["token"]
+
+    def test_shared_formula_transcribes_with_one_prompt_and_preserves_case(self):
+        token = self.login()
+        self.upstream.content = r"\frac{X+x}{2}"
+        payload = {"png": png(), "formulaMode": "shared"}
+        for output_format, latex in (
+            ("latex", r"\frac{X+x}{2}"),
+            ("inlineMath", r"$\frac{X+x}{2}$"),
+            ("calculator", "((X+x)/(2))"),
+        ):
+            status, result = self.request("/recognize", {**payload, "outputFormat": output_format}, token)
+            self.assertEqual((status, result["latex"]), (200, latex))
+        self.assertEqual(len(self.upstream.requests), 3)
+        first, *other = [request["body"]["messages"] for request in self.upstream.requests]
+        self.assertTrue(all(messages == first for messages in other))
+
+    def test_shared_calculator_notation_keeps_grouping(self):
+        for latex, expected in (
+            (r"2x_2+\sqrt{(x+1)^2}", "2*x_2+sqrt((x+1)^(2))"),
+            (r"\frac{2}{\frac{3}{4}}", "((2)/(((3)/(4))))"),
+            (r"\log_{2}(8)+5\%", "log_2(8)+5%"),
+            (r"\operatorname{mod}(17,5)", "mod(17,5)"),
+            (r"17 \bmod 5", "17 mod 5"),
+            (r"\alpha x\leq X", "α*x<=X"),
+        ):
+            with self.subTest(latex=latex):
+                self.assertEqual(calculator_notation(latex), expected)
+        for latex in (r"\sqrt{}", r"\frac{1}", r"\int_0^1 x dx", "X+}"):
+            with self.subTest(latex=latex):
+                with self.assertRaises(ValueError):
+                    calculator_notation(latex)
 
     def test_deepseek_formula_uses_fast_mode_then_configured_fallback(self):
         provider = Provider({**self.environment, "ANNOTATION_LLM_BASE_URL": "https://api.deepseek.com",

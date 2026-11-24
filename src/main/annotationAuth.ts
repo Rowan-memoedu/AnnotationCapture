@@ -270,6 +270,11 @@ export class AnnotationAuth {
             recognize: async (png, signal, outputFormat = "latex") => {
                 const session = this.config.session();
                 if (!session) throw new Error("请先使用邀请码登录");
+                const sharedFormula =
+                    outputFormat === "latex" ||
+                    outputFormat === "calculator" ||
+                    outputFormat === "inlineMath" ||
+                    outputFormat === "markdown";
                 const response = await this.request(
                     `${this.baseUrl}/recognize`,
                     {
@@ -284,7 +289,8 @@ export class AnnotationAuth {
                                 outputFormat === "latex"
                                     ? undefined
                                     : outputFormat,
-                            provider,
+                            provider: sharedFormula ? undefined : provider,
+                            formulaMode: sharedFormula ? "shared" : undefined,
                         }),
                         signal,
                         redirect: "error",
@@ -314,7 +320,7 @@ export class AnnotationAuth {
                     model: string;
                     detectedType?: import("./formulaProvider").Recognition["detectedType"];
                 };
-                if (provider && value?.provider !== provider)
+                if (!sharedFormula && provider && value?.provider !== provider)
                     throw new Error("所选识别服务暂时不可用");
                 if (this.config.session()?.token !== session.token)
                     throw new Error("登录状态已变化，请重新识别");

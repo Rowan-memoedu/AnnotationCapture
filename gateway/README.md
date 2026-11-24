@@ -39,7 +39,7 @@ node scripts/gateway-admin.cjs configure-provider
 
 命令从用户环境变量读取，不依赖旧进程继承，不打印凭据。配置经 SSH 标准输入传输，写入服务器 root 专用的 `/etc/annotationcapture/provider.env`，仅重启网关，失败时恢复原配置。上游必须支持 `image_url` 图片消息；不支持图片的纯文本 API 无法完成公式识别。不会回退到旧 DeepSeek 配置。
 
-DeepSeek Flash 对原始 LaTeX、行内公式、Markdown 公式和 Calculator 优先走非推理模式。输出无法解析或不可读时，使用管理员配置的推理参数再试一次。
+桌面显式公式格式与网站圈选公式传入 `formulaMode: "shared"`。网关优先用已配置的 DeepSeek Flash 非推理模式转写一次 LaTeX，在本地派生行内公式、Markdown 公式和计算器表达式。未配置 DeepSeek 时，该模式使用网关默认提供方。整页空白检测使用单独的并发名额。
 
 ## 部署和限额
 

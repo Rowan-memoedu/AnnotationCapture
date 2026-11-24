@@ -46,11 +46,13 @@
 
 0.8.13 在设置中提供 OpenAI 和 DeepSeek 两种识别服务。两者使用同一个邀请码登录，切换后对下一次识别生效。
 
+0.8.14 统一桌面和网站的公式转写，计算和化简使用同一版计算引擎。
+
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.13-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.14-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 从 0.8.4 起，运行新版后自动配置当前用户的 Windows 登录任务，在登录约 10 秒后后台启动，避免普通启动项队列造成的长时间等待。截图快捷键可直接使用，单击托盘图标打开设置；右键托盘的“开机自启动”可开启或关闭。
 
@@ -160,7 +162,7 @@
 
 首次使用公式识别，在软件中输入管理员提供的个人邀请码。登录状态由 Windows 加密保存在本机，后续启动自动恢复。个人邀请码可用于自己的多台电脑；管理员可单独停用一个用户，该用户所有设备的登录随之失效。
 
-登录后可在「设置 → 识别服务」选择 OpenAI 或 DeepSeek。两种服务都由共享网关配置，用户无需填写 API Key。批注 OCR 发送手动选区内的笔迹，区域 OCR 发送选中的屏幕画面。启用自动空白识别时，还会发送页面预览供所选服务定位可用空白。网关不保存请求图片。
+明确选择公式格式时，桌面和网站使用同一套公式识别服务。识别结果保留可区分的大小写，字形两可时尽量沿用同一公式中该变量的写法。计算器和 CAS 直接使用这次转写的结果。「设置 → 识别服务」用于自动判断、文字和页面空白检测。批注 OCR 发送手动选区内的笔迹，区域 OCR 发送选中的屏幕画面。网关不保存请求图片。
 
 旧版保存的个人密钥及 DeepSeek 环境变量不会用于 0.2.0 的识别请求。离线时保留本机登录状态，服务恢复后可重新连接。
 
