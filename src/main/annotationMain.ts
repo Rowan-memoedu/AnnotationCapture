@@ -253,7 +253,11 @@ function failCapture(win: BrowserWindow, title: string, message: string) {
     showPanel();
     void dialog.showMessageBox({ type: "error", title, message });
 }
-async function capture(imagePath?: string, mode: CaptureMode = "region") {
+async function capture(
+    imagePath?: string,
+    mode: CaptureMode = "region",
+    retryOnTimeout = true,
+) {
     if (updater?.installing || quitting) return;
     if (captureSaving) {
         queuedCapture = { imagePath, mode };
@@ -271,6 +275,12 @@ async function capture(imagePath?: string, mode: CaptureMode = "region") {
         win = captureWindow!;
         const startingWindow = win;
         captureStartTimer = setTimeout(() => {
+            if (startingWindow !== captureWindow || !captureStarting) return;
+            if (retryOnTimeout) {
+                startingWindow.destroy();
+                void capture(imagePath, mode, false);
+                return;
+            }
             failCapture(
                 startingWindow,
                 "无法开始截图",

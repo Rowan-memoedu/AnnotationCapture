@@ -51,6 +51,11 @@ async function run(warm) {
         const screenshot = ipcMain._invokeHandlers.get('annotation:screenshots');
         ipcMain.removeHandler('annotation:screenshots');
         ipcMain.handle('annotation:screenshots', async (...args) => {
+            if (globalThis.stalledScreenshots > 0) {
+                globalThis.stalledScreenshots--;
+                (globalThis.stalledCaptureWindows ??= []).push(args[0].sender.id);
+                return new Promise(() => {});
+            }
             if (globalThis.failScreenshot) throw new Error('simulated screen capture failure');
             const start = performance.now(), frames = await screenshot(...args);
             globalThis.nativeSample = {captureMs:performance.now()-start, displays:frames.length,
@@ -146,7 +151,38 @@ async function verifyRecovery(panel) {
         }));
         throw new Error(`Timed out waiting for capture recovery: ${JSON.stringify(state)}`);
     };
-    await app.evaluate(() => { globalThis.failScreenshot = true; });
+    await app.evaluate(() => { globalThis.stalledScreenshots = 1; });
+    await open('region');
+    const recovered = await waitUntil(async () => {
+        const error = await app.evaluate(() => globalThis.captureError);
+        assert.equal(error, undefined, 'a single timeout should recover without a dialog');
+        const page = currentCapture();
+        if (page && await page.locator('body[data-ac-ready=true]').count().catch(error => {
+            if (!page.isClosed()) throw error;
+            return 0;
+        })) return page;
+    });
+    assert.equal(await recovered.locator('#draw_free_pencil.select').count(), 0, 'the retry retains region mode');
+    const recoveredClosed = recovered.waitForEvent('close');
+    await recovered.keyboard.down('Escape').catch(error => {
+        if (!recovered.isClosed()) throw error;
+    });
+    await recoveredClosed;
+
+    await app.evaluate(() => {
+        globalThis.stalledScreenshots = 2;
+        globalThis.stalledCaptureWindows = [];
+    });
+    await open('full');
+    assert.match(await waitUntil(() => app.evaluate(() => globalThis.captureError)), /截图等待超时/);
+    const attempts = await app.evaluate(() => globalThis.stalledCaptureWindows);
+    assert.equal(attempts.length, 2, 'two stalled attempts produce a final error');
+    assert.notEqual(attempts[0], attempts[1], 'the retry uses a fresh renderer');
+
+    await app.evaluate(() => {
+        globalThis.failScreenshot = true;
+        globalThis.captureError = undefined;
+    });
     await open('full');
     assert.match(await waitUntil(() => app.evaluate(() => globalThis.captureError)), /simulated screen capture failure/);
     await app.evaluate(() => {
