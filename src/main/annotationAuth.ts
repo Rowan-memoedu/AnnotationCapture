@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import type { LoginSession, LoginState } from "../../lib/annotation";
+import {
+    type LoginSession,
+    type LoginState,
+    type OcrProvider,
+    ocrProviders,
+} from "../../lib/annotation";
 import {
     type WhiteboardDetection,
     type WhiteboardSettings,
@@ -15,7 +20,14 @@ export const serviceUrl =
 type SessionStore = Pick<
     AnnotationConfig,
     "session" | "saveSession" | "clearSession"
->;
+> &
+    Partial<Pick<AnnotationConfig, "public">>;
+
+function advertisedOcrProviders(input: unknown) {
+    return Array.isArray(input)
+        ? ocrProviders.filter((provider) => input.includes(provider))
+        : undefined;
+}
 
 export class AnnotationAuth {
     private state: LoginState;
@@ -78,6 +90,7 @@ export class AnnotationAuth {
             );
         const value = (await response.json()) as LoginSession & {
             providerReady?: boolean;
+            ocrProviders?: unknown;
         };
         if (
             !value ||
@@ -99,6 +112,7 @@ export class AnnotationAuth {
             verified: true,
             label: value.label,
             providerReady: value.providerReady === true,
+            ocrProviders: advertisedOcrProviders(value.ocrProviders),
             message: value.providerReady
                 ? "已登录，识别服务可用"
                 : "已登录，统一 API 待配置",
@@ -137,6 +151,7 @@ export class AnnotationAuth {
                 const value = (await response.json()) as {
                     label: string;
                     providerReady: boolean;
+                    ocrProviders?: unknown;
                 };
                 if (this.config.session()?.token !== session.token)
                     return this.public();
@@ -145,6 +160,7 @@ export class AnnotationAuth {
                     verified: true,
                     label: session.label,
                     providerReady: value.providerReady === true,
+                    ocrProviders: advertisedOcrProviders(value.ocrProviders),
                     message: value.providerReady
                         ? "已登录，识别服务可用"
                         : "已登录，统一 API 待配置",
@@ -174,8 +190,10 @@ export class AnnotationAuth {
         const session = this.config.session();
         if (!session) throw new Error("请先使用邀请码登录");
         signal.throwIfAborted();
+        const provider = this.config.public?.().ocrProvider;
         const key = createHash("sha256")
             .update(session.token)
+            .update(provider || "")
             .update(JSON.stringify(options))
             .update(png)
             .digest("hex");
@@ -194,7 +212,7 @@ export class AnnotationAuth {
                     Authorization: `Bearer ${session.token}`,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ png, options }),
+                body: JSON.stringify({ png, options, provider }),
                 signal: AbortSignal.timeout(12_000),
                 redirect: "error",
             }).then(async (response) => {
@@ -202,9 +220,13 @@ export class AnnotationAuth {
                     throw new Error(
                         `空白区域识别暂时不可用（HTTP ${response.status}），将使用中央白板`,
                     );
-                const value = (await response.json()) as WhiteboardDetection;
+                const value = (await response.json()) as WhiteboardDetection & {
+                    provider?: OcrProvider;
+                };
                 if (this.config.session()?.token !== session.token)
                     throw new Error("登录状态已变化");
+                if (provider && value.provider !== provider)
+                    throw new Error("所选识别服务暂时不可用");
                 whiteboardRects(value.rects, options.maxRects, 10000, 10000);
                 if (value.unprotected)
                     whiteboardRects(value.unprotected, 20, 10000, 10000);
@@ -243,6 +265,7 @@ export class AnnotationAuth {
     }
     provider(): FormulaProvider | null {
         if (!this.config.session()) return null;
+        const provider = this.config.public?.().ocrProvider;
         return {
             recognize: async (png, signal, outputFormat = "latex") => {
                 const session = this.config.session();
@@ -255,11 +278,14 @@ export class AnnotationAuth {
                             Authorization: `Bearer ${session.token}`,
                             "Content-Type": "application/json",
                         },
-                        body: JSON.stringify(
-                            outputFormat === "latex"
-                                ? { png }
-                                : { png, outputFormat },
-                        ),
+                        body: JSON.stringify({
+                            png,
+                            outputFormat:
+                                outputFormat === "latex"
+                                    ? undefined
+                                    : outputFormat,
+                            provider,
+                        }),
                         signal,
                         redirect: "error",
                     },
@@ -283,10 +309,13 @@ export class AnnotationAuth {
                                   : "识别服务调用失败，可重试",
                     );
                 const value = (await response.json()) as {
+                    provider?: OcrProvider;
                     latex: string;
                     model: string;
                     detectedType?: import("./formulaProvider").Recognition["detectedType"];
                 };
+                if (provider && value?.provider !== provider)
+                    throw new Error("所选识别服务暂时不可用");
                 if (this.config.session()?.token !== session.token)
                     throw new Error("登录状态已变化，请重新识别");
                 if (

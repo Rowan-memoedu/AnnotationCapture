@@ -12,9 +12,14 @@ import type {
     FormulaFont,
     LassoRule,
     LoginSession,
+    OcrProvider,
     PublicConfig,
 } from "../../lib/annotation";
-import { type OutputFormat, outputFormats } from "../../lib/annotation";
+import {
+    type OutputFormat,
+    ocrProviders,
+    outputFormats,
+} from "../../lib/annotation";
 import {
     type WhiteboardSettings,
     whiteboardSettings,
@@ -34,6 +39,7 @@ type StoredConfig = {
     scribbleEnabled: boolean;
     showMagnifier: boolean;
     outputFormat: OutputFormat;
+    ocrProvider?: OcrProvider;
     formulaFont: FormulaFont;
     lassoRule: LassoRule;
     archiveRetentionDays: number;
@@ -83,6 +89,11 @@ export class AnnotationConfig {
             }
         }
         this.config.whiteboard = whiteboardSettings(this.config.whiteboard);
+        if (
+            this.config.ocrProvider !== undefined &&
+            !ocrProviders.includes(this.config.ocrProvider)
+        )
+            delete this.config.ocrProvider;
     }
     session(): LoginSession | null {
         if (!this.config.encryptedSession) return null;
@@ -117,6 +128,7 @@ export class AnnotationConfig {
             scribbleEnabled: this.config.scribbleEnabled,
             showMagnifier: this.config.showMagnifier,
             outputFormat: this.config.outputFormat,
+            ocrProvider: this.config.ocrProvider,
             formulaFont: this.config.formulaFont,
             lassoRule: this.config.lassoRule,
             archiveRetentionDays: this.config.archiveRetentionDays,
@@ -188,6 +200,11 @@ export class AnnotationConfig {
         )
             throw new Error("识别输出格式无效");
         if (
+            input.ocrProvider !== undefined &&
+            !ocrProviders.includes(input.ocrProvider)
+        )
+            throw new Error("识别服务无效");
+        if (
             input.penWidth !== undefined &&
             (!Number.isInteger(input.penWidth) ||
                 input.penWidth < 1 ||
@@ -211,6 +228,7 @@ export class AnnotationConfig {
                 input.scribbleEnabled ?? this.config.scribbleEnabled,
             showMagnifier: input.showMagnifier ?? this.config.showMagnifier,
             outputFormat: input.outputFormat ?? this.config.outputFormat,
+            ocrProvider: input.ocrProvider ?? this.config.ocrProvider,
             formulaFont: input.formulaFont ?? this.config.formulaFont,
             lassoRule: input.lassoRule ?? this.config.lassoRule,
             archiveRetentionDays:

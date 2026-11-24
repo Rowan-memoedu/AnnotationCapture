@@ -72,6 +72,8 @@ export type FormulaResult = {
     model?: string;
     durationMs?: number;
 };
+export const ocrProviders = ["openai", "deepseek"] as const;
+export type OcrProvider = (typeof ocrProviders)[number];
 export type PublicConfig = {
     whiteboard: WhiteboardSettings;
     archiveRoot: string;
@@ -85,6 +87,7 @@ export type PublicConfig = {
     scribbleEnabled: boolean;
     showMagnifier: boolean;
     outputFormat: OutputFormat;
+    ocrProvider?: OcrProvider;
     formulaFont: FormulaFont;
     lassoRule: LassoRule;
     archiveRetentionDays: number;
@@ -96,6 +99,7 @@ export type LoginState = {
     verified: boolean;
     label: string;
     providerReady: boolean;
+    ocrProviders?: OcrProvider[];
     message: string;
 };
 export type ConfigInput = {
@@ -111,6 +115,7 @@ export type ConfigInput = {
     scribbleEnabled?: boolean;
     showMagnifier?: boolean;
     outputFormat?: OutputFormat;
+    ocrProvider?: OcrProvider;
     formulaFont?: FormulaFont;
     lassoRule?: LassoRule;
     archiveRetentionDays?: number;

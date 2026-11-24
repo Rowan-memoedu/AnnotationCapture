@@ -20,6 +20,8 @@ node scripts/gateway-admin.cjs revoke '<account-id>'
 
 同机部署 GraspMemoEdu 时可使用其 OpenAI SSH 转发。在转发和现有 OpenAI 环境文件均已核验的服务器上，将 `90-openai-vision.conf` 安装到 `/etc/systemd/system/annotationcapture.service.d/`，重新加载 systemd 并重启识别网关。网关使用该转发的回环端口连接 OpenAI，并校验 OpenAI 的 TLS 证书。明确选择公式或计算器格式时使用 Fast 档，其余请求使用标准档。需要独立密钥时，可通过网关的私密环境文件设置 `ANNOTATION_LLM_OPENAI_API_KEY`。移走此 drop-in 并重启网关即可恢复原 provider.env 配置。客户端继续用个人会话登录。
 
+OpenAI 与 DeepSeek 都配置好后，0.8.13 的设置面板会显示两种识别服务。OpenAI 是默认服务，DeepSeek 使用现有 `provider.env`。客户端可以为 `/recognize` 和 `/whitespace` 显式指定 `provider` 为 `openai` 或 `deepseek`。两种服务共用原会话与限额，所选服务不可用时由客户端提示重试。
+
 使用 DeepSeek 时，只需填写 Windows 用户环境变量 `ANNOTATION_LLM_API_KEY`。管理命令默认使用 `https://api.deepseek.com`、支持图片的 `deepseek-flash` 及低强度推理。以下变量可覆盖默认值，用于调整服务：
 
 | 变量 | 内容 |

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { LoginSession } from "../../lib/annotation";
+import type {
+    LoginSession,
+    OcrProvider,
+    PublicConfig,
+} from "../../lib/annotation";
 import { whiteboardDefaults } from "../../lib/whiteboard";
 import { AnnotationAuth } from "../../src/main/annotationAuth";
 
@@ -8,7 +12,11 @@ const session: LoginSession = {
     accountId: "fixture-account",
     label: "测试用户",
 };
-function fixture(initial: LoginSession | null, request: typeof fetch) {
+function fixture(
+    initial: LoginSession | null,
+    request: typeof fetch,
+    provider?: () => OcrProvider,
+) {
     let current = initial;
     const config = {
         session: () => current,
@@ -18,6 +26,7 @@ function fixture(initial: LoginSession | null, request: typeof fetch) {
         clearSession: vi.fn(() => {
             current = null;
         }),
+        public: () => ({ ocrProvider: provider?.() }) as PublicConfig,
     };
     const auth = new AnnotationAuth(
         config,
@@ -29,6 +38,44 @@ function fixture(initial: LoginSession | null, request: typeof fetch) {
 }
 
 describe("invitation sessions", () => {
+    it("uses the selected gateway provider and separates page caches", async () => {
+        let selected: OcrProvider = "openai";
+        const request = vi.fn(async (url: string, _options?: RequestInit) => {
+            if (url.endsWith("/session"))
+                return Response.json({
+                    label: session.label,
+                    providerReady: true,
+                    ocrProviders: ["openai", "deepseek", "unknown"],
+                });
+            return Response.json({
+                rects: [],
+                latex: "x=1",
+                model: "deepseek-flash",
+                provider: JSON.parse(String(_options?.body)).provider,
+            });
+        });
+        const { auth } = fixture(
+            session,
+            request as typeof fetch,
+            () => selected,
+        );
+        expect((await auth.refresh()).ocrProviders).toEqual([
+            "openai",
+            "deepseek",
+        ]);
+        const signal = new AbortController().signal;
+        await auth.detectWhitespace("fixture", whiteboardDefaults, signal);
+        selected = "deepseek";
+        await auth.detectWhitespace("fixture", whiteboardDefaults, signal);
+        await auth.provider()!.recognize("fixture", signal);
+        expect(
+            request.mock.calls
+                .slice(1)
+                .map(
+                    ([, options]) => JSON.parse(String(options?.body)).provider,
+                ),
+        ).toEqual(["openai", "deepseek", "deepseek"]);
+    });
     it("reuses page detections, separating changed preferences and sessions", async () => {
         const request = vi.fn(async () =>
             Response.json({

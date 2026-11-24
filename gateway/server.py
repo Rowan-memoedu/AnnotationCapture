@@ -148,13 +148,14 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class Provider:
-    def __init__(self, environment=None):
+    def __init__(self, environment=None, *, use_openai=True):
         env = os.environ if environment is None else environment
         self.base_url = env.get("ANNOTATION_LLM_BASE_URL", "").rstrip("/")
         self.key = env.get("ANNOTATION_LLM_API_KEY", "")
         self.model = env.get("ANNOTATION_LLM_MODEL", "")
         self.openai_port = None
-        if model := env.get("ANNOTATION_LLM_OPENAI_MODEL", "").strip():
+        model = env.get("ANNOTATION_LLM_OPENAI_MODEL", "").strip() if use_openai else ""
+        if model:
             self.base_url = "https://api.openai.com/v1"
             self.key = (env.get("ANNOTATION_LLM_OPENAI_API_KEY") or
                         env.get("GRASPMEMOEDU_CLIPPER_SPEECH_API_KEY", "")).strip()
@@ -471,12 +472,23 @@ class Gateway(http.server.ThreadingHTTPServer):
     def __init__(self, address, store, provider, environment=None):
         env = os.environ if environment is None else environment
         self.store, self.provider = store, provider
+        self.ocr_providers = {}
+        if provider.ready and provider.openai_port is not None:
+            self.ocr_providers["openai"] = provider
+            configured = Provider(env, use_openai=False)
+        else:
+            configured = provider
+        if configured.ready and urllib.parse.urlparse(configured.base_url).hostname == "api.deepseek.com":
+            self.ocr_providers["deepseek"] = configured
         self.limiter = RateLimiter()
         self.recognitions = threading.BoundedSemaphore(2)
         self.connections = threading.BoundedSemaphore(32)
         self.daily_global = int(env.get("ANNOTATION_DAILY_GLOBAL", "5000"))
         self.daily_account = int(env.get("ANNOTATION_DAILY_ACCOUNT", "1000"))
         super().__init__(address, Handler)
+
+    def provider_status(self):
+        return {"providerReady": self.provider.ready, "ocrProviders": list(self.ocr_providers)}
 
     def process_request(self, request, client_address):
         if not self.connections.acquire(blocking=False):
@@ -537,7 +549,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(200, {"status": "ok"})
         if self.path == "/session":
             account = self.account()
-            return self.send_json(200, {**account, "providerReady": self.server.provider.ready}) if account else self.send_json(401, {"error": "unauthorized"})
+            return self.send_json(200, {**account, **self.server.provider_status()}) if account else self.send_json(401, {"error": "unauthorized"})
         self.send_json(404, {"error": "not_found"})
 
     def do_POST(self):
@@ -551,7 +563,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not isinstance(code, str) or not 1 <= len(code.strip()) <= 256:
                     raise ValueError("Invalid invitation")
                 session = self.server.store.login(code.strip())
-                return self.send_json(200, {**session, "providerReady": self.server.provider.ready}) if session else self.send_json(401, {"error": "unauthorized"})
+                return self.send_json(200, {**session, **self.server.provider_status()}) if session else self.send_json(401, {"error": "unauthorized"})
             if self.path not in ("/recognize", "/whitespace"):
                 return self.send_json(404, {"error": "not_found"})
             account = self.account()
@@ -566,16 +578,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 raise ValueError("Unsupported output format")
             validate_png(png)
             options = validate_whiteboard_options(value.get("options", {})) if self.path == "/whitespace" else None
-            if not self.server.provider.ready:
+            provider, selection = self.server.provider, None
+            if "provider" in value:
+                selection = value["provider"]
+                if not isinstance(selection, str) or selection not in ("openai", "deepseek"):
+                    raise ValueError("Unsupported OCR provider")
+                provider = self.server.ocr_providers.get(selection)
+            if provider is None or not provider.ready:
                 return self.send_json(503, {"error": "provider_unconfigured"})
             if not self.server.recognitions.acquire(blocking=False):
                 return self.send_json(429, {"error": "busy"})
             try:
                 if not self.server.store.reserve_usage(account["accountId"], self.server.daily_global, self.server.daily_account):
                     return self.send_json(429, {"error": "daily_limit"})
-                result = self.server.provider.whitespace(png, options) if options is not None else self.server.provider.recognize(png, output_format)
+                result = provider.whitespace(png, options) if options is not None else provider.recognize(png, output_format)
                 if not self.account():
                     return self.send_json(401, {"error": "unauthorized"})
+                if selection is not None:
+                    result = {**result, "provider": selection}
                 return self.send_json(200, result)
             finally:
                 self.server.recognitions.release()
