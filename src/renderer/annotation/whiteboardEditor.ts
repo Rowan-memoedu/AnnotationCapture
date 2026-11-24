@@ -793,7 +793,19 @@ async function snapshotSelection() {
         x: left,
         y: Math.min(layer.height - 2, Math.max(24, bottom)),
     };
-    return { id, png: await encodePng(cropped) };
+    const [index] = selected;
+    const item = selected.size === 1 ? items[index] : undefined;
+    const text = item?.kind === "text" ? item.text.trim() : undefined;
+    const expression =
+        text &&
+        text.length <= 64 &&
+        /^[\p{Script=Greek}a-z0-9_+*/^%.,()[\]=!<>×÷−≤≥≠√ \t-]+$/iu.test(text) &&
+        !/[\p{L}\d][ \t]+[\p{L}\d]/u.test(text) &&
+        (/^[\p{Script=Greek}a-z](?:_\d+)?$/iu.test(text) ||
+            /[0-9_+*/^%=<>×÷−≤≥≠√()-]/u.test(text))
+            ? text
+            : undefined;
+    return { id, png: await encodePng(cropped), ...(expression ? { expression } : {}) };
 }
 
 function replaceSelection(value: { id: number; text: string }) {
