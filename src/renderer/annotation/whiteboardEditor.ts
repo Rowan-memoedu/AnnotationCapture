@@ -51,7 +51,9 @@ let start: Position | undefined;
 let movement: Position | undefined;
 let resizing: Resize | undefined;
 let frame = 0;
-const english = new URL(location.href).searchParams.get("lang") === "en";
+const english =
+    document.documentElement.lang === "en" ||
+    new URL(location.href).searchParams.get("lang") === "en";
 
 function button(
     zh: string,
