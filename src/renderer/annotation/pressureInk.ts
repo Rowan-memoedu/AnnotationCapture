@@ -1,13 +1,11 @@
-import { FabricObject, Path, type TSimplePathData } from "fabric";
-import { getStroke } from "perfect-freehand";
+import { FabricObject, Path } from "fabric";
+import { type PressureInk, pressurePathData } from "./pressureGeometry";
 
-export type PressurePoint = [x: number, y: number, pressure: number];
-export type PressureInk = {
-    version: 1;
-    points: PressurePoint[];
-    width: number;
-    sensitivity: number;
-};
+export {
+    type PressureInk,
+    type PressurePoint,
+    pressurePathData,
+} from "./pressureGeometry";
 export type PressurePath = Path & { acPressure: PressureInk };
 FabricObject.customProperties = [
     ...FabricObject.customProperties,
@@ -16,23 +14,6 @@ FabricObject.customProperties = [
 
 export function isPressurePath(object: FabricObject): object is PressurePath {
     return object instanceof Path && "acPressure" in object;
-}
-
-export function pressurePathData(ink: PressureInk): TSimplePathData {
-    const outline = getStroke(ink.points, {
-        size: ink.width,
-        thinning: (ink.sensitivity / 100) * 0.9,
-        simulatePressure: false,
-        streamline: 0,
-        smoothing: 0.5,
-        last: true,
-    });
-    if (!outline.length) return [];
-    return [
-        ["M", outline[0][0], outline[0][1]],
-        ...outline.slice(1).map(([x, y]): ["L", number, number] => ["L", x, y]),
-        ["Z"],
-    ];
 }
 
 export function createPressurePath(ink: PressureInk, color: string) {
