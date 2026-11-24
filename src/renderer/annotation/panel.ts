@@ -3,6 +3,7 @@ import type {
     AppState,
     FormulaFont,
     FormulaResult,
+    OcrProvider,
 } from "../../../lib/annotation";
 import {
     type OutputFormat,
@@ -192,6 +193,16 @@ const outputFormat = ele("select")
                 .add(t(outputFormatLabels[format])),
         ),
     );
+const ocrProvider = ele("select")
+    .class("ac-field")
+    .attr({ id: "ac-ocr-provider", disabled: true })
+    .add([
+        ele("option").attr({ value: "openai" }).add("OpenAI"),
+        ele("option").attr({ value: "deepseek" }).add("DeepSeek"),
+    ]);
+const ocrProviderSetting = ele("label")
+    .style({ display: "none", flexDirection: "column", gap: "6px" })
+    .add([t("识别服务"), ocrProvider]);
 const formulaFont = ele("select")
     .class("ac-field")
     .attr({ id: "ac-formula-font", ariaLabel: t("公式字体") })
@@ -403,6 +414,7 @@ root.add([
                 .add([showMagnifier, t("批注时显示放大框")]),
             p(t("默认识别输出格式")),
             outputFormat,
+            ocrProviderSetting,
             whiteboardOptions,
             p(
                 t(
@@ -463,6 +475,9 @@ root.add([
                                 showMagnifier: showMagnifier.el.checked,
                                 outputFormat: outputFormat.el
                                     .value as OutputFormat,
+                                ocrProvider: ocrProvider.el.disabled
+                                    ? undefined
+                                    : (ocrProvider.el.value as OcrProvider),
                             });
                             await refresh(true);
                             pressureSettings.el.dataset.state = "success";
@@ -618,6 +633,20 @@ async function refresh(settings = false) {
         summary.el.textContent = `${state.config.fullShortcut || t("点击按钮开始")} ${t("全屏批注")} · ${state.config.shortcut || t("点击按钮开始")} ${t("区域截图")} · ${t("Esc / Ctrl+Enter 归档退出；Ctrl+Shift+Enter 选择公式")}`;
         if (state.shortcutError) notice.el.textContent = state.shortcutError;
     }
+    const availableProviders = state.login.ocrProviders ?? [];
+    const canChooseProvider =
+        state.login.verified &&
+        (availableProviders.length > 1 ||
+            (availableProviders.length === 1 && !!state.config.ocrProvider));
+    if (settings || ocrProvider.el.disabled)
+        ocrProvider.el.value =
+            state.config.ocrProvider ?? availableProviders[0] ?? "openai";
+    for (const option of Array.from(ocrProvider.el.options))
+        option.disabled = !availableProviders.includes(
+            option.value as OcrProvider,
+        );
+    ocrProvider.el.disabled = !canChooseProvider;
+    ocrProviderSetting.el.style.display = canChooseProvider ? "flex" : "none";
     loginStatus.el.textContent = state.login.message;
     retentionStatus.el.textContent = state.archiveCleanup;
     accountLabel.el.textContent = state.login.loggedIn

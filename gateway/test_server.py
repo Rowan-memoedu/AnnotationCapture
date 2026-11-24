@@ -123,6 +123,21 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.request("/recognize", {"png": png()})[0], 401)
         self.assertEqual(self.upstream.requests, [])
 
+    def test_explicit_provider_shares_session_and_updates_both_image_routes(self):
+        self.gateway.ocr_providers["deepseek"] = self.provider
+        token = self.login()
+        status, session = self.request("/session", token=token)
+        self.assertEqual((status, session["ocrProviders"]), (200, ["deepseek"]))
+        self.assertEqual(self.request("/recognize", {"png": png(), "provider": "openai"}, token)[0], 503)
+        self.assertEqual(self.request("/recognize", {"png": png(), "provider": "other"}, token)[0], 400)
+        self.assertEqual(self.upstream.requests, [])
+        status, recognized = self.request("/recognize", {"png": png(), "provider": "deepseek"}, token)
+        self.assertEqual((status, recognized["provider"]), (200, "deepseek"))
+        self.upstream.content = '{"regions":[],"panels":[],"blocked":[],"taskbar":[],"chrome":[]}'
+        status, layout = self.request("/whitespace", {"png": png(), "provider": "deepseek"}, token)
+        self.assertEqual((status, layout["provider"]), (200, "deepseek"))
+        self.assertEqual(len(self.upstream.requests), 2)
+
     def test_calculator_transcribes_without_evaluating(self):
         token = self.login()
         self.upstream.content = "mod(17,5)+sqrt(4)"
