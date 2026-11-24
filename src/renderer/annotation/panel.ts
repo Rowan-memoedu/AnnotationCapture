@@ -139,6 +139,7 @@ const pressureEnabled = input("checkbox").attr({
     id: "ac-pressure-enabled",
     ariaLabel: t("启用笔压"),
 });
+const scribbleEnabled = input("checkbox").attr({ id: "ac-scribble-enabled" });
 const pressureSensitivity = input("number")
     .class("ac-field")
     .attr({
@@ -389,6 +390,9 @@ root.add([
             p(t("默认画笔粗细")),
             penWidth,
             pressureSettings,
+            ele("label")
+                .class("ac-pressure-toggle")
+                .add([scribbleEnabled, t("涂抹删除")]),
             p(t("自由圈选规则")),
             lassoRule,
             p(t("同时用于 D 键圈选和按住 D 清除；选中或删除整条笔迹。")),
@@ -450,6 +454,7 @@ root.add([
                                 penWidth: Number(penWidth.el.value),
                                 pressureEnabled: pressureEnabled.el.checked,
                                 pressureSensitivity: sensitivity,
+                                scribbleEnabled: scribbleEnabled.el.checked,
                                 formulaFont: formulaFont.el
                                     .value as FormulaFont,
                                 lassoRule: lassoRule.el.value as
@@ -604,6 +609,7 @@ async function refresh(settings = false) {
         penWidth.el.value = String(state.config.penWidth);
         pressureEnabled.el.checked = state.config.pressureEnabled;
         pressureSensitivity.el.value = String(state.config.pressureSensitivity);
+        scribbleEnabled.el.checked = state.config.scribbleEnabled;
         updatePressureSettings();
         formulaFont.el.value = state.config.formulaFont;
         lassoRule.el.value = state.config.lassoRule;

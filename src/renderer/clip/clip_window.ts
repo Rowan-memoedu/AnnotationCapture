@@ -49,6 +49,7 @@ let pendingCanvasWork = Promise.resolve();
 let entryMode: CaptureMode = "region";
 let showAnnotationMagnifier = false;
 let pressureOptions = { pressureEnabled: true, pressureSensitivity: 50 };
+let scribbleEnabled = true;
 let formulaInk: ReturnType<typeof installFormulaInk> | undefined;
 let inkSelection: ReturnType<typeof installInkSelection> | undefined;
 let whiteboard: ReturnType<typeof installWhiteboard> | undefined;
@@ -4278,6 +4279,7 @@ async function initializeCapture(
     formulaInk?.setFont(config.formulaFont);
     inkSelection?.setRule(config.lassoRule);
     pressureOptions = config;
+    scribbleEnabled = config.scribbleEnabled;
     freeColor = config.penColor;
     shapePro.free = {
         ...shapePro.free,
@@ -5341,9 +5343,18 @@ setEditType("select", editType.select);
 fabricCanvas.on("object:added", ({ target }) => {
     target.set("erasable", true);
 });
-fabricCanvas.on("path:created", ({ path }) =>
-    formulaInk ? formulaInk.pathCreated(path) : hisPush(),
-);
+fabricCanvas.on("path:created", ({ path }) => {
+    const brush = fabricCanvas.freeDrawingBrush;
+    if (
+        scribbleEnabled &&
+        !formulaInk?.isActive() &&
+        brush instanceof PressureBrush &&
+        brush.eraseScribble(path)
+    )
+        hisPush();
+    else if (formulaInk) formulaInk.pathCreated(path);
+    else hisPush();
+});
 const completion = installCompletion(
     async (formula) => {
         whiteboard?.cancelChoice();

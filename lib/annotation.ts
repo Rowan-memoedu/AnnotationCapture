@@ -78,6 +78,7 @@ export type PublicConfig = {
     penWidth: number;
     pressureEnabled: boolean;
     pressureSensitivity: number;
+    scribbleEnabled: boolean;
     showMagnifier: boolean;
     outputFormat: OutputFormat;
     formulaFont: FormulaFont;
@@ -103,6 +104,7 @@ export type ConfigInput = {
     penWidth?: number;
     pressureEnabled?: boolean;
     pressureSensitivity?: number;
+    scribbleEnabled?: boolean;
     showMagnifier?: boolean;
     outputFormat?: OutputFormat;
     formulaFont?: FormulaFont;

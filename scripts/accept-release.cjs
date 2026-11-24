@@ -51,6 +51,7 @@ async function extract() {
         { script: 'portable-smoke' },
         { script: 'shortcuts-acceptance' },
         { script: 'settings-acceptance' },
+        { script: 'scribble-acceptance' },
         ...['1','1.5','2'].map(scale=>({script:'whiteboard-acceptance',scale})),
         { script: 'capture-latency-acceptance' },
         ...(process.env.ANNOTATION_INVITE_FILE ? [{script:'whiteboard-live'}] : []),
