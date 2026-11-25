@@ -108,6 +108,11 @@ export class FormulaJobs {
             result.detectedType = recognized.detectedType;
             result.model = recognized.model;
             if (useCalculator) {
+                if (recognized.calculatorSupported === false) {
+                    result.status = "review";
+                    result.message = "已识别原式，但计算器暂不支持这种写法";
+                    return result;
+                }
                 try {
                     result.latex = await calculateWhiteboardFormula(
                         recognized.latex,

@@ -106,6 +106,46 @@ class GatewayTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     calculator_notation(latex)
 
+    def test_matrix_notation_preserves_rows_columns_and_cell_structure(self):
+        cases = {
+            r"\begin{pmatrix}1\\-2\\3\end{pmatrix}-\begin{bmatrix}4\\5\\6\end{bmatrix}":
+                "[[1],[-2],[3]]-[[4],[5],[6]]",
+            r"\left[\begin{array}{cr}\frac{1}{2}&2\\3&-4\\\end{array}\right]":
+                "([[((1)/(2)),2],[3,-4]])",
+            r"2\begin{smallmatrix}1&x_2\cr 0&3\end{smallmatrix}": "2*[[1,x_2],[0,3]]",
+              r"\begin{aligned}\begin{pmatrix}-2\\0\end{pmatrix}&+0,95\begin{pmatrix}0,3\\0{,}1\end{pmatrix}\\&-\frac{1}{20}\begin{pmatrix}1\\3\end{pmatrix}\cdot2(-2)\end{aligned}":
+                  "[[-2],[0]]+0.95*[[0.3],[0.1]]-((1)/(20))*[[1],[3]]*2*(-2)",
+              r"0{,}75\cdot\begin{bmatrix}1,25\\-0,4\end{bmatrix}": "0.75*[[1.25],[-0.4]]",
+              r"\operatorname{mod}(17,5)": "mod(17,5)",
+              r"\begin{pmatrix}2x\\3x^2-2x\end{pmatrix}-y\begin{pmatrix}5\frac{x}{y}\\6x\end{pmatrix}":
+                  "[[2*x],[3*x^(2)-2*x]]-y*[[5*((x)/(y))],[6*x]]",
+        }
+        for latex, expected in cases.items():
+            with self.subTest(latex=latex):
+                self.assertEqual(calculator_notation(latex), expected)
+        for latex in (
+            r"\begin{matrix}1&2\\3\end{matrix}",
+            r"\begin{matrix}1&\\2&3\end{matrix}",
+            r"\begin{matrix}1\end{bmatrix}",
+              r"\begin{matrix}1,2,3\\4\end{matrix}",
+            r"\begin{vmatrix}1&2\\3&4\end{vmatrix}",
+              r"\begin{aligned}1+2\\3+4\end{aligned}",
+              r"\begin{gathered}1+2\\x=4\end{gathered}",
+        ):
+            with self.subTest(latex=latex), self.assertRaises(ValueError):
+                calculator_notation(latex)
+
+    def test_shared_calculator_distinguishes_unreadable_from_unsupported(self):
+        provider = self.gateway.provider
+        with patch.object(provider, "_compat_completion", return_value=r"\int_0^1 x\,dx") as upstream:
+            result = provider.recognize_formula(png(), "calculator")
+            self.assertEqual(result["latex"], r"\int_0^1 x\,dx")
+            self.assertIs(result["calculatorSupported"], False)
+            upstream.assert_called_once()
+        with patch.object(provider, "_compat_completion", return_value=r"\text{UNREADABLE}"):
+            with self.assertRaises(ValueError):
+                provider.recognize_formula(png(), "calculator")
+
     def test_deepseek_formula_uses_fast_mode_then_configured_fallback(self):
         provider = Provider({**self.environment, "ANNOTATION_LLM_BASE_URL": "https://api.deepseek.com",
                              "ANNOTATION_LLM_MODEL": "deepseek-flash",

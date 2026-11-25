@@ -6,7 +6,7 @@ type SharedCalculator = {
     calculateSelectedFormula: (input: {
         expression: string;
         cas: boolean;
-    }) => Promise<{ text: string }>;
+    }) => Promise<{ text: string; nonZero?: string[] }>;
 };
 
 async function calculatorEngine() {
@@ -29,8 +29,14 @@ export async function calculateWhiteboardFormula(
 ) {
     try {
         const engine = await calculatorEngine();
-        return (await engine.calculateSelectedFormula({ expression, cas }))
-            .text;
+        const { text, nonZero } = await engine.calculateSelectedFormula({
+            expression,
+            cas,
+        });
+        const conditions = nonZero?.map((divisor) => `(${divisor}) ≠ 0`);
+        return conditions?.length
+            ? `${text}（当 ${conditions.join("，")}）`
+            : text;
     } catch {
         throw new Error(
             cas
