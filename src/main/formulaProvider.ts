@@ -3,6 +3,7 @@ import type { OutputFormat } from "../../lib/annotation";
 export type Recognition = {
     latex: string;
     model: string;
+    calculatorSupported?: boolean;
     detectedType?: "text" | "markdown" | "mermaid" | "formula";
 };
 export type FormulaProvider = {

@@ -318,6 +318,7 @@ export class AnnotationAuth {
                     provider?: OcrProvider;
                     latex: string;
                     model: string;
+                    calculatorSupported?: boolean;
                     detectedType?: import("./formulaProvider").Recognition["detectedType"];
                 };
                 if (!sharedFormula && provider && value?.provider !== provider)
@@ -344,6 +345,9 @@ export class AnnotationAuth {
                         value.detectedType,
                     ),
                     model: value.model,
+                    ...(value.calculatorSupported === false
+                        ? { calculatorSupported: false }
+                        : {}),
                     ...(value.detectedType
                         ? { detectedType: value.detectedType }
                         : {}),
