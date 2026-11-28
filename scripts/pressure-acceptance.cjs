@@ -125,6 +125,43 @@ async function lasso(page, points) {
     assert.ok(Math.abs(mixed.canvas.objects[0].acPressure.points[0][2] - 0.1) < 0.00001);
     checks.push({ name: 'real pressure changes width; mouse stays equal; undo/redo and JSON', widths });
 
+    page = await open();
+    await page.locator('.upper-canvas').evaluate(canvas => {
+        const emit = (type, x, y, buttons) => canvas.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, isPrimary: false, pointerId: 61, pointerType: 'pen', clientX: x, clientY: y,
+            button: type === 'pointermove' ? -1 : 0, buttons, pressure: buttons ? 0.8 : 0,
+        }));
+        emit('pointermove', 340, 220, 0);
+        emit('pointermove', 450, 220, 0);
+        emit('pointerdown', 340, 320, 1);
+        emit('pointermove', 550, 320, 1);
+        emit('pointerup', 550, 320, 0);
+        emit('pointermove', 340, 390, 1);
+        emit('pointermove', 550, 390, 1);
+        emit('pointermove', 570, 390, 0);
+    });
+    await settle(page);
+    assert.ok(await thickness(page, 220) < 1, 'Pen hover must not leave ink');
+    assert.ok(await thickness(page, 320) > 10, 'A non-primary pen must draw');
+    assert.ok(await thickness(page, 390) > 10, 'A non-primary pen must recover a missed down and up');
+
+    await page.locator('.upper-canvas').evaluate(canvas => {
+        const capture = canvas.setPointerCapture;
+        canvas.setPointerCapture = () => {
+            canvas.setPointerCapture = capture;
+            canvas.dataset.captureFailureInjected = 'true';
+            throw new DOMException('Pointer no longer registered', 'NotFoundError');
+        };
+    });
+    await line(page, 250, 0.8);
+    assert.equal(await page.locator('.upper-canvas').getAttribute('data-capture-failure-injected'), 'true');
+    await line(page, 285, 0.8, 'mouse');
+    await line(page, 420, 0.8);
+    const sameSession = (await finish(page)).canvas.objects;
+    assert.ok(sameSession.every(stroke => stroke.width >= 195));
+    assert.deepEqual(sameSession.map(stroke => !!stroke.acPressure), [true, true, true, false, true]);
+    checks.push({ name: 'non-primary pen and failed pointer capture recover in the same session without drawing hover' });
+
     await configure({ pressureEnabled: false }); page = await open('region');
     await line(page, 310, 0.1); await line(page, 410, 0.9);
     assert.ok(Math.abs(await thickness(page,310) - await thickness(page,410)) <= 1);

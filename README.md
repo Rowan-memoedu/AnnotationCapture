@@ -52,13 +52,15 @@
 
 0.8.18 支持圈选 `变量 = 表达式`。结果保留变量名并计算右边。含 CAS 的格式可给出根式或分数的精确结果。
 
+0.8.19 修复截图批注中数位笔悬停有准心、落笔却没有笔迹的问题。数位笔被标记为非主指针或指针捕获失败时，仍可在当前批注窗口书写。
+
 0.8.16 在截图开启超时时自动重新打开一次，并给 Windows 截屏进程的第一帧留出更多启动时间。
 
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.18-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.19-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 从 0.8.4 起，运行新版后自动配置当前用户的 Windows 登录任务，在登录约 10 秒后后台启动，避免普通启动项队列造成的长时间等待。截图快捷键可直接使用，单击托盘图标打开设置；右键托盘的“开机自启动”可开启或关闭。
 
@@ -216,6 +218,8 @@ pnpm run release:win
 `scripts/capture-modes-acceptance.cjs` 核对两种入口、默认画笔及归档像素；`scripts/invite-login-acceptance.cjs` 验证真实网关登录、重启、多设备及单用户撤销；`scripts/ui-acceptance.cjs` 验证真实截图、绘画、归档与未登录状态；`scripts/edge-acceptance.cjs` 验证最后一笔、撤销重做、橡皮擦、保存失败、选区取消、文字编辑和 100%/150%/200% 显示缩放。`scripts/live-ocr-acceptance.cjs` 通过私密的 `ANNOTATION_INVITE_FILE` 登录，使用统一 API 做四个真实笔迹样例；客户端无需上游密钥。
 
 脚本需要 Playwright，可通过 `PLAYWRIGHT_MODULE` 指向模块目录；实际使用软件不需要 Playwright。设置 `ANNOTATION_EXE` 可针对打包后的程序执行相同验收。`pnpm run test:gateway` 运行隔离网关测试，使用本机假上游验证协议与权限，不计为真实模型识别通过。
+
+`node scripts/pressure-acceptance.cjs` 核对压感、鼠标交替书写、指针捕获失败、非主数位笔指针以及漏落笔或抬笔时的同窗口恢复。
 
 `node scripts/capture-latency-acceptance.cjs --native --verify` 用实际 Windows 截屏测量从请求到画布显示、从 Esc 到窗口隐藏，验证启动超时后自动重试、两次超时后恢复手动开启，以及保存期间的再次开启。延迟测试在屏幕外显示验收窗口，真实桌面像素仅用于内存测量。归档写入和失败恢复由 `scripts/edge-acceptance.cjs` 使用测试图片核验。
 
