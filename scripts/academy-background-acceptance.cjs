@@ -42,16 +42,19 @@ async function run() {
         await canvas.mouse.move(220, 180); await canvas.mouse.down();
         await canvas.mouse.move(280, 220, { steps:8 }); await canvas.mouse.up();
         const win = await app.browserWindow(canvas);
-        const attempt = async () => {
-            await canvas.locator("#tool_academy_submit").click();
+        const attempt = async (direct = false) => {
+            await canvas.locator("#tool_academy_submit").click(direct ? {modifiers:["Shift"]} : {});
             const selection = canvas.locator("#ac-selection");
-            await selection.waitFor();
-            const b = await selection.boundingBox();
-            await canvas.mouse.move(b.x+1,b.y+1); await canvas.mouse.down();
-            await canvas.mouse.move(b.x+b.width-1,b.y+b.height-1,{steps:4}); await canvas.mouse.up();
+            if (!direct) {
+                await selection.waitFor();
+                const b = await selection.boundingBox();
+                await canvas.mouse.move(b.x+1,b.y+1); await canvas.mouse.down();
+                await canvas.mouse.move(b.x+b.width-1,b.y+b.height-1,{steps:4}); await canvas.mouse.up();
+            }
             await panel.waitForFunction(async () => !!(await require("electron").ipcRenderer.invoke("test:pending")));
             assert.equal(await win.evaluate(w=>w.isVisible()), false);
             assert.equal(await canvas.locator("#ac-submitting").count(), 0);
+            assert.equal(await selection.count(), 0);
         };
         await app.evaluate(({ipcMain}) => ipcMain.handle("test:pending",()=>!!globalThis.pendingTestFill));
         await attempt();
@@ -61,7 +64,7 @@ async function run() {
         await capture();
         await canvas.locator("#ac-capture-status.ac-error").waitFor();
         assert.equal(await win.evaluate(w=>w.isVisible()), true);
-        await attempt();
+        await attempt(true);
         const closed = canvas.waitForEvent("close");
         await app.evaluate(() => globalThis.pendingTestFill.resolve(1));
         await closed;

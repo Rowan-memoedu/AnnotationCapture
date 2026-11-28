@@ -277,10 +277,10 @@ export function installCompletion(
         }
     }
 
-    async function submitAnswer(byPosition = false) {
+    async function submitAnswer(direct = false) {
         if (busy) return;
         if (pointerDown !== undefined || hasStroke()) {
-            queued = byPosition ? "position" : "submit";
+            queued = direct ? "position" : "submit";
             return;
         }
         busy = true;
@@ -289,20 +289,27 @@ export function installCompletion(
             const reason = await invoke("academyTarget");
             if (reason) throw Error(reason);
             const fields = await invoke("academyLayout");
-            if (byPosition && fields.length < 2)
-                throw Error("按空位填写需要至少两个待填写的空位");
+            let byPosition = direct && fields.length > 1;
             const frozen = await snapshot(true, true);
             if (!frozen.ink) throw Error("请先写下最终答案");
             const archiveImage = archivePng(frozen.composite);
             // Selection can be cancelled before the encoder settles.
             void archiveImage.catch(() => {});
             let png: string | null = null;
-            if (frozen.selectedInk) {
-                const { width, height } = frozen.selectedInk;
+            const chosen =
+                frozen.selectedInk ?? (direct ? frozen.ink : undefined);
+            if (chosen) {
+                const { width, height } = chosen;
                 const rect = { x: 0, y: 0, width, height };
-                png = byPosition
-                    ? positionedInkPng(frozen.selectedInk, rect, fields)
-                    : inkPng(frozen.selectedInk, rect, true);
+                try {
+                    png = byPosition
+                        ? positionedInkPng(chosen, rect, fields)
+                        : inkPng(chosen, rect, true);
+                } catch (error) {
+                    // A full canvas can also contain scratch work. Leave the
+                    // original ink available for a smaller, explicit selection.
+                    if (frozen.selectedInk || !byPosition) throw error;
+                }
             }
             if (!png) {
                 selectionOpen = true;

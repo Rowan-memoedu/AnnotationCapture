@@ -3525,7 +3525,9 @@ for (const [id, { el }] of Object.entries(toolsX)) {
 const academySubmit = button(t("提交"))
     .attr({
         id: "tool_academy_submit",
-        title: t("填写 Math Academy 原题（Shift + 点击按原题空位填写）"),
+        title: t(
+            "填写 Math Academy 原题（仅有答案笔迹时，Shift + 点击直接填写）",
+        ),
         ariaLabel: t("提交"),
     })
     .on("click", (event) => void completion.submitAnswer(event.shiftKey));
