@@ -1,6 +1,7 @@
 import { button, ele, p, view } from "dkh-ui";
 import {
     type ArchiveRecord,
+    inkBounds,
     type OutputFormat,
     outputFormatLabels,
     outputFormats,
@@ -41,28 +42,39 @@ type FormulaSelection = {
     outputFormat: OutputFormat;
 };
 
-function inkPng(ink: HTMLCanvasElement, rect: PixelRect) {
+function inkPng(ink: HTMLCanvasElement, rect: PixelRect, trim = false) {
+    const pixels = ink
+        .getContext("2d")!
+        .getImageData(rect.x, rect.y, rect.width, rect.height);
+    const bounds = inkBounds(pixels.data, pixels.width, pixels.height);
+    if (!bounds) return null;
+    const source = trim
+        ? {
+              x: rect.x + bounds.x,
+              y: rect.y + bounds.y,
+              width: bounds.width,
+              height: bounds.height,
+          }
+        : rect;
+    const padding = trim ? 12 : 0;
     const crop = ele("canvas").attr({
-        width: rect.width,
-        height: rect.height,
+        width: source.width + 2 * padding,
+        height: source.height + 2 * padding,
     }).el;
     const ctx = crop.getContext("2d")!;
-    ctx.drawImage(
-        ink,
-        rect.x,
-        rect.y,
-        rect.width,
-        rect.height,
-        0,
-        0,
-        rect.width,
-        rect.height,
-    );
-    const pixels = ctx.getImageData(0, 0, crop.width, crop.height).data;
-    if (!pixels.some((v, i) => i % 4 === 3 && v > 8)) return null;
-    ctx.globalCompositeOperation = "destination-over";
     ctx.fillStyle = "white";
     ctx.fillRect(0, 0, crop.width, crop.height);
+    ctx.drawImage(
+        ink,
+        source.x,
+        source.y,
+        source.width,
+        source.height,
+        padding,
+        padding,
+        source.width,
+        source.height,
+    );
     return crop.toDataURL();
 }
 export function installCompletion(
@@ -273,10 +285,17 @@ export function installCompletion(
             if (reason) throw Error(reason);
             const frozen = await snapshot(true, true);
             if (!frozen.ink) throw Error("请先写下最终答案");
+            const archiveImage = archivePng(frozen.composite);
+            // Selection can be cancelled before the encoder settles.
+            void archiveImage.catch(() => {});
             let png: string | null = null;
             if (frozen.selectedInk) {
                 const { width, height } = frozen.selectedInk;
-                png = inkPng(frozen.selectedInk, { x: 0, y: 0, width, height });
+                png = inkPng(
+                    frozen.selectedInk,
+                    { x: 0, y: 0, width, height },
+                    true,
+                );
             }
             if (!png) {
                 selectionOpen = true;
@@ -299,7 +318,7 @@ export function installCompletion(
                 .attr({ role: "status", id: "ac-submitting" })
                 .add(p(t("正在识别笔迹并填写原题…")))
                 .addInto().el;
-            await saveSnapshot(frozen, await archivePng(frozen.composite));
+            await saveSnapshot(frozen, await archiveImage);
             await invoke("academyFill", png);
             rawClose();
         } catch (error) {
@@ -321,7 +340,9 @@ export function installCompletion(
         ink: HTMLCanvasElement,
         forSubmit = false,
     ) {
-        const config = await invoke("captureConfig");
+        const format = forSubmit
+            ? "latex"
+            : (await invoke("captureConfig")).outputFormat;
         return new Promise<FormulaSelection | null>((resolve) => {
             const outputFormat = ele("select")
                 .class("ac-field")
@@ -334,7 +355,7 @@ export function installCompletion(
                             .add(t(outputFormatLabels[format])),
                     ),
                 );
-            outputFormat.el.value = config.outputFormat;
+            outputFormat.el.value = format;
             const display = ele("canvas")
                 .attr({
                     id: "ac-selection",
@@ -463,7 +484,7 @@ export function installCompletion(
                 resolve(selection);
             }
             function submit(rect: PixelRect) {
-                const png = inkPng(ink, rect);
+                const png = inkPng(ink, rect, forSubmit);
                 if (!png) {
                     info.el.textContent = t("选区没有批注笔迹，请重新框选");
                     draw();
