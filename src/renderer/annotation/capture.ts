@@ -1,6 +1,6 @@
 import { button, ele, p, view } from "dkh-ui";
 import {
-    type CaptureInput,
+    type ArchiveRecord,
     type OutputFormat,
     outputFormatLabels,
     outputFormats,
@@ -14,6 +14,7 @@ import { annotationStyles } from "./styles";
 export type CaptureSnapshot = {
     composite: HTMLCanvasElement;
     ink?: HTMLCanvasElement;
+    selectedInk?: HTMLCanvasElement;
     rect: PixelRect;
     screenId: number;
     annotations?: object;
@@ -39,19 +40,49 @@ type FormulaSelection = {
     rect: PixelRect;
     outputFormat: OutputFormat;
 };
+
+function inkPng(ink: HTMLCanvasElement, rect: PixelRect) {
+    const crop = ele("canvas").attr({
+        width: rect.width,
+        height: rect.height,
+    }).el;
+    const ctx = crop.getContext("2d")!;
+    ctx.drawImage(
+        ink,
+        rect.x,
+        rect.y,
+        rect.width,
+        rect.height,
+        0,
+        0,
+        rect.width,
+        rect.height,
+    );
+    const pixels = ctx.getImageData(0, 0, crop.width, crop.height).data;
+    if (!pixels.some((v, i) => i % 4 === 3 && v > 8)) return null;
+    ctx.globalCompositeOperation = "destination-over";
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, crop.width, crop.height);
+    return crop.toDataURL();
+}
 export function installCompletion(
-    snapshot: (formula: boolean) => Promise<CaptureSnapshot>,
+    snapshot: (
+        formula: boolean,
+        selected?: boolean,
+    ) => Promise<CaptureSnapshot>,
     rawClose: () => void,
     drawingElement: HTMLElement,
     hasStroke: () => boolean,
     saveDefaults: () => Promise<void>,
 ) {
     annotationStyles();
-    const id = crypto.randomUUID();
     const capturedAt = new Date().toISOString();
     let busy = false;
     let pointerDown: number | undefined;
-    let queued: boolean | null = null;
+    let queued: boolean | "submit" | null = null;
+    let saved:
+        | { png: string; metadata: string; record: ArchiveRecord }
+        | undefined;
     let selectionOpen = false;
     const status = p()
         .attr({ role: "status", ariaLive: "polite", id: "ac-capture-status" })
@@ -120,7 +151,11 @@ export function installCompletion(
         const formula = queued;
         queued = null;
         // The canvas commits the final segment in the same pointer event.
-        setTimeout(() => void finish(formula), 0);
+        setTimeout(
+            () =>
+                void (formula === "submit" ? submitAnswer() : finish(formula)),
+            0,
+        );
     }
     function releasePointer(event: PointerEvent) {
         if (event.pointerId === pointerDown && !(event.buttons & 1)) released();
@@ -146,6 +181,24 @@ export function installCompletion(
         true,
     );
 
+    async function saveSnapshot(frozen: CaptureSnapshot, png: string) {
+        const input = {
+            capturedAt,
+            rect: frozen.rect,
+            screenId: frozen.screenId,
+            annotations: frozen.annotations,
+        };
+        const metadata = JSON.stringify(input);
+        if (saved?.png === png && saved.metadata === metadata)
+            return saved.record;
+        const record = await invoke("archive", {
+            ...input,
+            png,
+            id: crypto.randomUUID(),
+        });
+        saved = { png, metadata, record };
+        return record;
+    }
     async function finish(formula: boolean, directFormat?: OutputFormat) {
         if (busy) return;
         if (pointerDown !== undefined || hasStroke()) {
@@ -164,17 +217,8 @@ export function installCompletion(
             if (!formula || directFormat)
                 await invoke("captureVisibility", false);
             const frozen = await snapshot(formula);
-            const input = {
-                id,
-                capturedAt,
-                rect: frozen.rect,
-                screenId: frozen.screenId,
-                annotations: frozen.annotations,
-            } satisfies Omit<CaptureInput, "png">;
             const png = archivePng(frozen.composite);
-            const archived = png.then((image) =>
-                invoke("archive", { ...input, png: image }),
-            );
+            const archived = png.then((image) => saveSnapshot(frozen, image));
             // The archive can fail while the selection dialog is still open.
             void archived.catch(() => {});
             blocker.remove();
@@ -191,7 +235,7 @@ export function installCompletion(
                 }
                 await invoke("captureVisibility", false);
             }
-            await archived;
+            const record = await archived;
             if (directFormat) {
                 selection = {
                     png: await png,
@@ -205,7 +249,7 @@ export function installCompletion(
                 };
             }
             if (selection)
-                await invoke("formula", { archiveId: id, ...selection });
+                await invoke("formula", { archiveId: record.id, ...selection });
             rawClose();
         } catch (error) {
             await invoke("captureVisibility", true);
@@ -216,9 +260,66 @@ export function installCompletion(
         }
     }
 
+    async function submitAnswer() {
+        if (busy) return;
+        if (pointerDown !== undefined || hasStroke()) {
+            queued = "submit";
+            return;
+        }
+        busy = true;
+        let blocker: HTMLElement | undefined;
+        try {
+            const reason = await invoke("academyTarget");
+            if (reason) throw Error(reason);
+            const frozen = await snapshot(true, true);
+            if (!frozen.ink) throw Error("请先写下最终答案");
+            let png: string | null = null;
+            if (frozen.selectedInk) {
+                const { width, height } = frozen.selectedInk;
+                png = inkPng(frozen.selectedInk, { x: 0, y: 0, width, height });
+            }
+            if (!png) {
+                selectionOpen = true;
+                try {
+                    png =
+                        (
+                            await selectFormula(
+                                frozen.composite,
+                                frozen.ink,
+                                true,
+                            )
+                        )?.png ?? null;
+                } finally {
+                    selectionOpen = false;
+                }
+            }
+            if (!png) return;
+            blocker = view()
+                .class("ac-overlay")
+                .attr({ role: "status", id: "ac-submitting" })
+                .add(p(t("正在识别笔迹并填写原题…")))
+                .addInto().el;
+            await saveSnapshot(frozen, await archivePng(frozen.composite));
+            await invoke("academyFill", png);
+            rawClose();
+        } catch (error) {
+            status.class("ac-error");
+            status.el.textContent =
+                error instanceof Error
+                    ? error.message.replace(
+                          /^Error invoking remote method '[^']+': Error: /,
+                          "",
+                      )
+                    : String(error);
+        } finally {
+            blocker?.remove();
+            busy = false;
+        }
+    }
     async function selectFormula(
         composite: HTMLCanvasElement,
         ink: HTMLCanvasElement,
+        forSubmit = false,
     ) {
         const config = await invoke("captureConfig");
         return new Promise<FormulaSelection | null>((resolve) => {
@@ -254,10 +355,16 @@ export function installCompletion(
             let start: { x: number; y: number; pointerId: number } | null =
                 null;
             let rect: PixelRect | null = null;
-            const info = p(t("拖动框选要识别的批注"))
+            const info = p(
+                t(
+                    forSubmit
+                        ? "框选手写的最终答案，松开后填写原题"
+                        : "拖动框选要识别的批注",
+                ),
+            )
                 .class("ac-status")
                 .attr({ id: "ac-selection-status", role: "status" });
-            const cancel = button(t("保留截图并退出"))
+            const cancel = button(t(forSubmit ? "返回批注" : "保留截图并退出"))
                 .class("ac-button")
                 .attr({ id: "ac-cancel-selection" })
                 .on("click", () => close(null));
@@ -269,7 +376,12 @@ export function installCompletion(
                     ariaLabel: t("选择公式"),
                     id: "ac-formula-dialog",
                 })
-                .add([info, outputFormat, display, cancel])
+                .add([
+                    info,
+                    ...(forSubmit ? [] : [outputFormat]),
+                    display,
+                    cancel,
+                ])
                 .addInto();
             function draw() {
                 ctx.clearRect(0, 0, display.el.width, display.el.height);
@@ -351,33 +463,14 @@ export function installCompletion(
                 resolve(selection);
             }
             function submit(rect: PixelRect) {
-                const crop = ele("canvas").attr({
-                    width: rect.width,
-                    height: rect.height,
-                }).el;
-                const c = crop.getContext("2d")!;
-                c.drawImage(
-                    ink,
-                    rect.x,
-                    rect.y,
-                    rect.width,
-                    rect.height,
-                    0,
-                    0,
-                    rect.width,
-                    rect.height,
-                );
-                const data = c.getImageData(0, 0, crop.width, crop.height).data;
-                if (!data.some((v, i) => i % 4 === 3 && v > 8)) {
+                const png = inkPng(ink, rect);
+                if (!png) {
                     info.el.textContent = t("选区没有批注笔迹，请重新框选");
                     draw();
                     return;
                 }
-                c.globalCompositeOperation = "destination-over";
-                c.fillStyle = "white";
-                c.fillRect(0, 0, crop.width, crop.height);
                 close({
-                    png: crop.toDataURL(),
+                    png,
                     rect,
                     outputFormat: outputFormat.el.value as OutputFormat,
                 });
@@ -387,5 +480,5 @@ export function installCompletion(
             cancel.el.focus();
         });
     }
-    return { finish, toolbar };
+    return { finish, submitAnswer, toolbar };
 }

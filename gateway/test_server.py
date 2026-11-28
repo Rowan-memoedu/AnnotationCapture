@@ -75,6 +75,40 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(status, 200)
         return value["token"]
 
+    def test_handwritten_answers_send_the_actual_layout_and_only_return_empty_fields(self):
+        token = self.login()
+        context = {"question": "y = [[s1]], x = [[s2]], units [[s3]]",
+                   "fields": [{"id": "s1", "format": "latex", "current": ""},
+                              {"id": "s2", "format": "latex", "current": "0"},
+                              {"id": "s3", "format": "text", "current": ""}]}
+        payload = {"context": context, "png": png()}
+        result = {"status": "ready", "answers": [{"id": "s3", "value": "cm"}, {"id": "s1", "value": r"\frac{1}{2}"}]}
+        self.upstream.content = json.dumps(result)
+        self.assertEqual(self.request("/answer-fields", payload, token), (200, result))
+        body = self.upstream.requests[-1]["body"]
+        self.assertEqual(body["response_format"], {"type": "json_object"})
+        text, image = body["messages"][1]["content"]
+        self.assertEqual(json.loads(text["text"]), context)
+        self.assertEqual(image["image_url"]["url"], payload["png"])
+        for ids in (["s1"], ["s1", "s1"], ["s1", "s2"], ["s1", "surprise"]):
+            self.upstream.content = json.dumps({"status":"ready", "answers":[{"id":i, "value":"1"} for i in ids]})
+            self.assertNotEqual(self.request("/answer-fields", payload, token)[0], 200)
+        clarify = {"status":"clarify", "message":"请圈出两个坐标。"}
+        self.upstream.content = json.dumps(clarify)
+        self.assertEqual(self.request("/answer-fields", payload, token), (200, clarify))
+        self.assertIn(self.request("/answer-fields", payload)[0], (401, 403))
+
+    def test_answer_fields_validate_question_shape_before_model_call(self):
+        token = self.login()
+        for q, f in (("Choose [[s1]]", {"id":"s1","format":"choice","options":["a","a"],"current":""}),
+                     ("y = [[s2]]", {"id":"s1","format":"latex","current":""}),
+                     ("x = [[s1]]", {"id":"s1","format":"latex","current":"0"})):
+            self.assertEqual(self.request("/answer-fields", {"png":png(),"context":{"question":q,"fields":[f]}}, token)[0], 400)
+        self.assertFalse(self.upstream.requests)
+        self.upstream.content = json.dumps({"status":"ready","answers":[{"id":"s1","value":"unknown"}]})
+        field = {"id":"s1","format":"choice","current":"","options":["a","b"]}
+        self.assertNotEqual(self.request("/answer-fields", {"png":png(),"context":{"question":"[[s1]]","fields":[field]}}, token)[0], 200)
+
     def test_shared_formula_transcribes_with_one_prompt_and_preserves_case(self):
         token = self.login()
         self.upstream.content = r"\frac{X+x}{2}"

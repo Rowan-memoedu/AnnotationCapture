@@ -7,6 +7,16 @@ export type ScreenFrame = {
     pointer?: { x: number; y: number };
 } & ({ rgba: Uint8Array; width: number; height: number } | { png: string });
 export type CaptureMode = "region" | "full" | "ocr";
+export type AcademyContext = {
+    question: string;
+    fields: {
+        id: string;
+        format: "latex" | "text" | "choice";
+        current: string;
+        options?: string[];
+    }[];
+};
+export type AcademyAnswer = { id: string; value: string };
 export type FormulaFont = "stix2" | "newcm";
 export type LassoRule = "intersect" | "contain";
 export const outputFormats = [
@@ -170,6 +180,9 @@ export function selectedRect(
 }
 
 export type AnnotationMessages = {
+    academyTarget: () => string;
+    academyFill: (png: string) => number;
+    openAcademyExtension: () => void;
     setAutoStart: (enabled: boolean) => StartupState;
     detectWhitespace: (
         png: string,

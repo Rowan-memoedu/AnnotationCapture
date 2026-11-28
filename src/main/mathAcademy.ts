@@ -18,8 +18,8 @@ function unsupported(detail: string): never {
 }
 
 /** Only remove presentation commands; never simplify or drop mathematical structure. */
-export function mathAcademyOutput(source: string): string {
-    const value = normalizeLatex(source)
+export function normalizeAcademyLatex(source: string): string {
+    return normalizeLatex(source)
         .replace(/\\(?:display|text|script|scriptscript)style\b/g, " ")
         .replace(
             /\\(?:quad|qquad|enspace|thinspace|medspace|thickspace)\b|\\[,!;: ]/g,
@@ -43,6 +43,10 @@ export function mathAcademyOutput(source: string): string {
         .replace(/\s+/g, " ")
         .replace(/ ([\^_])/g, "$1")
         .trim();
+}
+
+export function mathAcademyOutput(source: string): string {
+    const value = normalizeAcademyLatex(source);
     const tokens = value.match(/\\[A-Za-z]+|\\.|[^\s]/g) ?? [];
     let index = 0;
     let depth = 0;

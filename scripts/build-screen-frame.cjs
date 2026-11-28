@@ -8,4 +8,6 @@ if (process.platform === 'win32') {
     const compiler = path.join(process.env.SystemRoot, 'Microsoft.NET/Framework64/v4.0.30319/csc.exe');
     execFileSync(compiler, ['/nologo', '/target:exe', '/optimize+', '/unsafe', '/platform:x64',
         '/reference:System.Drawing.dll', '/out:' + target, path.resolve('native/ScreenFrame.cs')], {stdio:'inherit', windowsHide:true});
+    execFileSync(compiler, ['/nologo', '/target:exe', '/optimize+', '/platform:x64',
+        '/out:' + path.resolve('out/native/MathAcademyHost.exe'), path.resolve('native/MathAcademyHost.cs')], {stdio:'inherit', windowsHide:true});
 }
