@@ -416,6 +416,8 @@ root.add([
             outputFormat,
             ocrProviderSetting,
             whiteboardOptions,
+            action("打开 Math Academy 扩展目录", "ac-academy-extension", () => invoke("openAcademyExtension")),
+            p(t("首次使用时，在 Chrome 扩展程序中加载此目录。在题目页开始批注后，点击「提交」即可填写原题。识别服务会收到选中笔迹、题干和答题框格式。")),
             p(
                 t(
                     "公式识别仅发送选区或白板内的批注笔迹。自动空白识别开启时会另行发送页面截图；登录凭据由 Windows 加密保存。",

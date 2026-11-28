@@ -54,13 +54,15 @@
 
 0.8.19 修复截图批注中数位笔悬停有准心、落笔却没有笔迹的问题。数位笔被标记为非主指针或指针捕获失败时，仍可在当前批注窗口书写。
 
+0.9.0 加入 Math Academy 手写填答。截图时读取题干、题面公式和答题框布局，提交选中的笔迹后按原题逐框填写。
+
 0.8.16 在截图开启超时时自动重新打开一次，并给 Windows 截屏进程的第一帧留出更多启动时间。
 
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.8.19-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.9.0-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 从 0.8.4 起，运行新版后自动配置当前用户的 Windows 登录任务，在登录约 10 秒后后台启动，避免普通启动项队列造成的长时间等待。截图快捷键可直接使用，单击托盘图标打开设置；右键托盘的“开机自启动”可开启或关闭。
 
@@ -117,6 +119,16 @@
 需要笔、数位板及驱动向 Electron 提供真实压力数据；仅返回固定压力值的设备无法呈现力度变化。自动化验收通过 Electron 的笔事件注入验证压力响应，不等同于所有型号硬件兼容性验证。
 
 ## Math Academy 公式输出
+
+### 在原题上填写手写答案
+
+首次使用，在设置中点「打开 Math Academy 扩展目录」。打开 Chrome 的 `chrome://extensions`，启用开发者模式，点「加载已解压的扩展程序」，选择刚打开的目录。扩展只连接 Math Academy 和这台电脑上的批注工具。
+
+1. 在 Chrome 打开一道待作答的 Math Academy Lesson 题，将鼠标放在题目窗口，按自己的截图批注快捷键。此时读取题干、已印出的公式与空位布局。
+2. 写下最终答案，点「文字识别」与「复制」之间的「提交」。已经圈选笔迹时直接使用选区，否则拖框选出最终答案。
+3. 识别服务结合题目和选中笔迹，返回每个空位需要的内容。程序核对原题、保留已有答案，将新值写进答题控件并回读。遇到换题、笔迹含糊或控件不支持时，画布会显示原因。回到原题核对后，由你点击网页上的 Submit 判题。
+
+### 复制单条公式
 
 批注后按 `Ctrl+Shift+Enter`，在输出格式中选择“Math Academy 公式”，框选需要输入的一条公式，松开后自动识别。也可在设置中将它设为默认输出格式。结果复制完成后，点击 Math Academy 网页里的公式输入框，再按 `Ctrl+V`，核对显示后自行提交。
 
@@ -195,7 +207,7 @@ Archive/YYYY-MM-DD/<截图编号>/
 
 ## 当前边界
 
-- 输出支持普通文字、Markdown、Mermaid 和公式；Math Academy 输出需手动粘贴到网页公式框，未提供自动粘贴和答案提交。
+- 输出支持普通文字、Markdown、Mermaid 和公式。「提交」可填写已连接的 Math Academy Lesson 题，「Math Academy 公式」可复制单条公式。
 - 公式画笔识别需要登录及联网；排版、修改字体与 LaTeX 使用随包资源。排版支持常见数学命令，不支持外部资源、自定义宏及系统字体任意切换。
 - 识别仅转写选定公式，不求解，不自动纠正数学表达式。结果可在复制前后人工检查、编辑。
 - Esc、归档按钮和批注窗口的常规关闭会先保存；保存失败时保留画布。托盘“退出”及设置页“退出软件”直接结束，不等待归档，本次尚未保存的批注会被放弃。

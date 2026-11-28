@@ -21,6 +21,7 @@ import type { CaptureMode } from "../../lib/annotation";
 import { handle } from "../../lib/annotationIpc";
 import { mainOn, mainSend } from "../../lib/ipc";
 import Store from "../../lib/store/store";
+import { AcademyBridge, type AcademyTarget } from "./academyBridge";
 import { ArchiveStore, decodePng } from "./annotationArchive";
 import { AnnotationAuth } from "./annotationAuth";
 import { AnnotationConfig } from "./annotationConfig";
@@ -55,6 +56,10 @@ let updater: AnnotationUpdater;
 let retention: ArchiveRetention;
 let startup: AnnotationStartup;
 let captureWindow: BrowserWindow | null = null;
+const academy = new AcademyBridge();
+let academyTarget: AcademyTarget | undefined;
+let academyReason = "";
+let academyRequest: AbortController | undefined;
 let panel: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let activeCapture = false;
@@ -207,6 +212,8 @@ function prepareCaptureWindow() {
         }
     });
     win.on("closed", () => {
+        academyTarget = undefined;
+        academyRequest?.abort();
         clearTimeout(captureStartTimer);
         captureStarting = false;
         cancelInk();
@@ -268,6 +275,9 @@ async function capture(
         return;
     }
     captureStarting = true;
+    const point = screen.getCursorScreenPoint();
+    const binding = imagePath || mode === "ocr" ? Promise.resolve({message: "请在 Math Academy 题目页开始本次批注"}) :
+        academy.bind(point).then(target => ({target}), (error: Error) => ({message: error.message}));
     panel?.hide();
     let win = captureWindow;
     try {
@@ -290,8 +300,10 @@ async function capture(
         const display = screen.getDisplayNearestPoint(
             screen.getCursorScreenPoint(),
         );
-        await ready;
+        const [, bound] = await Promise.all([ready, binding]);
         if (win !== captureWindow) return;
+        academyTarget = "target" in bound ? bound.target : undefined;
+        academyReason = "message" in bound ? bound.message : "";
         const bounds = win.getBounds();
         if (
             bounds.x !== display.bounds.x ||
@@ -601,6 +613,29 @@ handle("state", () => ({
     shortcutError,
 }));
 handle("captureConfig", () => config.public());
+handle("academyTarget", () => academyTarget ? "" : academyReason || "未绑定 Math Academy 题目");
+handle("openAcademyExtension", async () => {
+    const directory = app.isPackaged ? join(process.resourcesPath, "math-academy-extension") : join(runPath, "browser/math-academy");
+    const error = await shell.openPath(directory);
+    if (error) throw Error(error);
+});
+handle("academyFill", async (png) => {
+    const target = academyTarget;
+    if (!activeCapture || !target) throw Error(academyReason || "请重新进入题目批注");
+    if (academyRequest) throw Error("正在填写这道题");
+    if (nativeImage.createFromBuffer(decodePng(png)).isEmpty()) throw Error("笔迹图无效");
+    const request = new AbortController();
+    academyRequest = request;
+    const timer = setTimeout(() => request.abort(), 90000);
+    try {
+        const answers = await auth.recognizeFields(png, target.context, request.signal);
+        if (request.signal.aborted || target !== academyTarget || !activeCapture) throw Error("批注已结束，请重新进入原题");
+        return await academy.fill(target, answers);
+    } finally {
+        clearTimeout(timer);
+        if (academyRequest === request) academyRequest = undefined;
+    }
+});
 handle("configure", (input) => {
     const rollback = registerShortcuts(input);
     try {
@@ -663,6 +698,7 @@ else {
         }
     });
     app.on("will-quit", () => {
+        academy.close();
         for (const reader of frameReaders.values()) reader.stop();
         updater?.dispose();
         retention?.dispose();
@@ -670,6 +706,8 @@ else {
         tray?.destroy();
     });
     app.whenReady().then(() => {
+        if (process.platform === "win32" && (app.isPackaged || !args.testMode || args.academyTest))
+            void academy.start(join(dirname(frameHelper), "MathAcademyHost.exe"), dataRoot, app.isPackaged && !args.testMode);
         config = new AnnotationConfig(
             dataRoot,
             args.archiveRoot || join(dataRoot, "Archive"),
