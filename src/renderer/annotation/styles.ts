@@ -172,6 +172,11 @@ export function annotationStyles() {
             whiteSpace: "nowrap",
             color: "var(--font-color)",
         },
+        "#ac-lasso-options .ac-button[aria-pressed='true']": {
+            background: "var(--emphasis-color)",
+            borderColor: "var(--ac-focus-color)",
+            color: "var(--font-color-emphasis)",
+        },
         ".ac-toolbar p": { margin: "0" },
         ".ac-toolbar > [role='status']": {
             flexBasis: "100%",

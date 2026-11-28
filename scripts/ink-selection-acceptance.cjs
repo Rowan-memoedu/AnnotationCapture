@@ -98,7 +98,12 @@ async function select(page) {
 (async () => {
     app = await _electron.launch({ executablePath: process.env.ANNOTATION_EXE || path.resolve('node_modules/electron/dist/electron.exe'), args: [...(process.env.ANNOTATION_EXE ? [] : ['.']), '--userData', data, '--testMode', ...(process.env.ANNOTATION_SCALE ? ['--force-device-scale-factor=' + process.env.ANNOTATION_SCALE] : [])], timeout: 30000 });
     panel = await app.firstWindow(); await panel.waitForSelector('#ac-save-settings'); await isolateWindow(app, panel);
-    await app.evaluate(({ ipcMain, screen, nativeImage }) => {
+    await app.evaluate(({ dialog, ipcMain, screen, nativeImage }) => {
+        globalThis.captureErrors = [];
+        dialog.showMessageBox = async options => {
+            globalThis.captureErrors.push(options.message);
+            return { response: 0, checkboxChecked: false };
+        };
         ipcMain.removeHandler('annotation:screenshots');
         ipcMain.handle('annotation:screenshots', () => screen.getAllDisplays().map(d => {
             const width = Math.round(d.size.width * d.scaleFactor), height = Math.round(d.size.height * d.scaleFactor);
@@ -132,6 +137,76 @@ async function select(page) {
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('annotation.html')).show());
     await panel.screenshot({ path: path.join(root, 'settings-lasso-rule.png') });
     checks.push('legacy profile defaults to intersect; settings save and reload persist rule; capture buttons removed');
+
+    for (const mode of ['full', 'region']) {
+        const page = await open(mode);
+        const rules = page.locator('#ac-lasso-options');
+        const contain = page.locator('#ac-lasso-contain');
+        const intersect = page.locator('#ac-lasso-intersect');
+        assert.equal(await rules.isVisible(), false);
+        await stroke(page, [[250, 320], [650, 320]]);
+        await page.locator('#draw_select').hover();
+        await page.locator('#draw_select_lasso').click();
+        assert.equal(await page.locator('.upper-canvas').getAttribute('data-ac-selection'), 'select');
+        assert.equal(await rules.isVisible(), true);
+        assert.equal(await intersect.getAttribute('aria-pressed'), 'true');
+        await contain.click();
+        assert.equal(await contain.getAttribute('aria-pressed'), 'true');
+        assert.equal(await intersect.getAttribute('aria-pressed'), 'false');
+        await page.locator('#ac-completion').screenshot({ path: path.join(root, `${mode}-lasso-toolbar.png`) });
+        const before = await inkPixels(page);
+        await stroke(page, loop);
+        await page.keyboard.press('Delete');
+        assert.equal(await inkPixels(page), before);
+        await page.keyboard.press('d');
+        assert.equal(await rules.isVisible(), false);
+        await page.keyboard.down('d');
+        assert.equal(await rules.isVisible(), true);
+        await intersect.click();
+        await stroke(page, loop);
+        await page.keyboard.up('d');
+        assert.equal(await rules.isVisible(), false);
+        assert.equal((await finish(page)).canvas.objects.length, 0);
+        checks.push(`${mode}: lasso tool shows both rules; switching affects selection and hold-D erase immediately`);
+    }
+    let defaultsPage = await open();
+    await defaultsPage.keyboard.press('d');
+    await defaultsPage.locator('#ac-lasso-contain').click();
+    await finish(defaultsPage);
+    defaultsPage = await open('region');
+    await defaultsPage.keyboard.press('d');
+    assert.equal(await defaultsPage.locator('#ac-lasso-intersect').getAttribute('aria-pressed'), 'true');
+    await defaultsPage.locator('#ac-lasso-contain').click();
+    await defaultsPage.locator('#ac-save-defaults').click();
+    await defaultsPage.waitForFunction(() => require('electron').ipcRenderer.invoke('annotation:captureConfig').then(c => c.lassoRule === 'contain'));
+    await finish(defaultsPage);
+    defaultsPage = await open();
+    await defaultsPage.keyboard.press('d');
+    assert.equal(await defaultsPage.locator('#ac-lasso-contain').getAttribute('aria-pressed'), 'true');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(data, 'annotation-settings.json'), 'utf8')).lassoRule, 'contain');
+    await defaultsPage.locator('#ac-lasso-intersect').click();
+    await defaultsPage.locator('#ac-save-defaults').click();
+    await defaultsPage.waitForFunction(() => require('electron').ipcRenderer.invoke('annotation:captureConfig').then(c => c.lassoRule === 'intersect'));
+    await finish(defaultsPage);
+    checks.push('unsaved lasso rule is capture-local; Save as default persists it across capture modes');
+
+    const quickBoard = await open();
+    await quickBoard.locator('#ac-whiteboard').hover();
+    await quickBoard.locator('#draw_whiteboard_center').click();
+    await quickBoard.locator('#ac-whiteboard-adjust').click();
+    await stroke(quickBoard, [[250, 320], [650, 320]]);
+    await quickBoard.keyboard.press('d');
+    await quickBoard.locator('#ac-lasso-contain').click();
+    await stroke(quickBoard, loop);
+    await quickBoard.keyboard.press('Delete');
+    await quickBoard.locator('#ac-lasso-intersect').click();
+    await stroke(quickBoard, loop);
+    await quickBoard.keyboard.press('Delete');
+    const boardObjects = (await finish(quickBoard)).canvas.objects;
+    assert.equal(boardObjects.length, 1);
+    assert.equal(boardObjects[0].acWhiteboard, true);
+    checks.push('quick whiteboard offers both rules and keeps the whiteboard while deleting intersecting ink');
+
     for (const mode of ['full', 'region']) {
         let page = await open(mode);
         assert.equal(await page.locator('#draw_main > #ac-formula-pen').count(), 1);
@@ -257,13 +332,22 @@ async function select(page) {
             assert.ok(geometry.left >= 0 && geometry.right <= geometry.width && !geometry.overflow, JSON.stringify({ width, formula, geometry }));
             await page.screenshot({ path: path.join(root, `toolbar-${width}-${formula ? 'formula' : 'pencil'}.png`) });
         }
+        await page.keyboard.press('d');
+        assert.equal(await page.locator('#ac-lasso-options').isVisible(), true);
+        const fits = await page.locator('#ac-completion').evaluate(el => {
+            const { left, right } = el.getBoundingClientRect();
+            return left >= 0 && right <= innerWidth && el.scrollWidth <= el.clientWidth;
+        });
+        assert.ok(fits, `Lasso toolbar must fit at ${width}px`);
+        await page.keyboard.press('d');
     }
     await finish(page);
-    checks.push('formula controls follow tool selection; toolbar fits 320/375/414/768/1440px');
+    checks.push('formula and lasso controls follow tool selection; toolbar fits 320/375/414/768/1440px');
     assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(root, 'report.json'), JSON.stringify({ passed: true, checks, errors }, null, 2));
     console.log('INK_SELECTION_PASSED', checks);
-})().catch(error => {
+})().catch(async error => {
+    if (app) errors.push(...await app.evaluate(() => globalThis.captureErrors || []).catch(() => []));
     fs.writeFileSync(path.join(root, 'report.json'), JSON.stringify({ passed: false, checks, error: String(error), errors }, null, 2));
     console.error(error, errors); process.exitCode = 1;
 }).finally(async () => { if (app) await app.evaluate(({ app }) => app.exit()).catch(() => {}); });

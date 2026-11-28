@@ -1,3 +1,4 @@
+import { button, view } from "dkh-ui";
 import {
     ActiveSelection,
     type Canvas,
@@ -19,6 +20,7 @@ export function installInkSelection(
     history: () => void,
     select: () => void,
     pencil: () => void,
+    setToolPressed: (pressed: boolean) => void,
 ) {
     let rule: LassoRule = "intersect";
     let mode: "off" | "select" | "erase" = "off";
@@ -42,6 +44,32 @@ export function installInkSelection(
     overlay.append(outline);
     document.body.append(overlay);
     const hint = document.querySelector("#ac-selection-hint") as HTMLElement;
+    const ruleButtons = {
+        intersect: button(t("碰到即选中")),
+        contain: button(t("完全包含才选中")),
+    };
+    const rules = view("x")
+        .class("ac-toolbar-group")
+        .attr({
+            id: "ac-lasso-options",
+            role: "group",
+            ariaLabel: t("自由圈选规则"),
+            hidden: true,
+        })
+        .add(Object.values(ruleButtons));
+    function setRule(value: LassoRule) {
+        rule = value;
+        for (const [key, control] of Object.entries(ruleButtons)) {
+            control.el.setAttribute("aria-pressed", String(key === value));
+        }
+    }
+    for (const key of ["intersect", "contain"] as const) {
+        ruleButtons[key]
+            .class("ac-button")
+            .attr({ id: `ac-lasso-${key}` })
+            .on("click", () => setRule(key));
+    }
+    setRule(rule);
 
     function cancel() {
         mode = "off";
@@ -50,6 +78,8 @@ export function installInkSelection(
         overlay.style.display = "none";
         hint.textContent = "";
         upper.removeAttribute("data-ac-selection");
+        rules.el.hidden = true;
+        setToolPressed(false);
     }
     function enter(value: "select" | "erase") {
         select();
@@ -58,6 +88,8 @@ export function installInkSelection(
         canvas.selection = false;
         canvas.defaultCursor = "crosshair";
         upper.dataset.acSelection = value;
+        rules.el.hidden = false;
+        setToolPressed(true);
         hint.textContent = t(
             value === "erase"
                 ? "按住 D 圈选清除，松开恢复画笔"
@@ -298,8 +330,9 @@ export function installInkSelection(
     });
     return {
         cancel,
-        setRule: (value: LassoRule) => {
-            rule = value;
-        },
+        enter: () => enter("select"),
+        rules,
+        getRule: () => rule,
+        setRule,
     };
 }

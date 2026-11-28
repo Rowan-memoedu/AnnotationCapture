@@ -75,7 +75,7 @@ async function staysOpen(page, before, name) {
     await custom.mouse.move(600,450); await custom.mouse.wheel(0,-120);
     await custom.waitForFunction(() => document.querySelector('#ac-pen-width').textContent === '7 px');
     await custom.locator('#ac-save-defaults').click();
-    await custom.waitForFunction(() => document.querySelector('#ac-capture-status').textContent.includes('默认画笔已保存'));
+    await custom.waitForFunction(() => document.querySelector('#ac-capture-status').textContent.includes('默认设置已保存'));
     assert.equal(custom.isClosed(),false,'Saving pen defaults must keep the capture open');
     assert.equal(JSON.parse(fs.readFileSync(path.join(data,'annotation-settings.json'),'utf8')).penWidth,7);
     await custom.mouse.move(350,300); await custom.mouse.down(); await custom.mouse.move(500,350,{steps:10}); await custom.mouse.up();

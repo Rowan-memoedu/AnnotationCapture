@@ -102,13 +102,13 @@ export function installCompletion(
                         .attr({
                             id: "ac-save-defaults",
                             title: t(
-                                "保存当前画笔颜色和粗细，下次批注自动应用",
+                                "保存当前画笔和圈选设置，下次批注自动应用",
                             ),
                         })
                         .on("click", async () => {
                             try {
                                 await saveDefaults();
-                                status.el.textContent = t("默认画笔已保存");
+                                status.el.textContent = t("默认设置已保存");
                             } catch (error) {
                                 status.el.textContent = String(error);
                             }
