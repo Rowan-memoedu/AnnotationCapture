@@ -58,13 +58,15 @@
 
 0.9.1 在套索模式的底部设置栏提供「碰到即选中」和「完全包含才选中」，可将当前规则保存为默认。
 
+0.9.2 支持 Math Academy Lesson 和 Review 的单选题，能将手写答案对应到网页选项。公式题首次填写和部分填写时也能识别尚未记录的空框。
+
 0.8.16 在截图开启超时时自动重新打开一次，并给 Windows 截屏进程的第一帧留出更多启动时间。
 
 ## 下载与使用
 
 访问 [静态下载页](https://rowan-memoedu.github.io/AnnotationCapture/) 查看下载、快捷键和使用边界。
 
-从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.9.1-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
+从 [Releases](https://github.com/Rowan-memoedu/AnnotationCapture/releases) 下载 `AnnotationCapture-0.9.2-windows-x64.zip`，解压到可写目录，运行 `AnnotationCapture.exe`。运行时已随包提供，无需安装 Node.js、Python、pnpm 或 OCR 模型。当前发行目标是 Windows x64；包未做商业代码签名。
 
 从 0.8.4 起，运行新版后自动配置当前用户的 Windows 登录任务，在登录约 10 秒后后台启动，避免普通启动项队列造成的长时间等待。截图快捷键可直接使用，单击托盘图标打开设置；右键托盘的“开机自启动”可开启或关闭。
 
@@ -126,7 +128,7 @@
 
 首次使用，在设置中点「打开 Math Academy 扩展目录」。打开 Chrome 的 `chrome://extensions`，启用开发者模式，点「加载已解压的扩展程序」，选择刚打开的目录。扩展只连接 Math Academy 和这台电脑上的批注工具。
 
-1. 在 Chrome 打开一道待作答的 Math Academy Lesson 题，将鼠标放在题目窗口，按自己的截图批注快捷键。此时读取题干、已印出的公式与空位布局。
+1. 在 Chrome 打开一道待作答的 Math Academy Lesson 或 Review 题，将鼠标放在题目窗口，按自己的截图批注快捷键。此时读取题干、已印出的公式和空位或选项。
 2. 写下最终答案，点「文字识别」与「复制」之间的「提交」。已经圈选笔迹时直接使用选区，否则拖框选出最终答案。
 3. 识别服务结合题目和选中笔迹，返回每个空位需要的内容。程序核对原题、保留已有答案，将新值写进答题控件并回读。遇到换题、笔迹含糊或控件不支持时，画布会显示原因。回到原题核对后，由你点击网页上的 Submit 判题。
 
@@ -209,7 +211,7 @@ Archive/YYYY-MM-DD/<截图编号>/
 
 ## 当前边界
 
-- 输出支持普通文字、Markdown、Mermaid 和公式。「提交」可填写已连接的 Math Academy Lesson 题，「Math Academy 公式」可复制单条公式。
+- 输出支持普通文字、Markdown、Mermaid 和公式。「提交」可填写已连接的 Math Academy Lesson 或 Review 题，「Math Academy 公式」可复制单条公式。
 - 公式画笔识别需要登录及联网；排版、修改字体与 LaTeX 使用随包资源。排版支持常见数学命令，不支持外部资源、自定义宏及系统字体任意切换。
 - 识别仅转写选定公式，不求解，不自动纠正数学表达式。结果可在复制前后人工检查、编辑。
 - Esc、归档按钮和批注窗口的常规关闭会先保存；保存失败时保留画布。托盘“退出”及设置页“退出软件”直接结束，不等待归档，本次尚未保存的批注会被放弃。
