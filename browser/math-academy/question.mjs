@@ -1,11 +1,18 @@
-// This function is serialized by chrome.scripting and runs only in the bound lesson document.
+// chrome.scripting runs this function in the bound Lesson or Review document.
 export async function academyQuestion(expected = null, answers = []) {
     try {
-        const lesson =
+        const lessonPage =
             typeof studentLesson === "undefined"
                 ? window.studentLesson
                 : studentLesson;
-        const step = lesson?.step;
+        const reviewPage =
+            typeof studentReview === "undefined"
+                ? window.studentReview
+                : studentReview;
+        const activity = location.pathname.endsWith("/review")
+            ? reviewPage
+            : lessonPage ?? reviewPage;
+        const step = activity?.step;
         const widget = step?.questionWidget;
         const root = step && document.getElementById(`step-${step.id}`);
         if (
@@ -92,10 +99,26 @@ export async function academyQuestion(expected = null, answers = []) {
                 letters.set(letter, el);
             }
             if (letters.size < 2) throw Error("选择题未完成加载");
+            const responses = new Map();
+            for (const letter of letters.keys()) {
+                const code = typeof widget.getSelectedChoice === "function"
+                    ? widget.getSelectedChoice(letter)
+                    : letter;
+                const key = String(code ?? "").toLowerCase();
+                if (!key || responses.has(key))
+                    throw Error("选项与网页答案无法对应");
+                responses.set(key, letter);
+            }
             add(
                 choice,
                 "choice",
-                () => String(answer().selectedChoice ?? "").toLowerCase(),
+                () => {
+                    const value = answer().selectedChoice;
+                    if (value == null || value === "") return "";
+                    const letter = responses.get(String(value).toLowerCase());
+                    if (!letter) throw Error("网页返回了未知的选项");
+                    return letter;
+                },
                 (v) => letters.get(v).click(),
                 [...letters.keys()],
             );
@@ -243,7 +266,7 @@ export async function academyQuestion(expected = null, answers = []) {
             }
             const verify = () => {
                 if (
-                    lesson.step !== step ||
+                    activity.step !== step ||
                     widget.answerSubmitted ||
                     !root.isConnected
                 )
@@ -266,7 +289,7 @@ export async function academyQuestion(expected = null, answers = []) {
             throw Error("网页未确认全部答案，请检查答题框");
         } catch (error) {
             if (
-                lesson.step === step &&
+                activity.step === step &&
                 root.isConnected &&
                 !widget.answerSubmitted
             ) {

@@ -112,8 +112,52 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
             { filled: 3 },
         );
         assert.equal(await page.evaluate(() => window.clicks), 0);
+        await page.setContent(
+            `<div id="step-review">Choose a value
+                <table class="questionWidget-choicesTable">
+                    <tr><td><div class="questionWidget-choiceLetterCircle" id="choice-a">a</div></td><td>7</td></tr>
+                    <tr><td><div class="questionWidget-choiceLetterCircle" id="choice-b">b</div></td><td>12</td></tr>
+                </table><button id="submit" disabled>Submit</button>
+            </div>`,
+        );
+        await page.addScriptTag({
+            content: `window.academyQuestion = ${academyQuestion.toString()}`,
+        });
+        await page.evaluate(() => {
+            window.studentLesson = undefined;
+            const submitButton = document.querySelector("#submit");
+            let selectedChoice;
+            const codes = { a: 11, b: 27 };
+            const widget = {
+                submitButton,
+                getSelectedChoice: (letter) => codes[letter],
+                getStudentAnswer: () => ({ selectedChoice }),
+            };
+            window.studentReview = {
+                step: { id: "review", questionWidget: widget },
+            };
+            for (const el of document.querySelectorAll(".questionWidget-choiceLetterCircle")) {
+                el.onclick = () => {
+                    selectedChoice = codes[el.textContent];
+                    submitButton.disabled = false;
+                };
+            }
+            window.reviewGraded = 0;
+            submitButton.onclick = () => { window.reviewGraded++; };
+        });
+        const review = await page.evaluate(() => window.academyQuestion());
+        assert.deepEqual(review.snapshot?.context.fields[0].options, ["a", "b"]);
+        assert.ok(review.snapshot.context.question.includes("<cell>b</cell><cell>12</cell>"));
+        assert.deepEqual(
+            await fill([{ id: "s1", value: "b" }], review.snapshot),
+            { filled: 1 },
+        );
+        assert.deepEqual(await page.evaluate(() => ({
+            selected: window.studentReview.step.questionWidget.getStudentAnswer().selectedChoice,
+            graded: window.reviewGraded,
+        })), { selected: 27, graded: 0 });
         console.log(
-            "Verified field identity, occupied slots, stale questions, exact readback and no grading",
+            "Verified empty and occupied fields, stale questions, Review choices, readback and no grading",
         );
     } finally {
         await browser.close();
