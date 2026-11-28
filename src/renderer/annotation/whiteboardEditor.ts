@@ -892,12 +892,44 @@ function connect(event: MessageEvent) {
     window.removeEventListener("message", connect);
     const port = event.ports[0];
     selectionPort = port;
+    let reportGeometry = false;
+    const geometry = () => {
+        if (!reportGeometry) return;
+        const rect = board.getBoundingClientRect();
+        const left = rect.left + board.clientLeft;
+        const top = rect.top + board.clientTop;
+        const width = board.clientWidth;
+        const height = board.clientHeight;
+        // The editor toolbar stays above the canvas when the iframe scrolls.
+        port.postMessage({
+            geometry: {
+                left,
+                top,
+                width,
+                height,
+                visibleTop: Math.max(top, tools.getBoundingClientRect().bottom),
+                visibleRight: Math.min(
+                    left + width,
+                    document.documentElement.clientWidth,
+                ),
+                visibleBottom: Math.min(top + height, window.innerHeight),
+            },
+        });
+    };
+    const observer = new ResizeObserver(geometry);
+    observer.observe(board);
+    observer.observe(tools);
+    window.addEventListener("resize", geometry);
+    window.addEventListener("scroll", geometry, true);
     port.onmessage = ({ data }) => {
         const { id, command, value } = data;
         try {
             let result: unknown;
             if (command === "lock") setLocked(value === true);
-            else if (command === "scene") result = scene();
+            else if (command === "reportGeometry") {
+                reportGeometry = value === true;
+                geometry();
+            } else if (command === "scene") result = scene();
             else if (command === "snapshot") result = snapshot();
             else if (command === "snapshotSelection" && !locked)
                 result = snapshotSelection();
