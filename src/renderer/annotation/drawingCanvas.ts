@@ -66,19 +66,28 @@ export class DrawingCanvas extends Canvas {
         return this.contact !== undefined;
     }
 
+    override _isMainEvent(event: TPointerEvent) {
+        // Fabric and its brushes must accept every sample from the pen that
+        // owns the stroke, even when Chromium marks it non-primary.
+        return (
+            (event instanceof PointerEvent &&
+                this.contact?.pointerId === event.pointerId) ||
+            super._isMainEvent(event)
+        );
+    }
+
     override _onMouseDown(event: TPointerEvent) {
         if (!(event instanceof PointerEvent) || !this.isDrawingMode) {
             super._onMouseDown(event);
             return;
         }
-        if (event.button !== 0 || !event.isPrimary) return;
-        if (this.contact && this.contact.pointerId !== event.pointerId) return;
+        if (event.button !== 0 || !canDraw(event)) return;
+        if (this.contact && this.contact.pointerId !== event.pointerId) {
+            this.otherPresses.add(event.pointerId);
+            return;
+        }
         this.finishStroke();
-        this.otherPresses.delete(event.pointerId);
-        this.contact = event;
-        if (event.isTrusted)
-            this.upperCanvasEl.setPointerCapture(event.pointerId);
-        super._onMouseDown(event);
+        this.startStroke(event);
     }
 
     override _onMouseMove(event: TPointerEvent) {
@@ -96,7 +105,7 @@ export class DrawingCanvas extends Canvas {
             } else if (
                 this.isDrawingMode &&
                 pressed &&
-                event.isPrimary &&
+                canDraw(event) &&
                 event.target === this.upperCanvasEl &&
                 !this.otherPresses.has(event.pointerId)
             ) {
@@ -106,8 +115,10 @@ export class DrawingCanvas extends Canvas {
                 // move before a real down must not become an extra dot.
                 if (initial?.pointerId === event.pointerId) {
                     this.pendingContact = undefined;
-                    this.contact = event;
-                    super._onMouseDown(pointerEvent("pointerdown", initial));
+                    this.startStroke(
+                        event,
+                        pointerEvent("pointerdown", initial),
+                    );
                 }
             }
         }
@@ -119,26 +130,51 @@ export class DrawingCanvas extends Canvas {
             super._onMouseUp(event);
             return;
         }
-        // A pen and a mouse can both be primary. Fabric releases its document
-        // move/up listeners on any primary release, so only forward the owner.
+        // Fabric releases its document move/up listeners on a primary release.
+        // Keep them attached until the owner lifts.
         if (event.pointerId !== this.contact.pointerId || event.buttons & 1)
             return;
         this.finishStroke(event.button === 0 ? event : undefined);
+    }
+
+    private startStroke(event: PointerEvent, down = event) {
+        this.otherPresses.delete(event.pointerId);
+        this.contact = event;
+        if (event.isTrusted) {
+            try {
+                this.upperCanvasEl.setPointerCapture(event.pointerId);
+            } catch (error) {
+                if (
+                    !(error instanceof DOMException) ||
+                    error.name !== "NotFoundError"
+                )
+                    throw error;
+                // Fabric's document listeners can still receive the stroke.
+            }
+        }
+        super._onMouseDown(down);
     }
 
     finishStroke(event?: PointerEvent, cancelled = false) {
         this.pendingContact = undefined;
         const contact = this.contact;
         if (!contact) return;
-        this.contact = undefined;
         if (cancelled && this.freeDrawingBrush instanceof PressureBrush) {
             this.freeDrawingBrush.cancel();
             this._isCurrentlyDrawing = false;
         }
-        super._onMouseUp(event ?? pointerEvent("pointerup", contact));
-        const upper = this.upperCanvasEl;
-        if (upper.hasPointerCapture(contact.pointerId))
-            upper.releasePointerCapture(contact.pointerId);
-        upper.dispatchEvent(new Event("ac-stroke-end"));
+        try {
+            super._onMouseUp(event ?? pointerEvent("pointerup", contact));
+        } finally {
+            this.contact = undefined;
+            const upper = this.upperCanvasEl;
+            if (upper.hasPointerCapture(contact.pointerId))
+                upper.releasePointerCapture(contact.pointerId);
+            upper.dispatchEvent(new Event("ac-stroke-end"));
+        }
     }
+}
+
+function canDraw(event: PointerEvent) {
+    return event.isPrimary || event.pointerType === "pen";
 }
