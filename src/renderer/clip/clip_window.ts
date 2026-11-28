@@ -3616,6 +3616,9 @@ const drawSideSelect = {
     rect: iconEl("rect_select").attr({ title: "矩形选择" }),
     free: iconEl("free_select").attr({ title: "自由选择" }),
     draw: iconEl("draw_select").attr({ title: "移动" }),
+    lasso: button(t("套索"))
+        .class("ac-tool-icon")
+        .attr({ ariaPressed: "false" }),
 } as const;
 
 const whiteboardModes = {
@@ -5013,6 +5016,10 @@ drawSideSelect.free.on("click", () => {
 drawSideSelect.draw.on("click", () => {
     setEditType("select", "draw");
 });
+drawSideSelect.lasso.on("click", () => {
+    showSideBar(false);
+    inkSelection?.enter();
+});
 
 hotkeys("ctrl+z", () => {
     undo(true);
@@ -5411,11 +5418,13 @@ const completion = installCompletion(
     () => fabricCanvas.hasStroke,
     async () => {
         const pen = getShapePro(mode === "spray" ? "spray" : "free");
+        const lassoRule = inkSelection?.getRule();
         const { config } = await invoke("state");
         await invoke("configure", {
             ...config,
             penColor: chroma(pen.sc).hex(),
             penWidth: Math.max(1, Math.min(50, Math.round(pen.sw))),
+            lassoRule,
         });
     },
 );
@@ -5469,7 +5478,15 @@ inkSelection = installInkSelection(
     hisPush,
     () => setEditType("select", "draw"),
     () => setEditType("draw", "free"),
+    (pressed) => {
+        drawSideSelect.lasso.el.setAttribute("aria-pressed", String(pressed));
+        drawSideSelect.lasso.el.classList.toggle("select", pressed);
+        if (!pressed) return;
+        drawSideSelect.draw.el.classList.remove("select");
+        drawMainElsx.select.el.innerHTML = drawSideSelect.free.el.innerHTML;
+    },
 );
+completion.toolbar.el.prepend(inkSelection.rules.el);
 renderOn("annotation_finish", () => {
     void completion.finish(false);
 });
