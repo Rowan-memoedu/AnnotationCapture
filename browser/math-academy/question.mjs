@@ -69,7 +69,7 @@ export async function academyQuestion(expected = null, answers = []) {
                 }
             }
             if (
-                controls.length !== pending.freeResponseAnswers.length ||
+                pending.freeResponseAnswers.length > controls.length ||
                 controls.some(
                     (c, i) =>
                         c.read() !==

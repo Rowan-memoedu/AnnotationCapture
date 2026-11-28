@@ -37,9 +37,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
                     questionWidget: {
                         submitButton,
                         answerSubmitted: false,
-                        getStudentAnswer: () => ({
-                            freeResponseAnswers: inputs.map((i) => i.value),
-                        }),
+                        getStudentAnswer: () => {
+                            const values = inputs.map((i) => i.value);
+                            while (values.at(-1) === "") values.pop();
+                            return {
+                                freeResponseAnswers:
+                                    window.reportOverride ?? values,
+                            };
+                        },
                     },
                 },
             };
@@ -77,6 +82,35 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         assert.deepEqual(await fill(answers), { filled: 2 });
         assert.deepEqual(await read(), ["old", "7", "0", "cm"]);
         assert.ok((await fill(answers)).error);
+        await page.evaluate(() => {
+            window.reportOverride = [];
+        });
+        assert.ok((await page.evaluate(() => window.academyQuestion())).error);
+        for (const input of await page.locator("#step-current input").all())
+            await input.fill("");
+        const empty = await page.evaluate(() => window.academyQuestion());
+        assert.deepEqual(
+            empty.snapshot?.context.fields.map((field) => field.current),
+            ["", "", ""],
+        );
+        await page.evaluate(() => {
+            window.reportOverride = ["", "", "", ""];
+        });
+        assert.ok((await page.evaluate(() => window.academyQuestion())).error);
+        await page.evaluate(() => {
+            delete window.reportOverride;
+        });
+        assert.deepEqual(
+            await fill(
+                [
+                    { id: "s1", value: "2" },
+                    { id: "s2", value: "4" },
+                    { id: "s3", value: "m" },
+                ],
+                empty.snapshot,
+            ),
+            { filled: 3 },
+        );
         assert.equal(await page.evaluate(() => window.clicks), 0);
         console.log(
             "Verified field identity, occupied slots, stale questions, exact readback and no grading",
