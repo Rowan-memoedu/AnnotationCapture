@@ -23,6 +23,9 @@ async function stage(directory) {
     const engine = await import(pathToFileURL(join(directory, 'calculator-engine.js')).href);
     assert.equal((await engine.calculateSelectedFormula({expression: 'mod(17,5)'})).text, '2');
     assert.equal((await engine.calculateSelectedFormula({expression: 'x+x'})).text, '2*x');
+    assert.equal((await engine.calculateSelectedFormula({
+        expression: 'z=((7)/(sqrt(16+45+3-4-12)))', cas: true,
+    })).text, 'z = (7/12)*3^(1/2)');
     assert.equal((await engine.calculateSelectedFormula({expression: '[[5],[7]]-[[2],[3]]'})).text, '[[3], [4]]');
     assert.deepEqual(await engine.calculateSelectedFormula({expression: 'y*[[3*x/y],[1]]'}), {
         text: '[[3*x], [y]]', nonZero: ['y'],
