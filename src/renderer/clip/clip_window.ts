@@ -3525,10 +3525,10 @@ for (const [id, { el }] of Object.entries(toolsX)) {
 const academySubmit = button(t("提交"))
     .attr({
         id: "tool_academy_submit",
-        title: t("填写 Math Academy 原题"),
+        title: t("填写 Math Academy 原题（Shift + 点击按原题空位填写）"),
         ariaLabel: t("提交"),
     })
-    .on("click", () => void completion.submitAnswer());
+    .on("click", (event) => void completion.submitAnswer(event.shiftKey));
 toolsX.ocr.el.el.after(academySubmit.el);
 
 toolsX.long.el.sv(store.get("广截屏.方向"));

@@ -44,7 +44,7 @@ async function execute(message) {
             documentId: frame.documentId,
             snapshot: frame.result.snapshot,
         };
-        return { token: binding.token, context: frame.result.fillContext ?? binding.snapshot.context };
+        return { token: binding.token, context: frame.result.fillContext ?? binding.snapshot.context, fieldBoxes: frame.result.fieldBoxes };
     }
     if (
         message.action !== "fill" ||

@@ -158,7 +158,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         })), { selected: 27, graded: 0 });
         await page.route("https://mathacademy.com/tasks/test/multisteps/1", route => route.fulfill({
             contentType: "text/html",
-            body: '<div id="step-1">Shared exercise information</div><div id="step-3" style="display:grid;grid-template-columns:80px 80px"><span class="mq-editable-field" style="grid-area:2/2"></span><span class="mq-editable-field" style="grid-area:1/1"></span><span class="mq-editable-field" style="grid-area:2/1"></span><div class="submitButton disabledButton">Submit</div></div>',
+            body: '<style>.mq-editable-field { min-width:24px; min-height:20px }</style><div id="step-1">Shared exercise information</div><div id="step-3" style="display:grid;grid-template-columns:80px 80px"><span class="mq-editable-field" style="grid-area:2/2"></span><span class="mq-editable-field" style="grid-area:1/1"></span><span class="mq-editable-field" style="grid-area:2/1"></span><div class="submitButton disabledButton">Submit</div></div>',
         }));
         await page.goto("https://mathacademy.com/tasks/test/multisteps/1");
         await page.addScriptTag({ content: 'window.academyQuestion = ' + academyQuestion.toString() });
@@ -194,6 +194,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
         assert.ok(multi.fillContext.question.includes("Shared exercise information"));
         const centers = JSON.parse(multi.fillContext.question.match(/common scale: (.*?)\. Separate/)[1]);
         assert.ok(centers[0][1] > centers[1][1] && centers[0][2] > centers[1][2]);
+        assert.deepEqual(multi.fieldBoxes.map(b=>b.id), ["s1","s2","s3"]);
+        assert.ok(multi.fieldBoxes.every(b=>b.width>0 && b.height>0));
         assert.deepEqual(await fill([{ id:"s1", value:"8" },{ id:"s2", value:"5" },{ id:"s3", value:"2" }], multi.snapshot), {filled:3});
         assert.deepEqual(await page.evaluate(() => studentMultistep.getFreeResponseAnswers(studentMultistep.step.question)), ["8","5","2"]);
         console.log(

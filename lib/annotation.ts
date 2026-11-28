@@ -17,6 +17,7 @@ export type AcademyContext = {
     }[];
 };
 export type AcademyAnswer = { id: string; value: string };
+export type AcademyFieldBox = PixelRect & { id: string };
 export type FormulaFont = "stix2" | "newcm";
 export type LassoRule = "intersect" | "contain";
 export const outputFormats = [
@@ -211,7 +212,8 @@ export function inkBounds(
 
 export type AnnotationMessages = {
     academyTarget: () => string;
-    academyFill: (png: string) => number;
+    academyLayout: () => AcademyFieldBox[];
+    academyFill: (png: string, byPosition?: boolean) => number;
     academyRetryAvailable: () => void;
     openAcademyExtension: () => void;
     setAutoStart: (enabled: boolean) => StartupState;

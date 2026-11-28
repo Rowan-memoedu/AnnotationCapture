@@ -1,5 +1,6 @@
 import { button, ele, p, view } from "dkh-ui";
 import {
+    type AcademyFieldBox,
     type ArchiveRecord,
     inkBounds,
     type OutputFormat,
@@ -10,6 +11,7 @@ import {
 } from "../../../lib/annotation";
 import { invoke } from "../../../lib/annotationIpc";
 import { t } from "../../../lib/translate/translate";
+import { positionedInkPng } from "./positionedInk";
 import { annotationStyles } from "./styles";
 
 export type CaptureSnapshot = {
@@ -40,6 +42,7 @@ type FormulaSelection = {
     png: string;
     rect: PixelRect;
     outputFormat: OutputFormat;
+    byPosition?: boolean;
 };
 
 function inkPng(ink: HTMLCanvasElement, rect: PixelRect, trim = false) {
@@ -91,7 +94,7 @@ export function installCompletion(
     const capturedAt = new Date().toISOString();
     let busy = false;
     let pointerDown: number | undefined;
-    let queued: boolean | "submit" | null = null;
+    let queued: boolean | "submit" | "position" | null = null;
     let saved:
         | { png: string; metadata: string; record: ArchiveRecord }
         | undefined;
@@ -165,7 +168,9 @@ export function installCompletion(
         // The canvas commits the final segment in the same pointer event.
         setTimeout(
             () =>
-                void (formula === "submit" ? submitAnswer() : finish(formula)),
+                void (typeof formula === "string"
+                    ? submitAnswer(formula === "position")
+                    : finish(formula)),
             0,
         );
     }
@@ -272,10 +277,10 @@ export function installCompletion(
         }
     }
 
-    async function submitAnswer() {
+    async function submitAnswer(byPosition = false) {
         if (busy) return;
         if (pointerDown !== undefined || hasStroke()) {
-            queued = "submit";
+            queued = byPosition ? "position" : "submit";
             return;
         }
         busy = true;
@@ -283,6 +288,9 @@ export function installCompletion(
         try {
             const reason = await invoke("academyTarget");
             if (reason) throw Error(reason);
+            const fields = await invoke("academyLayout");
+            if (byPosition && fields.length < 2)
+                throw Error("按空位填写需要至少两个待填写的空位");
             const frozen = await snapshot(true, true);
             if (!frozen.ink) throw Error("请先写下最终答案");
             const archiveImage = archivePng(frozen.composite);
@@ -291,23 +299,23 @@ export function installCompletion(
             let png: string | null = null;
             if (frozen.selectedInk) {
                 const { width, height } = frozen.selectedInk;
-                png = inkPng(
-                    frozen.selectedInk,
-                    { x: 0, y: 0, width, height },
-                    true,
-                );
+                const rect = { x: 0, y: 0, width, height };
+                png = byPosition
+                    ? positionedInkPng(frozen.selectedInk, rect, fields)
+                    : inkPng(frozen.selectedInk, rect, true);
             }
             if (!png) {
                 selectionOpen = true;
                 try {
-                    png =
-                        (
-                            await selectFormula(
-                                frozen.composite,
-                                frozen.ink,
-                                true,
-                            )
-                        )?.png ?? null;
+                    const selection = await selectFormula(
+                        frozen.composite,
+                        frozen.ink,
+                        true,
+                        fields,
+                        byPosition,
+                    );
+                    png = selection?.png ?? null;
+                    byPosition = !!selection?.byPosition;
                 } finally {
                     selectionOpen = false;
                 }
@@ -316,7 +324,7 @@ export function installCompletion(
             await invoke("captureVisibility", false);
             hidden = true;
             await saveSnapshot(frozen, await archiveImage);
-            await invoke("academyFill", png);
+            await invoke("academyFill", png, byPosition);
             rawClose();
         } catch (error) {
             status.class("ac-error");
@@ -336,6 +344,8 @@ export function installCompletion(
         composite: HTMLCanvasElement,
         ink: HTMLCanvasElement,
         forSubmit = false,
+        fields: AcademyFieldBox[] = [],
+        byPosition = false,
     ) {
         const format = forSubmit
             ? "latex"
@@ -353,6 +363,22 @@ export function installCompletion(
                     ),
                 );
             outputFormat.el.value = format;
+            const mode = ele("select")
+                .class("ac-field")
+                .attr({
+                    id: "ac-answer-placement",
+                    ariaLabel: t("手写答案的位置"),
+                })
+                .style({ width: "auto", maxWidth: "100%" })
+                .add([
+                    ele("option")
+                        .attr({ value: "expression" })
+                        .add(t("完整答案")),
+                    ele("option")
+                        .attr({ value: "position" })
+                        .add(t("按原题空位填写")),
+                ]);
+            mode.el.value = byPosition ? "position" : "expression";
             const display = ele("canvas")
                 .attr({
                     id: "ac-selection",
@@ -396,7 +422,11 @@ export function installCompletion(
                 })
                 .add([
                     info,
-                    ...(forSubmit ? [] : [outputFormat]),
+                    ...(forSubmit
+                        ? fields.length > 1
+                            ? [mode]
+                            : []
+                        : [outputFormat]),
                     display,
                     cancel,
                 ])
@@ -481,7 +511,21 @@ export function installCompletion(
                 resolve(selection);
             }
             function submit(rect: PixelRect) {
-                const png = inkPng(ink, rect, forSubmit);
+                const positioned =
+                    forSubmit &&
+                    fields.length > 1 &&
+                    mode.el.value === "position";
+                let png: string | null;
+                try {
+                    png = positioned
+                        ? positionedInkPng(ink, rect, fields)
+                        : inkPng(ink, rect, forSubmit);
+                } catch (error) {
+                    info.el.textContent =
+                        error instanceof Error ? error.message : String(error);
+                    draw();
+                    return;
+                }
                 if (!png) {
                     info.el.textContent = t("选区没有批注笔迹，请重新框选");
                     draw();
@@ -491,6 +535,7 @@ export function installCompletion(
                     png,
                     rect,
                     outputFormat: outputFormat.el.value as OutputFormat,
+                    byPosition: positioned,
                 });
             }
             document.addEventListener("keydown", key, true);
