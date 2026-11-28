@@ -5,6 +5,7 @@ import { deflateSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
 import {
     type CaptureInput,
+    inkBounds,
     type OutputFormat,
     selectedRect,
 } from "../../lib/annotation";
@@ -430,5 +431,27 @@ describe("provider and pixel mapping", () => {
         expect(
             selectedRect({ x: -2, y: -10 }, { x: 150, y: 50 }, 100, 60),
         ).toEqual({ x: 0, y: 0, width: 100, height: 50 });
+    });
+    it("keeps isolated marks and interior spacing when trimming handwriting", () => {
+        const width = 17;
+        const height = 9;
+        const pixels = new Uint8ClampedArray(width * height * 4);
+        pixels[3] = 8;
+        expect(inkBounds(pixels, width, height)).toBeNull();
+        pixels[(width * 2 + 13) * 4 + 3] = 9;
+        expect(inkBounds(pixels, width, height)).toEqual({
+            x: 13,
+            y: 2,
+            width: 1,
+            height: 1,
+        });
+        pixels[(width * 8 + 4) * 4 + 3] = 255;
+        pixels[(width * 8 + 16) * 4 + 3] = 13;
+        expect(inkBounds(pixels, width, height)).toEqual({
+            x: 4,
+            y: 2,
+            width: 13,
+            height: 7,
+        });
     });
 });

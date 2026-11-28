@@ -179,6 +179,36 @@ export function selectedRect(
     };
 }
 
+export function inkBounds(
+    pixels: Uint8ClampedArray,
+    width: number,
+    height: number,
+): PixelRect | null {
+    let left = width;
+    let top = height;
+    let right = -1;
+    let bottom = -1;
+    for (let y = 0; y < height; y++) {
+        const row = y * width * 4 + 3;
+        let first = 0;
+        while (first < width && pixels[row + first * 4] <= 8) first++;
+        if (first === width) continue;
+        let last = width - 1;
+        while (last > first && pixels[row + last * 4] <= 8) last--;
+        left = Math.min(left, first);
+        right = Math.max(right, last);
+        top = Math.min(top, y);
+        bottom = y;
+    }
+    if (right < left) return null;
+    return {
+        x: left,
+        y: top,
+        width: right - left + 1,
+        height: bottom - top + 1,
+    };
+}
+
 export type AnnotationMessages = {
     academyTarget: () => string;
     academyFill: (png: string) => number;
