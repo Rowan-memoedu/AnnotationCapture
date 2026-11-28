@@ -156,6 +156,46 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
             selected: window.studentReview.step.questionWidget.getStudentAnswer().selectedChoice,
             graded: window.reviewGraded,
         })), { selected: 27, graded: 0 });
+        await page.route("https://mathacademy.com/tasks/test/multisteps/1", route => route.fulfill({
+            contentType: "text/html",
+            body: '<div id="step-1">Shared exercise information</div><div id="step-3" style="display:grid;grid-template-columns:80px 80px"><span class="mq-editable-field" style="grid-area:2/2"></span><span class="mq-editable-field" style="grid-area:1/1"></span><span class="mq-editable-field" style="grid-area:2/1"></span><div class="submitButton disabledButton">Submit</div></div>',
+        }));
+        await page.goto("https://mathacademy.com/tasks/test/multisteps/1");
+        await page.addScriptTag({ content: 'window.academyQuestion = ' + academyQuestion.toString() });
+        await page.evaluate(() => {
+            const nodes = [...document.querySelectorAll(".mq-editable-field")];
+            const fields = new Map();
+            function field(el) {
+                if (!fields.has(el)) fields.set(el, {
+                    el: () => el,
+                    latex: (value) => value === undefined ? el.textContent : el.textContent = value,
+                    revert() {},
+                });
+                return fields.get(el);
+            }
+            field.MathField = field;
+            window.MathQuill = { getInterface: () => field };
+            const editors = nodes.map(el => ({
+                mathField: field(el), getLatex: () => el.textContent, cleanLatex: s => s,
+                setLatex: s => field(el).latex(s),
+                checkForChange() {
+                    const ready = nodes.every(n => n.textContent);
+                    window.studentMultistep.submitButtonEnabled = ready;
+                    document.querySelector(".submitButton").classList.toggle("disabledButton", !ready);
+                },
+            }));
+            window.studentMultistep = {
+                step: { number: 3, question: { id: 71, format: "FR", freeResponseEditors: editors }},
+                getFreeResponseAnswers: q => q.freeResponseEditors.map(e => e.getLatex(true)),
+            };
+        });
+        const multi = await page.evaluate(() => academyQuestion());
+        assert.ok(multi.snapshot, multi.error);
+        assert.ok(multi.fillContext.question.includes("Shared exercise information"));
+        const centers = JSON.parse(multi.fillContext.question.match(/common scale: (.*?)\. Separate/)[1]);
+        assert.ok(centers[0][1] > centers[1][1] && centers[0][2] > centers[1][2]);
+        assert.deepEqual(await fill([{ id:"s1", value:"8" },{ id:"s2", value:"5" },{ id:"s3", value:"2" }], multi.snapshot), {filled:3});
+        assert.deepEqual(await page.evaluate(() => studentMultistep.getFreeResponseAnswers(studentMultistep.step.question)), ["8","5","2"]);
         console.log(
             "Verified empty and occupied fields, stale questions, Review choices, readback and no grading",
         );

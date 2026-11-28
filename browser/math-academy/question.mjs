@@ -9,12 +9,23 @@ export async function academyQuestion(expected = null, answers = []) {
             typeof studentReview === "undefined"
                 ? window.studentReview
                 : studentReview;
-        const activity = location.pathname.endsWith("/review")
+        const multistep = location.pathname.includes("/multisteps/")
+            ? window.studentMultistep
+            : undefined;
+        const activity = multistep ?? (location.pathname.endsWith("/review")
             ? reviewPage
-            : lessonPage ?? reviewPage;
+            : lessonPage ?? reviewPage);
         const step = activity?.step;
-        const widget = step?.questionWidget;
-        const root = step && document.getElementById(`step-${step.id}`);
+        const questionId = multistep ? step?.number : step?.id;
+        const root = step && document.getElementById('step-' + questionId);
+        const part = multistep && step?.question;
+        const widget = part?.format === "FR" && Array.isArray(part.freeResponseEditors)
+            ? {
+                get answerSubmitted() { return Boolean(part.answer); },
+                submitButton: root?.querySelector(".submitButton"),
+                getStudentAnswer: () => ({freeResponseAnswers: multistep.getFreeResponseAnswers(part)}),
+            }
+            : step?.questionWidget;
         if (
             !root ||
             !widget?.getStudentAnswer ||
@@ -52,11 +63,19 @@ export async function academyQuestion(expected = null, answers = []) {
                 if (el.matches(".mq-editable-field")) {
                     const field = MQ?.(el);
                     if (!field?.latex) throw Error("公式框未完成加载");
+                    const editor = part?.freeResponseEditors?.[controls.length];
+                    if (part && editor?.mathField?.el() !== el)
+                        throw Error("多步骤题的输入框与当前步骤不一致");
                     add(
                         el,
                         "latex",
                         () => field.latex(),
-                        (v) => field.latex(v),
+                        (v) => {
+                            if (editor) {
+                                editor.setLatex(v);
+                                editor.checkForChange();
+                            } else field.latex(v);
+                        },
                     );
                 } else if (!el.disabled && !el.readOnly) {
                     add(
@@ -79,7 +98,7 @@ export async function academyQuestion(expected = null, answers = []) {
                 pending.freeResponseAnswers.length > controls.length ||
                 controls.some(
                     (c, i) =>
-                        c.read() !==
+                        (part ? part.freeResponseEditors[i].getLatex(true) : c.read()) !==
                         String(pending.freeResponseAnswers[i] ?? ""),
                 )
             )
@@ -133,7 +152,7 @@ export async function academyQuestion(expected = null, answers = []) {
             if (
                 el.hidden ||
                 el.matches(
-                    "script,style,button,.questionWidget-header,.questionWidget-buttonBar,.questionWidget-spinnerFrame,[aria-hidden=true]:not(mjx-container)",
+                    "script,style,button,.stepHeader,.submitButtonFrame,.questionWidget-header,.questionWidget-buttonBar,.questionWidget-spinnerFrame,[aria-hidden=true]:not(mjx-container)",
                 )
             )
                 return "";
@@ -174,7 +193,9 @@ export async function academyQuestion(expected = null, answers = []) {
             if (el.matches("div,p,table,li")) return `\n${mark || ""}${body}\n`;
             return body;
         }
-        const question = render(root)
+        const intro = part && document.getElementById("step-1");
+        const common = intro && intro !== root && !intro.querySelector(".question,.questionWidget") ? render(intro) : "";
+        const question = (common + "\n" + render(root))
             .replace(/[ \t]+/g, " ")
             .replace(/ *\n */g, "\n")
             .replace(/\n+/g, "\n")
@@ -192,12 +213,29 @@ export async function academyQuestion(expected = null, answers = []) {
         )
             throw Error("题干或控件布局未能完整读取");
         const snapshot = {
-            step: String(step.id),
+            step: part ? String(questionId) + "/" + part.id : String(questionId),
             context: { question, fields },
         };
         if (!expected) {
             if (fields.every((f) => f.current))
                 throw Error("这道题的答题框已经填好");
+            const empty = controls.filter(c => c.format !== "choice" && !c.read());
+            if (empty.length > 1) {
+                const boxes = empty.map(c => c.el.getBoundingClientRect());
+                const left = Math.min(...boxes.map(b => b.left));
+                const top = Math.min(...boxes.map(b => b.top));
+                const span = Math.max(...boxes.map(b => b.right - left), ...boxes.map(b => b.bottom - top));
+                if (span > 0) {
+                    const positions = boxes.map((b,i) => [
+                        empty[i].id,
+                        Math.round(1000 * (b.left + b.width / 2 - left) / span),
+                        Math.round(1000 * (b.top + b.height / 2 - top) / span),
+                    ]);
+                    const layout = "\nVisible empty control centers [id,x,y], measured right and down at a common scale: " + JSON.stringify(positions) +
+                        ". Separate handwritten entries may be written directly at these positions. Match their relative positions to the controls. A complete handwritten expression can also be mapped using the template.";
+                    if (question.length + layout.length <= 16000) return {snapshot, fillContext: {question: question + layout, fields}};
+                }
+            }
             return { snapshot };
         }
         const prior = expected.context;
@@ -277,10 +315,10 @@ export async function academyQuestion(expected = null, answers = []) {
                     return (
                         c.read() === value &&
                         (!Array.isArray(values) ||
-                            String(values[i] ?? "") === value)
+                            String(values[i] ?? "") === (part ? part.freeResponseEditors[i].cleanLatex(value) : value))
                     );
                 });
-                return matches && !widget.submitButton.disabled;
+                return matches && (part ? multistep.submitButtonEnabled === true && !widget.submitButton.classList.contains("disabledButton") : !widget.submitButton.disabled);
             };
             for (let i = 0; i < 50; i++) {
                 if (verify()) return { filled: written.length };

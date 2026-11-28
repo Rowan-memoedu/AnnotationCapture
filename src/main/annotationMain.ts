@@ -60,6 +60,7 @@ const academy = new AcademyBridge();
 let academyTarget: AcademyTarget | undefined;
 let academyReason = "";
 let academyRequest: AbortController | undefined;
+let academyRetry = false;
 let panel: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let activeCapture = false;
@@ -85,8 +86,21 @@ const icon = join(runPath, "assets/logo/64x64.png");
 
 function refreshTray() {
     if (!tray) return;
+    tray.setToolTip(
+        academyRetry
+            ? "Math Academy 填答未完成，点击返回批注"
+            : "AnnotationCapture",
+    );
     tray.setContextMenu(
         Menu.buildFromTemplate([
+            ...(academyRetry
+                ? [
+                      {
+                          label: "查看填答问题并返回批注",
+                          click: showCaptureWindow,
+                      },
+                  ]
+                : []),
             { label: "区域截图并批注", click: () => void capture() },
             {
                 label: "全屏截图并批注",
@@ -212,6 +226,10 @@ function prepareCaptureWindow() {
         }
     });
     win.on("closed", () => {
+        if (academyRetry) {
+            academyRetry = false;
+            refreshTray();
+        }
         academyTarget = undefined;
         academyRequest?.abort();
         clearTimeout(captureStartTimer);
@@ -433,6 +451,10 @@ function showCaptureWindow() {
     if (captureSaving) return;
     const win = captureWindow;
     if (!win || win.isDestroyed()) return;
+    if (academyRetry) {
+        academyRetry = false;
+        refreshTray();
+    }
     if (win.isMinimized()) win.restore();
     win.show();
     if (process.platform === "darwin") win.setSimpleFullScreen(true);
@@ -486,6 +508,17 @@ handle("captureVisibility", (visible) => {
     } else {
         whitespaceRequest?.abort();
         captureWindow?.hide();
+    }
+});
+handle("academyRetryAvailable", () => {
+    if (!activeCapture || !captureSaving) return;
+    captureSaving = false;
+    academyRetry = true;
+    refreshTray();
+    if (queuedCapture || quitting) {
+        queuedCapture = undefined;
+        quitting = false;
+        showCaptureWindow();
     }
 });
 handle("detectWhitespace", async (png) => {
@@ -835,9 +868,10 @@ else {
         }
         shortcutError = shortcutErrors.join("；");
         tray = new Tray(icon);
-        tray.setToolTip("AnnotationCapture");
         refreshTray();
-        tray.on("click", showPanel);
+        tray.on("click", () =>
+            academyRetry ? showCaptureWindow() : showPanel(),
+        );
         screen.on("display-removed", (_, display) => {
             frameReaders.get(display.id)?.stop();
             frameReaders.delete(display.id);

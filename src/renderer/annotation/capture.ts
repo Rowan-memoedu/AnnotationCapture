@@ -279,7 +279,7 @@ export function installCompletion(
             return;
         }
         busy = true;
-        let blocker: HTMLElement | undefined;
+        let hidden = false;
         try {
             const reason = await invoke("academyTarget");
             if (reason) throw Error(reason);
@@ -313,11 +313,8 @@ export function installCompletion(
                 }
             }
             if (!png) return;
-            blocker = view()
-                .class("ac-overlay")
-                .attr({ role: "status", id: "ac-submitting" })
-                .add(p(t("正在识别笔迹并填写原题…")))
-                .addInto().el;
+            await invoke("captureVisibility", false);
+            hidden = true;
             await saveSnapshot(frozen, await archiveImage);
             await invoke("academyFill", png);
             rawClose();
@@ -330,8 +327,8 @@ export function installCompletion(
                           "",
                       )
                     : String(error);
+            if (hidden) await invoke("academyRetryAvailable");
         } finally {
-            blocker?.remove();
             busy = false;
         }
     }

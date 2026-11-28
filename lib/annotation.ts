@@ -212,6 +212,7 @@ export function inkBounds(
 export type AnnotationMessages = {
     academyTarget: () => string;
     academyFill: (png: string) => number;
+    academyRetryAvailable: () => void;
     openAcademyExtension: () => void;
     setAutoStart: (enabled: boolean) => StartupState;
     detectWhitespace: (
