@@ -38,6 +38,35 @@ function fixture(
 }
 
 describe("invitation sessions", () => {
+    it("maps handwriting using the question's requested slots and rejects writes to occupied fields", async () => {
+        const context = {
+            question: "y = [[s1]], x = [[s2]]",
+            fields: [
+                { id: "s1", format: "latex" as const, current: "" },
+                { id: "s2", format: "latex" as const, current: "0" },
+            ],
+        };
+        let id = "s1";
+        const request = vi.fn(async (_url, init) => {
+            expect(JSON.parse(String(init?.body))).toEqual({
+                png: "ink",
+                context,
+            });
+            return Response.json({
+                status: "ready",
+                answers: [{ id, value: "\\displaystyle \\dfrac{1}{2}" }],
+            });
+        });
+        const { auth } = fixture(session, request as typeof fetch);
+        const signal = new AbortController().signal;
+        await expect(
+            auth.recognizeFields("ink", context, signal),
+        ).resolves.toEqual([{ id: "s1", value: "\\frac{1}{2}" }]);
+        id = "s2";
+        await expect(
+            auth.recognizeFields("ink", context, signal),
+        ).rejects.toThrow("不匹配");
+    });
     it("uses the selected gateway provider and separates page caches", async () => {
         let selected: OcrProvider = "openai";
         const request = vi.fn(async (url: string, _options?: RequestInit) => {

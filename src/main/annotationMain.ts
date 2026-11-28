@@ -276,8 +276,15 @@ async function capture(
     }
     captureStarting = true;
     const point = screen.getCursorScreenPoint();
-    const binding = imagePath || mode === "ocr" ? Promise.resolve({message: "请在 Math Academy 题目页开始本次批注"}) :
-        academy.bind(point).then(target => ({target}), (error: Error) => ({message: error.message}));
+    const binding =
+        imagePath || mode === "ocr"
+            ? Promise.resolve({
+                  message: "请在 Math Academy 题目页开始本次批注",
+              })
+            : academy.bind(point).then(
+                  (target) => ({ target }),
+                  (error: Error) => ({ message: error.message }),
+              );
     panel?.hide();
     let win = captureWindow;
     try {
@@ -613,23 +620,38 @@ handle("state", () => ({
     shortcutError,
 }));
 handle("captureConfig", () => config.public());
-handle("academyTarget", () => academyTarget ? "" : academyReason || "未绑定 Math Academy 题目");
+handle("academyTarget", () =>
+    academyTarget ? "" : academyReason || "未绑定 Math Academy 题目",
+);
 handle("openAcademyExtension", async () => {
-    const directory = app.isPackaged ? join(process.resourcesPath, "math-academy-extension") : join(runPath, "browser/math-academy");
+    const directory = app.isPackaged
+        ? join(process.resourcesPath, "math-academy-extension")
+        : join(runPath, "browser/math-academy");
     const error = await shell.openPath(directory);
     if (error) throw Error(error);
 });
 handle("academyFill", async (png) => {
     const target = academyTarget;
-    if (!activeCapture || !target) throw Error(academyReason || "请重新进入题目批注");
+    if (!activeCapture || !target)
+        throw Error(academyReason || "请重新进入题目批注");
     if (academyRequest) throw Error("正在填写这道题");
-    if (nativeImage.createFromBuffer(decodePng(png)).isEmpty()) throw Error("笔迹图无效");
+    if (nativeImage.createFromBuffer(decodePng(png)).isEmpty())
+        throw Error("笔迹图无效");
     const request = new AbortController();
     academyRequest = request;
     const timer = setTimeout(() => request.abort(), 90000);
     try {
-        const answers = await auth.recognizeFields(png, target.context, request.signal);
-        if (request.signal.aborted || target !== academyTarget || !activeCapture) throw Error("批注已结束，请重新进入原题");
+        const answers = await auth.recognizeFields(
+            png,
+            target.context,
+            request.signal,
+        );
+        if (
+            request.signal.aborted ||
+            target !== academyTarget ||
+            !activeCapture
+        )
+            throw Error("批注已结束，请重新进入原题");
         return await academy.fill(target, answers);
     } finally {
         clearTimeout(timer);
@@ -706,8 +728,15 @@ else {
         tray?.destroy();
     });
     app.whenReady().then(() => {
-        if (process.platform === "win32" && (app.isPackaged || !args.testMode || args.academyTest))
-            void academy.start(join(dirname(frameHelper), "MathAcademyHost.exe"), dataRoot, app.isPackaged && !args.testMode);
+        if (
+            process.platform === "win32" &&
+            (app.isPackaged || !args.testMode || args.academyTest)
+        )
+            void academy.start(
+                join(dirname(frameHelper), "MathAcademyHost.exe"),
+                dataRoot,
+                app.isPackaged && !args.testMode,
+            );
         config = new AnnotationConfig(
             dataRoot,
             args.archiveRoot || join(dataRoot, "Archive"),

@@ -922,7 +922,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     result = provider.recognize(png, output_format)
                 if not self.account():
                     return self.send_json(401, {"error": "unauthorized"})
-                if selection is not None and not shared_formula:
+                if selection is not None and not shared_formula and context is None:
                     result = {**result, "provider": selection}
                 return self.send_json(200, result)
             finally:

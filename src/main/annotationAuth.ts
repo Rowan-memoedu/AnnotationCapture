@@ -266,33 +266,67 @@ export class AnnotationAuth {
             );
         });
     }
-    async recognizeFields(png: string, context: AcademyContext, signal: AbortSignal): Promise<AcademyAnswer[]> {
+    async recognizeFields(
+        png: string,
+        context: AcademyContext,
+        signal: AbortSignal,
+    ): Promise<AcademyAnswer[]> {
         const session = this.config.session();
         if (!session) throw Error("请先使用邀请码登录");
-        const response = await this.request(this.baseUrl + "/answer-fields", {
-            method: "POST", redirect: "error", signal,
-            headers: {Authorization: "Bearer " + session.token, "Content-Type": "application/json"},
-            body: JSON.stringify({png, context}),
+        const response = await this.request(`${this.baseUrl}/answer-fields`, {
+            method: "POST",
+            redirect: "error",
+            signal,
+            headers: {
+                Authorization: `Bearer ${session.token}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ png, context }),
         });
-        if (this.config.session()?.token !== session.token) throw Error("登录状态已变化，请重新识别");
+        if (this.config.session()?.token !== session.token)
+            throw Error("登录状态已变化，请重新识别");
         if (response.status === 401 || response.status === 403) {
             this.logout();
             throw Error("登录已失效，请重新填写邀请码");
         }
-        if (!response.ok) throw Error(response.status === 429 ? "识别请求过于频繁，请稍后重试" : "未能取得可用的逐框答案，请重新框选或稍后重试");
+        if (!response.ok)
+            throw Error(
+                response.status === 429
+                    ? "识别请求过于频繁，请稍后重试"
+                    : "未能取得可用的逐框答案，请重新框选或稍后重试",
+            );
         const result = await response.json();
-        if (result?.status === "clarify" && typeof result.message === "string") throw Error(result.message.slice(0, 400));
-        const remaining = new Map(context.fields.filter(f => !f.current).map(f => [f.id, f]));
-        if (result?.status !== "ready" || !Array.isArray(result.answers) || !remaining.size || result.answers.length !== remaining.size)
+        if (result?.status === "clarify" && typeof result.message === "string")
+            throw Error(result.message.slice(0, 400));
+        const remaining = new Map(
+            context.fields.filter((f) => !f.current).map((f) => [f.id, f]),
+        );
+        if (
+            result?.status !== "ready" ||
+            !Array.isArray(result.answers) ||
+            !remaining.size ||
+            result.answers.length !== remaining.size
+        )
             throw Error("识别结果没有覆盖全部空位");
         return result.answers.map((entry: AcademyAnswer) => {
             const field = remaining.get(entry?.id);
             const value = entry?.value;
-            if (!field || typeof value !== "string" || !value.trim() || value.length > 2048 ||
-                (field.format === "choice" && !field.options?.includes(value)))
+            if (
+                !field ||
+                typeof value !== "string" ||
+                !value.trim() ||
+                value.length > 2048 ||
+                (field.format === "choice" && !field.options?.includes(value))
+            )
                 throw Error("识别结果与网页控件不匹配");
             remaining.delete(field.id);
-            return {id: field.id, value: field.format === "latex" ? normalizeAcademyLatex(value) : value.trim()};
+            return {
+                id: field.id,
+                value:
+                    field.format === "latex"
+                        ? normalizeAcademyLatex(value)
+                        : value.trim(),
+            };
         });
     }
     provider(): FormulaProvider | null {

@@ -874,5 +874,12 @@
     "1949b1": "Allow covering window top information and window buttons",
     "d8e667": "Maximum whiteboard rectangles",
     "769560": "Defaults to 5, adjustable from 1 to 20. Click the main button to create a board immediately, or choose Smart whiteboard to wait for recognition.",
-    "4274d0": "Formula recognition sends only ink in the selection or whiteboards. Automatic blank-area detection also sends a page screenshot. Windows encrypts stored login credentials."
+    "4274d0": "Formula recognition sends only ink in the selection or whiteboards. Automatic blank-area detection also sends a page screenshot. Windows encrypts stored login credentials.",
+    "mafill1": "Fill",
+    "mafill2": "Fill the original Math Academy question",
+    "mafill3": "Reading handwriting and filling the question…",
+    "mafill4": "Select your final answer and release to fill the question",
+    "mafill5": "Return to annotation",
+    "mafill6": "Open Math Academy extension folder",
+    "mafill7": "Load this folder in Chrome Extensions once. Start annotating on the question and choose Fill. Recognition uses your selected ink, question and field formats."
 }

@@ -3522,9 +3522,13 @@ const toolBarEl = view().attr({ id: "tool_bar" }).class(Class.glassBar);
 for (const [id, { el }] of Object.entries(toolsX)) {
     toolBarEl.add(el.attr({ id: `tool_${id}` }));
 }
-const academySubmit = button(t("提交")).attr({
-    id: "tool_academy_submit", title: t("填写 Math Academy 原题"), ariaLabel: t("提交"),
-}).on("click", () => void completion.submitAnswer());
+const academySubmit = button(t("提交"))
+    .attr({
+        id: "tool_academy_submit",
+        title: t("填写 Math Academy 原题"),
+        ariaLabel: t("提交"),
+    })
+    .on("click", () => void completion.submitAnswer());
 toolsX.ocr.el.el.after(academySubmit.el);
 
 toolsX.long.el.sv(store.get("广截屏.方向"));
@@ -3560,7 +3564,11 @@ for (const g of tools) {
     else el.style({ display: "none" });
 }
 const ocrOrder = toolsOrder.indexOf("ocr");
-academySubmit.style({order: String(ocrOrder >= 0 ? 2 * ocrOrder + 1 : 2 * toolsOrder.indexOf("copy") - 1)});
+academySubmit.style({
+    order: String(
+        ocrOrder >= 0 ? 2 * ocrOrder + 1 : 2 * toolsOrder.indexOf("copy") - 1,
+    ),
+});
 
 const drawBarEl = view().attr({ id: "draw_bar" }).addInto();
 const drawBarMainEl = view()
@@ -5352,10 +5360,15 @@ const completion = installCompletion(
         await pendingCanvasWork;
         const active = fabricCanvas.getActiveObject();
         if (active instanceof IText && active.isEditing) active.exitEditing();
-        const selected = useSelection ? new Set<object>(fabricCanvas.getActiveObjects()) : undefined;
+        const selected = useSelection
+            ? new Set<object>(fabricCanvas.getActiveObjects())
+            : undefined;
         const bounds = selected?.size ? active?.getBoundingRect() : undefined;
         const composite = getClipPhoto();
-        const isInk = (object: {type: string}) => !isWhiteboard(object) && !(object instanceof FabricImage) && object.type.toLowerCase() !== "mask";
+        const isInk = (object: { type: string }) =>
+            !isWhiteboard(object) &&
+            !(object instanceof FabricImage) &&
+            object.type.toLowerCase() !== "mask";
         const ink = formula
             ? fabricCanvas.toCanvasElement(1, {
                   left: finalRect[0],
@@ -5368,11 +5381,17 @@ const completion = installCompletion(
         return {
             composite,
             ink,
-            selectedInk: bounds && selected ? fabricCanvas.toCanvasElement(1, {
-                left: Math.floor(bounds.left) - 2, top: Math.floor(bounds.top) - 2,
-                width: Math.ceil(bounds.width) + 5, height: Math.ceil(bounds.height) + 5,
-                filter: object => selected.has(object) && isInk(object),
-            }) : undefined,
+            selectedInk:
+                bounds && selected
+                    ? fabricCanvas.toCanvasElement(1, {
+                          left: Math.floor(bounds.left) - 2,
+                          top: Math.floor(bounds.top) - 2,
+                          width: Math.ceil(bounds.width) + 5,
+                          height: Math.ceil(bounds.height) + 5,
+                          filter: (object) =>
+                              selected.has(object) && isInk(object),
+                      })
+                    : undefined,
             rect: {
                 x: finalRect[0],
                 y: finalRect[1],
