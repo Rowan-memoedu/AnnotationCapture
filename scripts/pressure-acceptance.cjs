@@ -153,10 +153,10 @@ async function lasso(page, points) {
             throw new DOMException('Pointer no longer registered', 'NotFoundError');
         };
     });
-    await line(page, 460, 0.8);
+    await line(page, 250, 0.8);
     assert.equal(await page.locator('.upper-canvas').getAttribute('data-capture-failure-injected'), 'true');
-    await line(page, 530, 0.8, 'mouse');
-    await line(page, 600, 0.8);
+    await line(page, 285, 0.8, 'mouse');
+    await line(page, 420, 0.8);
     const sameSession = (await finish(page)).canvas.objects;
     assert.ok(sameSession.every(stroke => stroke.width >= 195));
     assert.deepEqual(sameSession.map(stroke => !!stroke.acPressure), [true, true, true, false, true]);
