@@ -5,7 +5,11 @@ import { createServer, type Socket } from "node:net";
 import { userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
-import type { AcademyAnswer, AcademyContext } from "../../lib/annotation";
+import type {
+    AcademyAnswer,
+    AcademyContext,
+    AcademyFieldBox,
+} from "../../lib/annotation";
 
 const hostName = "edu.memo.annotationcapture.mathacademy";
 const origin = "chrome-extension://gdejildelbenfhefjohighebigmnmame/";
@@ -14,6 +18,7 @@ export type AcademyTarget = {
     peer: Socket;
     token: string;
     context: AcademyContext;
+    fieldBoxes?: AcademyFieldBox[];
 };
 
 export class AcademyBridge {
@@ -172,7 +177,12 @@ export class AcademyBridge {
                     !Array.isArray(r.context.fields)
                 )
                     throw Error("网页控件未完成加载");
-                return { peer, token: r.token, context: r.context };
+                return {
+                    peer,
+                    token: r.token,
+                    context: r.context,
+                    fieldBoxes: r.fieldBoxes,
+                };
             }),
         );
         const ready = responses.flatMap((r) =>

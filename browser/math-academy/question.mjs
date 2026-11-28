@@ -233,7 +233,8 @@ export async function academyQuestion(expected = null, answers = []) {
                     ]);
                     const layout = "\nVisible empty control centers [id,x,y], measured right and down at a common scale: " + JSON.stringify(positions) +
                         ". Separate handwritten entries may be written directly at these positions. Match their relative positions to the controls. A complete handwritten expression can also be mapped using the template.";
-                    if (question.length + layout.length <= 16000) return {snapshot, fillContext: {question: question + layout, fields}};
+                    const fieldBoxes = boxes.map((b,i) => ({id: empty[i].id, x: b.left, y: b.top, width: b.width, height: b.height}));
+                    return {snapshot, fieldBoxes, fillContext: {question: question.length + layout.length <= 16000 ? question + layout : question, fields}};
                 }
             }
             return { snapshot };

@@ -656,6 +656,7 @@ handle("captureConfig", () => config.public());
 handle("academyTarget", () =>
     academyTarget ? "" : academyReason || "未绑定 Math Academy 题目",
 );
+handle("academyLayout", () => academyTarget?.fieldBoxes ?? []);
 handle("openAcademyExtension", async () => {
     const directory = app.isPackaged
         ? join(process.resourcesPath, "math-academy-extension")
@@ -663,7 +664,7 @@ handle("openAcademyExtension", async () => {
     const error = await shell.openPath(directory);
     if (error) throw Error(error);
 });
-handle("academyFill", async (png) => {
+handle("academyFill", async (png, byPosition) => {
     const target = academyTarget;
     if (!activeCapture || !target)
         throw Error(academyReason || "请重新进入题目批注");
@@ -674,9 +675,20 @@ handle("academyFill", async (png) => {
     academyRequest = request;
     const timer = setTimeout(() => request.abort(), 90000);
     try {
+        const context = target.context;
+        const labels =
+            "Each printed label (s1, s2, etc.) identifies the target field. Transcribe only the handwriting beside each label into that field.\n";
+        if (
+            byPosition &&
+            (!target.fieldBoxes?.length ||
+                context.question.length + labels.length > 16000)
+        )
+            throw Error("无法按空位核对本题，请选择完整答案方式");
         const answers = await auth.recognizeFields(
             png,
-            target.context,
+            byPosition
+                ? { ...context, question: labels + context.question }
+                : context,
             request.signal,
         );
         if (

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AnnotationCapture · Math Academy 填答",
   "description": "将批注工具圈选的手写答案填入当前 Math Academy 题目。",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minimum_chrome_version": "106",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw3HjwsiLm0dQOVjcA7gkke+5g9gmfCwqVKkTcWnMFPqMpZ67xurSG4sybd9sYkP8RXNpDsUbMLmYaNi/Z82QufyJoFZDszzN8bnsfLHjndrQWPOaeVPp6SJmHYxmTznE8BDhCZE3rmoB7T+Rnfo886J31tJ/uZT1XT6vB5OzJ+PoFOb7XDyvGDA9IBSm4hZoJF5jYmh09okdkwHlgp9ZkG0McGX+u8F7aE8MlEbBM4rAcGCvtOfJGS1IdAOJrCWlZNFjyTn19v5XidnR3bukio4rS3D/mATmdJWZ3uyUcUpId1NW+7OZovF3Lcv8avCmjddS7VQIbO4tbz61wrwE0QIDAQAB",
   "permissions": ["nativeMessaging", "scripting", "alarms"],
